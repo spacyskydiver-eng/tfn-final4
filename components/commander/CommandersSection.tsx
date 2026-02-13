@@ -192,9 +192,30 @@ export function CommandersSection({
         </Card>
       ) : (
         <>
-          {profile.commanders.map((cmd) => {
-            const calc = calcCommanderNeeds(cmd)
-            const pct = calc.total > 0 ? Math.round((calc.invested / calc.total) * 100) : 0
+{profile.commanders.map((cmd) => {
+  const calc = calcCommanderNeeds(cmd)
+
+  // Treat "Current Gold Heads" as universal heads available to invest.
+  // Distribute by allocation across commanders.
+  const universalPool = Math.max(0, Number(profile.currentGoldHeads ?? 0))
+
+  const allocatedUniversal =
+    profile.commanders.length <= 1
+      ? universalPool
+      : Math.floor(universalPool * (cmd.allocationPct / 100))
+
+  // Display "Needed" as remaining after applying allocated universal heads
+  const neededAfterUniversal = Math.max(0, calc.needed - allocatedUniversal)
+
+  // Display "Invested" as skill-invested + universal allocated (coverage)
+  const investedDisplay = calc.invested + Math.min(calc.needed, allocatedUniversal)
+
+  // Keep total the same (skill total requirement)
+  const totalDisplay = calc.total
+
+  const pct =
+    totalDisplay > 0 ? Math.min(100, Math.round((investedDisplay / totalDisplay) * 100)) : 0
+
 
             return (
               <Card key={cmd.id}>
@@ -299,15 +320,15 @@ export function CommandersSection({
                     <div className="grid grid-cols-3 gap-3 text-center mb-3">
                       <div>
                         <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Invested</p>
-                        <p className="text-sm font-bold text-foreground tabular-nums">{calc.invested}</p>
+                        <p className="text-sm font-bold text-foreground tabular-nums">{investedDisplay}</p>
                       </div>
                       <div>
                         <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Needed</p>
-                        <p className="text-sm font-bold text-primary tabular-nums">{calc.needed}</p>
+                        <p className="text-sm font-bold text-primary tabular-nums">{neededAfterUniversal}</p>
                       </div>
                       <div>
                         <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</p>
-                        <p className="text-sm font-bold text-foreground tabular-nums">{calc.total}</p>
+                        <p className="text-sm font-bold text-foreground tabular-nums">{totalDisplay}</p>
                       </div>
                     </div>
                     <Progress value={pct} className="h-2" />

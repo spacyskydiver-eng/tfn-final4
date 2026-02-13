@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 import { Dices, Package } from 'lucide-react'
 import { useEvents } from '@/lib/event-context'
 import type { AccountProfile, OccOutcome, MtgEventPlan } from '@/lib/engine/types'
@@ -118,22 +119,38 @@ export function EventTracker({
     setWofSpinsByOcc((prev) => ({ ...prev, [key]: Math.max(0, Math.floor(spins || 0)) }))
   }
 
+  /* ---------- SoC Timeline Toggle ---------- */
+  const useSocTimeline = profile.wofUseSocTimeline ?? false
+  const toggleSocTimeline = () => {
+    onUpdate({ ...profile, wofUseSocTimeline: !useSocTimeline })
+  }
+
+  /* ---------- Commander Assignment per Wheel ---------- */
+  const wofAssignments = profile.wofCommanderAssignments ?? {}
+  const setWheelCommander = (key: string, commanderId: string) => {
+    onUpdate({
+      ...profile,
+      wofCommanderAssignments: { ...wofAssignments, [key]: commanderId },
+    })
+  }
+
   /* ---------- Computed Rows ---------- */
+  const profileStartDate = profile.startDate
   const occRows = useMemo(
-    () => buildOccurrenceRows(events, todayStr, goalDateStr, outcomes),
-    [events, todayStr, goalDateStr, outcomes],
+    () => buildOccurrenceRows(events, todayStr, goalDateStr, outcomes, profileStartDate),
+    [events, todayStr, goalDateStr, outcomes, profileStartDate],
   )
   const activeEvents = occRows.filter((r) => r.status === 'active')
   const upcomingEvents = occRows.filter((r) => r.status === 'upcoming')
 
   const mtgRows = useMemo(
-    () => buildMtgRows(events, todayStr, goalDateStr),
-    [events, todayStr, goalDateStr],
+    () => buildMtgRows(events, todayStr, goalDateStr, profileStartDate),
+    [events, todayStr, goalDateStr, profileStartDate],
   )
 
   const wheelRows = useMemo(
-    () => buildWheelRows(events, todayStr, goalDateStr),
-    [events, todayStr, goalDateStr],
+    () => buildWheelRows(events, todayStr, goalDateStr, profileStartDate),
+    [events, todayStr, goalDateStr, profileStartDate],
   )
 
   /* ---------- Totals ---------- */
@@ -229,7 +246,7 @@ export function EventTracker({
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-xs text-muted-foreground">
-              Each MTG event lasts 2 days. Select your gem spending per day. Default: 14k/day.
+              Each MTG event lasts 2 days. Select your gem spending per day. Default: skip.
             </p>
             {mtgRows.map((m) => {
               const plan = getMtgPlan(m.key)
@@ -349,6 +366,19 @@ export function EventTracker({
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* SoC Timeline Toggle */}
+          <div className="flex items-center gap-3 rounded-lg border border-border bg-secondary/20 px-4 py-3">
+            <Switch checked={useSocTimeline} onCheckedChange={toggleSocTimeline} />
+            <div>
+              <p className="text-sm font-medium text-foreground">Use SoC timeline</p>
+              <p className="text-xs text-muted-foreground">
+                {useSocTimeline
+                  ? 'Showing troop-type wheel labels (Leadership, Cavalry, etc.)'
+                  : 'Simple mode — each wheel shows as "Wheel of Fortune"'}
+              </p>
+            </div>
+          </div>
+
           <div className="grid grid-cols-3 gap-3 text-center">
             <div className="rounded-lg border border-border bg-secondary/30 p-3">
               <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Wheels Left</p>
@@ -371,36 +401,99 @@ export function EventTracker({
               No Wheel of Fortune events found in your calendar before the goal date.
             </p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               {wheelRows.map((w) => {
                 const start = new Date(w.startDate)
                 const diff = Math.ceil((start.getTime() - today.getTime()) / 86400000)
+                const assignedCmdId = wofAssignments[w.key] ?? ''
+                const assignedCmd = profile.commanders.find((c) => c.id === assignedCmdId)
+
+                // Display title: simple or SoC troop-type label
+                const displayTitle = useSocTimeline && w.title
+                  ? w.title
+                  : 'Wheel of Fortune'
+
+                // Expected heads for this wheel
+                const spins = wofSpinsByOcc[w.key] ?? 0
+                const expectedHeadsThisWheel = spins > 0
+                  ? Math.floor(calcWofPlan({ targetSpins: spins, useBundles: {} }).expectedHeads)
+                  : 0
+
                 return (
-                  <div key={w.key} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
-                    <div className="text-sm">
-                      <div className="text-foreground font-medium">
-                        {w.title || 'Wheel of Fortune'}{' '}
-                        <span className="text-xs text-muted-foreground">
-                          ({w.startDate} → {w.endDate})
-                        </span>
+                  <div
+                    key={w.key}
+                    className={`rounded-lg border p-4 space-y-3 ${
+                      w.status === 'active'
+                        ? 'border-primary/40 bg-primary/5'
+                        : w.status === 'past'
+                        ? 'border-border bg-secondary/20'
+                        : 'border-border bg-card'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">
+                          {displayTitle}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {w.startDate} → {w.endDate}
+                          {w.status === 'upcoming' && ` (in ${diff} day${diff !== 1 ? 's' : ''})`}
+                          {w.status === 'active' && ' (Active now)'}
+                          {w.status === 'past' && ' (Past)'}
+                        </p>
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        {w.status === 'past'
-                          ? 'Past'
-                          : w.status === 'active'
-                          ? 'Active now'
-                          : `In ${diff} day${diff !== 1 ? 's' : ''}`}
-                      </div>
+                      {expectedHeadsThisWheel > 0 && (
+                        <div className="text-right">
+                          <p className="text-sm font-bold text-primary tabular-nums">
+                            {expectedHeadsThisWheel} heads
+                          </p>
+                          {assignedCmd && (
+                            <p className="text-[10px] text-muted-foreground">
+                              → {assignedCmd.name}
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Label className="text-xs text-muted-foreground">Spins</Label>
-                      <Input
-                        type="number"
-                        className="w-[110px] h-8"
-                        min={0}
-                        value={wofSpinsByOcc[w.key] ?? 0}
-                        onChange={(e) => setWheelSpins(w.key, Number(e.target.value) || 0)}
-                      />
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {/* Commander dropdown */}
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Commander</Label>
+                        <Select
+                          value={assignedCmdId}
+                          onValueChange={(v) => setWheelCommander(w.key, v)}
+                        >
+                          <SelectTrigger className="h-8">
+                            <SelectValue placeholder="Select commander..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {profile.commanders.length === 0 ? (
+                              <SelectItem value="__none" disabled>
+                                Add commanders first
+                              </SelectItem>
+                            ) : (
+                              profile.commanders.map((c) => (
+                                <SelectItem key={c.id} value={c.id}>
+                                  {c.name || 'Unnamed'}
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Spins input */}
+                      <div className="space-y-1">
+                        <Label className="text-xs text-muted-foreground">Spins</Label>
+                        <Input
+                          type="number"
+                          className="h-8"
+                          min={0}
+                          value={wofSpinsByOcc[w.key] ?? 0}
+                          onChange={(e) => setWheelSpins(w.key, Number(e.target.value) || 0)}
+                        />
+                      </div>
                     </div>
                   </div>
                 )
@@ -447,7 +540,11 @@ export function EventTracker({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-center">
+            <div className="rounded-lg border border-border bg-secondary/30 p-3">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Starting</p>
+              <p className="text-sm font-bold tabular-nums">{profile.currentGoldHeads ?? 0}</p>
+            </div>
             <div className="rounded-lg border border-border bg-secondary/30 p-3">
               <p className="text-[10px] uppercase tracking-wide text-muted-foreground">VIP</p>
               <p className="text-sm font-bold tabular-nums">{vipTotal}</p>
@@ -463,7 +560,7 @@ export function EventTracker({
             <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
               <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Total Expected</p>
               <p className="text-sm font-bold text-primary tabular-nums">
-                {vipTotal + eventHeads + mtgHeads + wheelExpectedHeads}
+                {(profile.currentGoldHeads ?? 0) + vipTotal + eventHeads + mtgHeads + wheelExpectedHeads}
               </p>
             </div>
           </div>

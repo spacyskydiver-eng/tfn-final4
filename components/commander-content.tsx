@@ -69,6 +69,9 @@ function createDefaultProfile(name?: string): AccountProfile {
     commanders: [],
     wofTargetSpins: 0,
     wofBundles: {},
+    startDate: new Date().toISOString().slice(0, 10),
+    currentGoldHeads: 0,
+    actualProgress: {},
   }
 }
 
@@ -162,6 +165,7 @@ export function CommanderContent() {
               </div>
 
               {activeProfile && (
+                <>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                   <div className="space-y-1">
                     <Label className="text-xs">Account Name</Label>
@@ -208,6 +212,34 @@ export function CommanderContent() {
                     />
                   </div>
                 </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Tracking Start Date</Label>
+                    <Input
+                      type="date"
+                      value={activeProfile.startDate ?? new Date().toISOString().slice(0, 10)}
+                      onChange={(e) => updateProfile({ ...activeProfile, startDate: e.target.value })}
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      Events before this date are ignored.
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Current Gold Heads</Label>
+                    <Input
+                      type="number"
+                      value={activeProfile.currentGoldHeads ?? 0}
+                      onChange={(e) => updateProfile({ ...activeProfile, currentGoldHeads: Math.max(0, Number(e.target.value) || 0) })}
+                      placeholder="0"
+                      min={0}
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      Gold heads you already own. Projections start from this.
+                    </p>
+                  </div>
+                </div>
+                </>
               )}
 
               {profiles.length > 1 && activeProfile && (
@@ -289,8 +321,8 @@ function ProfileContent({
       {activeSection === 'wheel' && <WheelOfFortuneSection profile={profile} onUpdate={onUpdate} />}
       {activeSection === 'income' && <EventTracker profile={profile} onUpdate={onUpdate} />}
       {activeSection === 'gems' && <GemsPlanner profile={profile} onUpdate={onUpdate} />}
-      {activeSection === 'overview' && <ProjectionSummary profile={profile} />}
-      {activeSection === 'graph' && <ProgressGraph profile={profile} />}
+      {activeSection === 'overview' && <ProjectionSummary profile={profile} onUpdate={onUpdate} />}
+      {activeSection === 'graph' && <ProgressGraph profile={profile} onUpdate={onUpdate} />}
       {activeSection === 'admin' && <AdminCommanderManager />}
     </div>
   )

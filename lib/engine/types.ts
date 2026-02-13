@@ -24,6 +24,16 @@ export type AccountProfile = {
   commanders: CommanderGoal[]
   wofTargetSpins: number
   wofBundles: Record<string, boolean>
+  /** Maps wheel occurrence key → commander id for direct head assignment */
+  wofCommanderAssignments?: Record<string, string>
+  /** Whether to use SoC timeline mode in Wheel Tracker */
+  wofUseSocTimeline?: boolean
+  /** Profile tracking start date (YYYY-MM-DD). Events before this are ignored. */
+  startDate?: string
+  /** Current gold heads the user already owns */
+  currentGoldHeads?: number
+  /** User-recorded actual progress entries: { [YYYY-MM-DD]: totalGoldHeads } */
+  actualProgress?: Record<string, number>
 }
 
 export type OccOutcome = 'default' | 'win' | 'loss' | 'complete' | 'skip' | null
@@ -63,8 +73,10 @@ export type WheelOcc = {
 
 export type ChartRow = {
   day: number
+  date: string
   vip: number
   events: number
   wheel: number
   total: number
+  actual?: number
 }

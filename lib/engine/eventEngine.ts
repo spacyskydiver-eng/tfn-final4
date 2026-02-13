@@ -75,9 +75,11 @@ export function buildOccurrenceRows(
   todayStr: string,
   goalDateStr: string,
   outcomes: Record<string, OccOutcome>,
+  profileStartDate?: string,
 ): OccRow[] {
   return events
     .filter((e) => e.startDate <= goalDateStr)
+    .filter((e) => !profileStartDate || e.endDate >= profileStartDate)
     .filter((e) => isGoldHeadEvent(e.category))
     .filter((e) => e.category !== 'Wheel of Fortune')
     .filter((e) => e.category !== 'More Than Gems')
@@ -121,8 +123,8 @@ export const MTG_TIERS: Record<MtgDayPlan['gemTier'], { heads: number; gems: num
 
 export function createDefaultMtgPlan(): MtgEventPlan {
   return {
-    day1: { gemTier: '14k', heads: 13, gems: 14000 },
-    day2: { gemTier: '14k', heads: 13, gems: 14000 },
+    day1: { gemTier: 'skip', heads: 0, gems: 0 },
+    day2: { gemTier: 'skip', heads: 0, gems: 0 },
     actualHeadsLogged: null,
   }
 }
@@ -150,9 +152,11 @@ export function buildMtgRows(
   events: { title: string; category: string; startDate: string; endDate: string }[],
   todayStr: string,
   goalDateStr: string,
+  profileStartDate?: string,
 ) {
   return events
     .filter((e) => e.startDate <= goalDateStr)
+    .filter((e) => !profileStartDate || e.endDate >= profileStartDate)
     .filter((e) => e.category === 'More Than Gems')
     .map((e) => {
       const status = getEventStatus(e.startDate, e.endDate, todayStr)
@@ -173,9 +177,11 @@ export function buildWheelRows(
   events: { title: string; category: string; startDate: string; endDate: string }[],
   todayStr: string,
   goalDateStr: string,
+  profileStartDate?: string,
 ): WheelOcc[] {
   return events
     .filter((e) => e.startDate <= goalDateStr)
+    .filter((e) => !profileStartDate || e.endDate >= profileStartDate)
     .filter((e) => e.category === 'Wheel of Fortune')
     .map((e) => {
       const status = getEventStatus(e.startDate, e.endDate, todayStr)

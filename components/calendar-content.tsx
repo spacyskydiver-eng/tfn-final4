@@ -328,30 +328,33 @@ export function CalendarContent() {
       ) : (
         <>
           {viewMode === 'timeline' && (
-            <TimelineView
-              events={allEvents}
-              settings={settings}
-              onEdit={isAdmin ? (e => { if (!e.isGenerated) { setEditing(e); setShowEditor(true) } }) : undefined}
-              onDelete={isAdmin ? (id => { if (!manualEvents.find(e => e.id === id)?.isGenerated) deleteEvent(id) }) : undefined}
-            />
+<TimelineView
+  events={allEvents}
+  settings={settings}
+  onEdit={isAdmin ? (e => { setEditing(e); setShowEditor(true) }) : undefined}
+  onDelete={isAdmin ? (id => deleteEvent(id)) : undefined}
+/>
+
           )}
           {viewMode === 'cards' && (
-            <CardsView
-              events={allEvents}
-              settings={settings}
-              onEdit={isAdmin ? (e => { if (!e.isGenerated) { setEditing(e); setShowEditor(true) } }) : undefined}
-              onDelete={isAdmin ? (id => { if (!manualEvents.find(e => e.id === id)?.isGenerated) deleteEvent(id) }) : undefined}
-            />
+<CardsView
+  events={allEvents}
+  settings={settings}
+  onEdit={isAdmin ? (e => { setEditing(e); setShowEditor(true) }) : undefined}
+  onDelete={isAdmin ? (id => deleteEvent(id)) : undefined}
+/>
+
           )}
           {viewMode === 'calendar' && (
-            <MonthCalendarView
-              events={allEvents}
-              settings={settings}
-              currentDate={calendarMonth}
-              onDateChange={setCalendarMonth}
-              onEdit={isAdmin ? (e => { if (!e.isGenerated) { setEditing(e); setShowEditor(true) } }) : undefined}
-              onDelete={isAdmin ? (id => deleteEvent(id)) : undefined}
-            />
+<MonthCalendarView
+  events={allEvents}
+  settings={settings}
+  currentDate={calendarMonth}
+  onDateChange={setCalendarMonth}
+  onEdit={isAdmin ? (e => { setEditing(e); setShowEditor(true) }) : undefined}
+  onDelete={isAdmin ? (id => deleteEvent(id)) : undefined}
+/>
+
           )}
         </>
       )}
@@ -412,6 +415,7 @@ function SettingsPanel({
   onUpdate,
   onClose,
 }: {
+  
   settings: CalendarSettings
   onUpdate: (s: CalendarSettings) => void
   onClose: () => void
