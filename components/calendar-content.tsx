@@ -937,8 +937,8 @@ function MonthCalendarView({ events, settings, currentDate, onDateChange, onEdit
                   </span>
                 )}
               </div>
-              <div className="space-y-0.5 overflow-hidden mt-0.5">
-                {dayEvents.slice(0, 3).map(e => (
+              <div className="space-y-0.5 overflow-y-auto mt-0.5 max-h-[85px] pr-1">
+                {dayEvents.map(e => (
                   <button
                     key={e.id}
                     onClick={() => onEdit?.(e)}
@@ -951,11 +951,6 @@ function MonthCalendarView({ events, settings, currentDate, onDateChange, onEdit
                     {e.title}
                   </button>
                 ))}
-                {dayEvents.length > 3 && (
-                  <div className="text-[10px] text-muted-foreground px-1">
-                    +{dayEvents.length - 3} more
-                  </div>
-                )}
               </div>
             </div>
           )
