@@ -328,15 +328,15 @@ export function CalendarContent() {
       ) : (
         <>
 {viewMode === 'timeline' && (
-  <TimelineView
-    events={allEvents}
-    settings={settings}
-    onEdit={isAdmin ? (e => {
-      setEditing(e);
-      setShowEditor(true);
-    }) : undefined}
-    onDelete={isAdmin ? deleteEvent : undefined}
-  />
+<TimelineView
+  events={allEvents}
+  settings={settings}
+  onEdit={isAdmin ? (e => {
+    setEditing(e)
+    setShowEditor(true)
+  }) : undefined}
+  onDelete={isAdmin ? deleteEvent : undefined}
+/>
 )}
 
 
@@ -344,32 +344,32 @@ export function CalendarContent() {
 
           
 {viewMode === 'cards' && (
-  <CardsView
-    events={allEvents}
-    settings={settings}
-    onEdit={isAdmin ? (e => {
-      setEditing(e);
-      setShowEditor(true);
-    }) : undefined}
-    onDelete={isAdmin ? deleteEvent : undefined}
-  />
+<CardsView
+  events={allEvents}
+  settings={settings}
+  onEdit={isAdmin ? (e => {
+    setEditing(e)
+    setShowEditor(true)
+  }) : undefined}
+  onDelete={isAdmin ? deleteEvent : undefined}
+/>
 )}
 
 
 
           
 {viewMode === 'calendar' && (
-  <MonthCalendarView
-    events={allEvents}
-    settings={settings}
-    currentDate={calendarMonth}
-    onDateChange={setCalendarMonth}
-    onEdit={isAdmin ? (e => {
-      setEditing(e);
-      setShowEditor(true);
-    }) : undefined}
-    onDelete={isAdmin ? deleteEvent : undefined}
-  />
+<MonthCalendarView
+  events={allEvents}
+  settings={settings}
+  currentDate={calendarMonth}
+  onDateChange={setCalendarMonth}
+  onEdit={isAdmin ? (e => {
+    setEditing(e)
+    setShowEditor(true)
+  }) : undefined}
+  onDelete={isAdmin ? deleteEvent : undefined}
+/>
 )}
 
         </>

@@ -59,3 +59,27 @@
     @apply bg-background text-foreground;
   }
 }
+/* Dark minimal scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120,120,140,0.35) transparent;
+}
+
+/* Chrome, Edge, Safari */
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(120,120,140,0.35);
+  border-radius: 6px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(150,150,180,0.55);
+}
