@@ -327,35 +327,51 @@ export function CalendarContent() {
         </Card>
       ) : (
         <>
-          {viewMode === 'timeline' && (
-<TimelineView
-  events={allEvents}
-  settings={settings}
-  onEdit={isAdmin ? (e => { setEditing(e); setShowEditor(true) }) : undefined}
-  onDelete={isAdmin ? (id => deleteEvent(id)) : undefined}
-/>
+{viewMode === 'timeline' && (
+  <TimelineView
+    events={allEvents}
+    settings={settings}
+    onEdit={isAdmin ? (e => {
+      setEditing(e);
+      setShowEditor(true);
+    }) : undefined}
+    onDelete={isAdmin ? deleteEvent : undefined}
+  />
+)}
 
-          )}
-          {viewMode === 'cards' && (
-<CardsView
-  events={allEvents}
-  settings={settings}
-  onEdit={isAdmin ? (e => { setEditing(e); setShowEditor(true) }) : undefined}
-  onDelete={isAdmin ? (id => deleteEvent(id)) : undefined}
-/>
 
-          )}
-          {viewMode === 'calendar' && (
-<MonthCalendarView
-  events={allEvents}
-  settings={settings}
-  currentDate={calendarMonth}
-  onDateChange={setCalendarMonth}
-  onEdit={isAdmin ? (e => { setEditing(e); setShowEditor(true) }) : undefined}
-  onDelete={isAdmin ? (id => deleteEvent(id)) : undefined}
-/>
 
-          )}
+
+          
+{viewMode === 'cards' && (
+  <CardsView
+    events={allEvents}
+    settings={settings}
+    onEdit={isAdmin ? (e => {
+      setEditing(e);
+      setShowEditor(true);
+    }) : undefined}
+    onDelete={isAdmin ? deleteEvent : undefined}
+  />
+)}
+
+
+
+          
+{viewMode === 'calendar' && (
+  <MonthCalendarView
+    events={allEvents}
+    settings={settings}
+    currentDate={calendarMonth}
+    onDateChange={setCalendarMonth}
+    onEdit={isAdmin ? (e => {
+      setEditing(e);
+      setShowEditor(true);
+    }) : undefined}
+    onDelete={isAdmin ? deleteEvent : undefined}
+  />
+)}
+
         </>
       )}
     </div>
@@ -689,7 +705,7 @@ function TimelineView({ events, settings, onEdit, onDelete }: {
                   )}
                 </div>
 
-                {!event.isGenerated && (onEdit || onDelete) && (
+                {(onEdit || onDelete) && (
                   <div className="flex gap-1 flex-shrink-0">
                     {onEdit && (
                       <Button variant="outline" size="sm" className="h-7 w-7 p-0 bg-transparent" onClick={() => onEdit(event)}>
@@ -784,7 +800,7 @@ function CardsView({ events, settings, onEdit, onDelete }: {
                   <h3 className="text-base font-bold text-foreground mt-1">{event.title}</h3>
                 </div>
 
-                {!event.isGenerated && (onEdit || onDelete) && (
+                {(onEdit || onDelete) && (
                   <div className="flex gap-1 flex-shrink-0">
                     {onEdit && (
                       <Button variant="outline" size="sm" className="h-7 w-7 p-0 bg-transparent" onClick={() => onEdit(event)}>
@@ -925,7 +941,7 @@ function MonthCalendarView({ events, settings, currentDate, onDateChange, onEdit
                 {dayEvents.slice(0, 3).map(e => (
                   <button
                     key={e.id}
-                    onClick={() => !e.isGenerated && onEdit?.(e)}
+                    onClick={() => onEdit?.(e)}
                     className={`w-full text-left px-1 py-0.5 rounded text-[10px] font-medium truncate transition-colors hover:opacity-80 ${
                       e.isGenerated ? 'cursor-default' : 'cursor-pointer'
                     }`}
