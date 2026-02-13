@@ -15,13 +15,7 @@ export type CalendarEvent = {
 
 export type KingdomMode = 'early' | 'mature'
 
-export type MatureSeason =
-  | 'preparation'
-  | 'season1'
-  | 'season2'
-  | 'season3'
-  | 'soc'
-
+export type MatureSeason = 'soc'
 /* ------------------------------------------------------------------ */
 /*  CATEGORY COLORS                                                    */
 /* ------------------------------------------------------------------ */
@@ -224,12 +218,50 @@ export function generateSoCEvents(rangeStart: string, rangeEnd: string): Calenda
  * If firstWheelDate is missing/empty, returns [] (no Wheel events).
  */
 export function generateEarlyKingdomEvents(
+  
   kingdomStartDate: string,
   firstWheelDate: string,
   rangeStart: string,
   rangeEnd: string,
 ): CalendarEvent[] {
   const events: CalendarEvent[] = []
+// ---------- Fixed Early Kingdom Events (Day 1–20) ----------
+if (kingdomStartDate) {
+  const start = new Date(kingdomStartDate + "T00:00:00Z")
+
+  const addEvent = (
+    dayStart: number,
+    dayEnd: number,
+    title: string,
+    category: string,
+    color: string
+  ) => {
+    const s = new Date(start)
+    s.setDate(s.getDate() + dayStart - 1)
+
+    const e = new Date(start)
+    e.setDate(e.getDate() + dayEnd - 1)
+
+    events.push({
+      id: `early-${title}-${dayStart}`,
+      title,
+      description: "",
+      startDate: s.toISOString().slice(0, 10),
+      endDate: e.toISOString().slice(0, 10),
+      category,
+      color,
+      isGenerated: true,
+    })
+  }
+
+  // Example early events (replace later with real ones)
+  addEvent(1, 3, "Kingdom Opening Rush", "Kingdom", "#22c55e")
+  addEvent(4, 6, "Early Growth Event", "Growth", "#38bdf8")
+  addEvent(7, 10, "First Power Push", "Competition", "#a855f7")
+  addEvent(11, 15, "Alliance Expansion", "Alliance", "#f59e0b")
+  addEvent(16, 20, "Pre-KvK Prep", "Preparation", "#ef4444")
+}
+  
 
   // Guard: kingdom start date must be valid to calculate day cap
   if (!isValidDateStr(kingdomStartDate)) return events
@@ -296,30 +328,14 @@ export function getKingdomDay(
 const SEASON3_REMOVED_CATEGORIES: string[] = [] // Season 3 gets the full SoC cycle for now
 
 export function generateMatureSeasonEvents(
-  season: MatureSeason,
+  _season: MatureSeason,
   rangeStart: string,
   rangeEnd: string,
 ): CalendarEvent[] {
-  // Validate range dates
   if (!isValidDateStr(rangeStart) || !isValidDateStr(rangeEnd)) return []
-
-  if (season === 'soc') {
-    return generateSoCEvents(rangeStart, rangeEnd)
-  }
-
-  if (season === 'season3') {
-    // Season 3 uses the SoC cycle, optionally with some categories removed
-    const allEvents = generateSoCEvents(rangeStart, rangeEnd)
-    if (SEASON3_REMOVED_CATEGORIES.length === 0) return allEvents
-    return allEvents.filter(
-      (e) => !SEASON3_REMOVED_CATEGORIES.includes(e.category),
-    )
-  }
-
-  // Preparation, Season 1, Season 2 → NO auto-generated events.
-  // Admins add events manually for these seasons.
-  return []
+  return generateSoCEvents(rangeStart, rangeEnd)
 }
+
 
 /* ------------------------------------------------------------------ */
 /*  SETTINGS PERSISTENCE                                               */

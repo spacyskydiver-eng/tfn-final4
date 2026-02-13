@@ -79,18 +79,11 @@ function daysUntilStart(startDate: string) {
 }
 
 const SEASON_LABELS: Record<MatureSeason, string> = {
-  preparation: 'Preparation Season (Early Kingdom)',
-  season1: 'Season 1',
-  season2: 'Season 2',
-  season3: 'Season 3',
-  soc: 'Season of Conquest',
+  soc: 'Global Events',
 }
 
+
 const SEASON_ICONS: Record<MatureSeason, React.ElementType> = {
-  preparation: Crown,
-  season1: Shield,
-  season2: Swords,
-  season3: Target,
   soc: Zap,
 }
 
@@ -181,7 +174,7 @@ export function CalendarContent() {
 
   // Check if early kingdom should suggest switching
   const earlyKingdomDay55Passed = useMemo(() => {
-    if (settings.mode !== 'early' && settings.matureSeason !== 'preparation') return false
+    if (settings.mode !== 'early') return false
     const now = new Date()
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
     const day = getKingdomDay(settings.kingdomStartDate, todayStr)
@@ -383,10 +376,10 @@ export function CalendarContent() {
 /* ================================================================== */
 
 function KingdomModeBar({ settings }: { settings: CalendarSettings }) {
-  const isEarly = settings.mode === 'early' || settings.matureSeason === 'preparation'
-  const seasonKey = isEarly ? 'preparation' : settings.matureSeason
-  const SeasonIcon = SEASON_ICONS[seasonKey]
-  const label = isEarly ? 'Early Kingdom (Preparation Season)' : SEASON_LABELS[settings.matureSeason]
+const isEarly = settings.mode === 'early'
+const SeasonIcon = SEASON_ICONS.soc
+const label = isEarly ? 'Early Kingdom' : SEASON_LABELS.soc
+
 
   const now = new Date()
   const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
@@ -528,39 +521,9 @@ function SettingsPanel({
             </div>
 
             {/* Show early kingdom fields if Preparation season is selected */}
-            {settings.matureSeason === 'preparation' && (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 mt-4 p-4 rounded-lg bg-secondary/30 border border-border">
-                <div className="space-y-2">
-                  <Label>Kingdom Start Date</Label>
-                  <Input
-                    type="date"
-                    value={settings.kingdomStartDate}
-                    onChange={e => onUpdate({ ...settings, kingdomStartDate: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>First Cao Cao Wheel of Fortune Date (optional)</Label>
-                  <Input
-                    type="date"
-                    value={settings.firstWheelDate}
-                    onChange={e => onUpdate({ ...settings, firstWheelDate: e.target.value })}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Leave blank if unknown. Wheel events only appear once this is set.
-                  </p>
-                </div>
-              </div>
-            )}
-
+            
             {/* Info note for seasons without auto events */}
-            {(settings.matureSeason === 'season1' || settings.matureSeason === 'season2') && (
-              <div className="mt-4 p-4 rounded-lg bg-secondary/30 border border-border">
-                <p className="text-sm text-muted-foreground">
-                  {SEASON_LABELS[settings.matureSeason]} does not have automatic global event schedules.
-                  Admins can manually create events using the Add Event button above.
-                </p>
-              </div>
-            )}
+
           </div>
         )}
       </CardContent>
@@ -650,8 +613,7 @@ function TimelineView({ events, settings, onEdit, onDelete }: {
   onEdit?: (e: CalendarEvent) => void
   onDelete?: (id: string) => void
 }) {
-  const isEarly = settings.mode === 'early' || settings.matureSeason === 'preparation'
-
+  const isEarly = settings.mode === 'early'
   return (
     <div className="space-y-3">
       {events.map((event) => {
@@ -757,8 +719,7 @@ function CardsView({ events, settings, onEdit, onDelete }: {
   onEdit?: (e: CalendarEvent) => void
   onDelete?: (id: string) => void
 }) {
-  const isEarly = settings.mode === 'early' || settings.matureSeason === 'preparation'
-
+  const isEarly = settings.mode === 'early'
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       {events.map(event => {
@@ -860,8 +821,7 @@ function MonthCalendarView({ events, settings, currentDate, onDateChange, onEdit
 }) {
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
-  const isEarly = settings.mode === 'early' || settings.matureSeason === 'preparation'
-
+  const isEarly = settings.mode === 'early'
   const firstDay = new Date(year, month, 1)
   const lastDay = new Date(year, month + 1, 0)
   const startOffset = firstDay.getDay()
