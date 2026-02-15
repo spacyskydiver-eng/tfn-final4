@@ -5,6 +5,7 @@
 export type CalendarEvent = {
   id: string
   title: string
+  kingdomDay?: number
   description: string
   startDate: string   // YYYY-MM-DD
   endDate: string     // YYYY-MM-DD

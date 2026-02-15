@@ -166,11 +166,18 @@ export function CalendarContent() {
   }, [settings, activeRange])
 
   // Combine generated + manual events
-  const allEvents = useMemo(() => {
-    return [...generatedEvents, ...manualEvents].sort(
-      (a, b) => new Date(a.startDate + 'T00:00:00Z').getTime() - new Date(b.startDate + 'T00:00:00Z').getTime()
-    )
-  }, [generatedEvents, manualEvents])
+const allEvents = useMemo(() => {
+  const filteredManual = manualEvents.filter(e => {
+    if (settings.mode === 'early') return e.kingdomDay !== undefined
+    return e.kingdomDay === undefined
+  })
+
+  return [...generatedEvents, ...filteredManual].sort(
+    (a, b) =>
+      new Date(a.startDate + 'T00:00:00Z').getTime() -
+      new Date(b.startDate + 'T00:00:00Z').getTime()
+  )
+}, [generatedEvents, manualEvents, settings.mode])
 
   // Check if early kingdom should suggest switching
   const earlyKingdomDay55Passed = useMemo(() => {
@@ -201,15 +208,33 @@ export function CalendarContent() {
     setShowEditor(true)
   }
 
-  const saveEvent = (event: CalendarEvent) => {
-    const exists = manualEvents.find(e => e.id === event.id)
-    const next = exists
-      ? manualEvents.map(e => (e.id === event.id ? event : e))
-      : [event, ...manualEvents]
-    persistManual(next)
-    setEditing(null)
-    setShowEditor(false)
+const saveEvent = (event: CalendarEvent) => {
+  let finalEvent = { ...event }
+
+  if (settings.mode === 'early' && event.kingdomDay && settings.kingdomStartDate) {
+    const start = new Date(settings.kingdomStartDate + 'T00:00:00Z')
+    const eventDate = new Date(start)
+    eventDate.setDate(start.getDate() + event.kingdomDay - 1)
+
+    const dateStr = eventDate.toISOString().slice(0, 10)
+
+    finalEvent = {
+      ...event,
+      startDate: dateStr,
+      endDate: dateStr,
+      isGenerated: false,
+    }
   }
+
+  const exists = manualEvents.find(e => e.id === finalEvent.id)
+  const next = exists
+    ? manualEvents.map(e => (e.id === finalEvent.id ? finalEvent : e))
+    : [finalEvent, ...manualEvents]
+
+  persistManual(next)
+  setEditing(null)
+  setShowEditor(false)
+}
 
   const deleteEvent = (id: string) => {
     persistManual(manualEvents.filter(e => e.id !== id))
@@ -296,11 +321,12 @@ export function CalendarContent() {
 
       {/* Event Editor Inline */}
       {showEditor && editing && (
-        <EventEditor
-          event={editing}
-          onSave={saveEvent}
-          onCancel={() => { setEditing(null); setShowEditor(false) }}
-        />
+<EventEditor
+  event={editing}
+  settings={settings}
+  onSave={saveEvent}
+  onCancel={() => { setEditing(null); setShowEditor(false) }}
+/>
       )}
 
       {/* Views */}
@@ -535,8 +561,9 @@ function SettingsPanel({
 /*  EVENT EDITOR                                                       */
 /* ================================================================== */
 
-function EventEditor({ event, onSave, onCancel }: {
+function EventEditor({ event, settings, onSave, onCancel }: {
   event: CalendarEvent
+  settings: CalendarSettings
   onSave: (e: CalendarEvent) => void
   onCancel: () => void
 }) {
@@ -544,49 +571,67 @@ function EventEditor({ event, onSave, onCancel }: {
   const [description, setDescription] = useState(event.description)
   const [startDate, setStartDate] = useState(event.startDate)
   const [endDate, setEndDate] = useState(event.endDate)
+  const [kingdomDay, setKingdomDay] = useState(event.kingdomDay ?? '')
   const [category, setCategory] = useState(event.category)
   const [color, setColor] = useState(event.color)
 
   return (
     <Card>
       <CardContent className="space-y-4 pt-6">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label>Event Title</Label>
-            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Event name" />
-          </div>
+<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+  <div className="space-y-2">
+    <Label>Event Title</Label>
+    <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Event name" />
+  </div>
 
-          <div className="space-y-2">
-            <Label>Category</Label>
-            <div className="flex flex-wrap gap-2">
-              {EVENT_CATEGORIES.map(cat => (
-                <button
-                  key={cat.label}
-                  onClick={() => { setCategory(cat.label); setColor(cat.color) }}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
-                    category === cat.label
-                      ? 'text-primary-foreground border-transparent'
-                      : 'bg-secondary text-foreground border-border hover:bg-secondary/80'
-                  }`}
-                  style={category === cat.label ? { backgroundColor: cat.color } : undefined}
-                >
-                  {cat.label}
-                </button>
-              ))}
-            </div>
-          </div>
+  <div className="space-y-2">
+    <Label>Category</Label>
+    <div className="flex flex-wrap gap-2">
+      {EVENT_CATEGORIES.map(cat => (
+        <button
+          key={cat.label}
+          onClick={() => { setCategory(cat.label); setColor(cat.color) }}
+          className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
+            category === cat.label
+              ? 'text-primary-foreground border-transparent'
+              : 'bg-secondary text-foreground border-border hover:bg-secondary/80'
+          }`}
+          style={category === cat.label ? { backgroundColor: cat.color } : undefined}
+        >
+          {cat.label}
+        </button>
+      ))}
+    </div>
+  </div>
 
-          <div className="space-y-2">
-            <Label>Start Date</Label>
-            <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
-          </div>
+  {settings.mode === 'early' ? (
+    <div className="space-y-2">
+      <Label>Kingdom Day</Label>
+      <Input
+        type="number"
+        min={1}
+        value={kingdomDay}
+        onChange={e => setKingdomDay(Number(e.target.value))}
+        placeholder="e.g. 5"
+      />
+      <p className="text-xs text-muted-foreground">
+        Day 1 = kingdom start date
+      </p>
+    </div>
+  ) : (
+    <>
+      <div className="space-y-2">
+        <Label>Start Date</Label>
+        <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+      </div>
 
-          <div className="space-y-2">
-            <Label>End Date</Label>
-            <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
-          </div>
-        </div>
-
+      <div className="space-y-2">
+        <Label>End Date</Label>
+        <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+      </div>
+    </>
+  )}
+</div>
         <div className="space-y-2">
           <Label>Description</Label>
           <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional details..." rows={2} />
@@ -594,7 +639,18 @@ function EventEditor({ event, onSave, onCancel }: {
 
         <div className="flex gap-2 justify-end">
           <Button variant="outline" onClick={onCancel} className="bg-transparent">Cancel</Button>
-          <Button onClick={() => onSave({ ...event, title, description, startDate, endDate, category, color })}>
+          <Button onClick={() =>
+  onSave({
+    ...event,
+    title,
+    description,
+    startDate,
+    endDate,
+    category,
+    color,
+    kingdomDay: settings.mode === 'early' ? Number(kingdomDay) : undefined,
+  })
+}>
             Save Event
           </Button>
         </div>
