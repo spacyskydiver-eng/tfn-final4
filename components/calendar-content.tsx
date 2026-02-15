@@ -213,17 +213,18 @@ const saveEvent = (event: CalendarEvent) => {
 
   if (settings.mode === 'early' && event.kingdomDay && settings.kingdomStartDate) {
     const start = new Date(settings.kingdomStartDate + 'T00:00:00Z')
-    const eventDate = new Date(start)
-    eventDate.setDate(start.getDate() + event.kingdomDay - 1)
+    
+const eventDate = new Date(start)
+eventDate.setDate(start.getDate() + event.kingdomDay - 1)
 
-    const dateStr = eventDate.toISOString().slice(0, 10)
+const dateStr = eventDate.toISOString().slice(0, 10)
 
-    finalEvent = {
-      ...event,
-      startDate: dateStr,
-      endDate: dateStr,
-      isGenerated: false,
-    }
+finalEvent = {
+  ...event,
+  startDate: dateStr,
+  endDate: dateStr,
+  isGenerated: false,
+}
   }
 
   const exists = manualEvents.find(e => e.id === finalEvent.id)
@@ -571,7 +572,8 @@ function EventEditor({ event, settings, onSave, onCancel }: {
   const [description, setDescription] = useState(event.description)
   const [startDate, setStartDate] = useState(event.startDate)
   const [endDate, setEndDate] = useState(event.endDate)
-  const [kingdomDay, setKingdomDay] = useState(event.kingdomDay ?? '')
+  const [startKingdomDay, setStartKingdomDay] = useState(event.kingdomDay ?? '')
+
   const [category, setCategory] = useState(event.category)
   const [color, setColor] = useState(event.color)
 
@@ -605,19 +607,17 @@ function EventEditor({ event, settings, onSave, onCancel }: {
   </div>
 
   {settings.mode === 'early' ? (
-    <div className="space-y-2">
-      <Label>Kingdom Day</Label>
-      <Input
-        type="number"
-        min={1}
-        value={kingdomDay}
-        onChange={e => setKingdomDay(Number(e.target.value))}
-        placeholder="e.g. 5"
-      />
-      <p className="text-xs text-muted-foreground">
-        Day 1 = kingdom start date
-      </p>
-    </div>
+<div className="space-y-2">
+  <Label>Start Kingdom Day</Label>
+  <Input
+    type="number"
+    min={1}
+    value={startKingdomDay}
+    onChange={e => setStartKingdomDay(Number(e.target.value))}
+  />
+</div>
+
+
   ) : (
     <>
       <div className="space-y-2">
@@ -648,7 +648,7 @@ function EventEditor({ event, settings, onSave, onCancel }: {
     endDate,
     category,
     color,
-    kingdomDay: settings.mode === 'early' ? Number(kingdomDay) : undefined,
+    kingdomDay: settings.mode === 'early' ? Number(startKingdomDay) : undefined,
   })
 }>
             Save Event
