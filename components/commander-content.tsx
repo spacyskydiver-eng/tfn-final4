@@ -34,6 +34,7 @@ import { GemsPlanner } from '@/components/commander/GemsPlanner'
 import { ProjectionSummary } from '@/components/commander/ProjectionSummary'
 import { ProgressGraph } from '@/components/commander/ProgressGraph'
 import { AdminCommanderManager } from '@/components/commander/AdminCommanderManager'
+import { CommanderPlannerSection } from '@/components/commander-planner/CommanderPlannerSection'
 
 /* ================================================================ */
 /*  SAVE / LOAD                                                       */
@@ -278,11 +279,12 @@ function ProfileContent({
 }) {
   const { user } = useAuth()
   const [activeSection, setActiveSection] = useState<
-    'commanders' | 'wheel' | 'income' | 'gems' | 'overview' | 'graph' | 'admin'
+    'commanders' | 'planner' | 'wheel' | 'income' | 'gems' | 'overview' | 'graph' | 'admin'
   >('commanders')
 
   const TABS: { id: typeof activeSection; label: string; icon: typeof Crown; adminOnly?: boolean }[] = [
     { id: 'commanders', label: 'Commanders', icon: Crown },
+    { id: 'planner', label: 'Commander Planner', icon: TrendingUp },
     { id: 'wheel', label: 'Wheel of Fortune', icon: Dices },
     { id: 'income', label: 'Event Tracker', icon: Package },
     { id: 'gems', label: 'Gems Planner', icon: Gem },
@@ -292,6 +294,8 @@ function ProfileContent({
   ]
 
   const visibleTabs = TABS.filter((t) => !t.adminOnly || user?.isAdmin)
+  const onNavigateToPlanner = () => setActiveSection('planner')
+  const onNavigateToInvestments = () => setActiveSection('commanders')
 
   return (
     <div className="space-y-6">
@@ -317,7 +321,20 @@ function ProfileContent({
         })}
       </div>
 
-      {activeSection === 'commanders' && <CommandersSection profile={profile} onUpdate={onUpdate} />}
+      {activeSection === 'commanders' && (
+        <CommandersSection
+          profile={profile}
+          onUpdate={onUpdate}
+          onNavigateToPlanner={onNavigateToPlanner}
+        />
+      )}
+      {activeSection === 'planner' && (
+        <CommanderPlannerSection
+          profile={profile}
+          onUpdate={onUpdate}
+          onNavigateToInvestments={onNavigateToInvestments}
+        />
+      )}
       {activeSection === 'wheel' && <WheelOfFortuneSection profile={profile} onUpdate={onUpdate} />}
       {activeSection === 'income' && <EventTracker profile={profile} onUpdate={onUpdate} />}
       {activeSection === 'gems' && <GemsPlanner profile={profile} onUpdate={onUpdate} />}

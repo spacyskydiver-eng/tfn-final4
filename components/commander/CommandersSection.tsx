@@ -27,7 +27,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Trash2, Crown, ChevronsUpDown, Check } from 'lucide-react'
+import { Plus, Trash2, Crown, ChevronsUpDown, Check, TrendingUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AccountProfile, CommanderGoal } from '@/lib/engine/types'
 import type { CommanderSkillSet } from '@/lib/kvk-engine'
@@ -106,9 +106,11 @@ function createDefaultCommander(name?: string): CommanderGoal {
 export function CommandersSection({
   profile,
   onUpdate,
+  onNavigateToPlanner,
 }: {
   profile: AccountProfile
   onUpdate: (p: AccountProfile) => void
+  onNavigateToPlanner?: () => void
 }) {
   const roster = useMemo(() => getCommanderRoster(), [])
   const skillLabels = ['1st Skill', '2nd Skill', '3rd Skill', '4th Skill']
@@ -177,6 +179,17 @@ export function CommandersSection({
 
   return (
     <div className="space-y-6">
+      {profile.commanders.length > 0 && onNavigateToPlanner && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-2.5">
+          <p className="text-xs text-muted-foreground">
+            Want gear, formation, and level planning? Open the <span className="font-medium text-foreground">Planner</span> tab to simulate upgrades and completion dates.
+          </p>
+          <Button variant="outline" size="sm" className="gap-1.5 shrink-0" onClick={onNavigateToPlanner}>
+            <TrendingUp className="h-3.5 w-3.5" />
+            Planner tab
+          </Button>
+        </div>
+      )}
       {profile.commanders.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center">
