@@ -6,7 +6,7 @@ import { Progress } from '@/components/ui/progress'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { TrendingUp, Crown, Save } from 'lucide-react'
+import { TrendingUp, Crown, Save, Gem } from 'lucide-react'
 import { useEvents } from '@/lib/event-context'
 import type { AccountProfile, OccOutcome, MtgEventPlan } from '@/lib/engine/types'
 import {
@@ -15,6 +15,7 @@ import {
   buildWheelRows,
   createDefaultMtgPlan,
   getMtgPlannedHeads,
+  getMtgPlannedGems,
 } from '@/lib/engine/eventEngine'
 import { calcCommanderNeeds, calcTotalHeadsNeeded } from '@/lib/engine/commanderEngine'
 import { calcVipHeads, calcTotalProjectedHeads } from '@/lib/engine/incomeEngine'
@@ -44,11 +45,16 @@ export function ProjectionSummary({
   const [wofSpinsByOcc, setWofSpinsByOcc] = useState<Record<string, number>>({})
 
   useEffect(() => {
-    try {
-      setOutcomes(JSON.parse(localStorage.getItem(OUTCOME_KEY) || '{}'))
-    } catch {
-      setOutcomes({})
+    if (profile.ghOutcomes) {
+      setOutcomes(profile.ghOutcomes)
+    } else {
+      try {
+        setOutcomes(JSON.parse(localStorage.getItem(OUTCOME_KEY) || '{}'))
+      } catch {
+        setOutcomes({})
+      }
     }
+
     try {
       setMtgPlans(JSON.parse(localStorage.getItem(MTG_KEY) || '{}'))
     } catch {
@@ -59,7 +65,7 @@ export function ProjectionSummary({
     } catch {
       setWofSpinsByOcc({})
     }
-  }, [OUTCOME_KEY, MTG_KEY, WOF_SPINS_KEY])
+  }, [OUTCOME_KEY, MTG_KEY, WOF_SPINS_KEY, profile.ghOutcomes])
 
   /* ---------- Actual progress (from profile) ---------- */
   const actualProgress = profile.actualProgress ?? {}
@@ -121,6 +127,11 @@ export function ProjectionSummary({
     0,
   )
 
+  const mtgGems = mtgRows.reduce(
+    (s, r) => s + getMtgPlannedGems(mtgPlans[r.key] ?? createDefaultMtgPlan()),
+    0,
+  )
+
   const totalWheelSpins = wheelRows.reduce((sum, w) => sum + (wofSpinsByOcc[w.key] ?? 0), 0)
 
   const wofHeads = useMemo(() => {
@@ -158,6 +169,7 @@ export function ProjectionSummary({
 
   const totalDirectWheelHeads = Object.values(wheelHeadsByCommander).reduce((s, h) => s + h, 0)
   const universalHeads = totalHeadsExpected - totalDirectWheelHeads
+
 
   const commanderBreakdown = profile.commanders.map((cmd) => {
     const needs = calcCommanderNeeds(cmd)
@@ -336,6 +348,32 @@ export function ProjectionSummary({
           )}
         </CardContent>
       </Card>
+
+      {/* Gems Overview */}
+      {mtgGems > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Gem className="h-4 w-4 text-primary" />
+              Gems Overview
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-xl border border-primary/30 bg-primary/5 p-5">
+              <div className="grid grid-cols-1 text-center">
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">MTG Gems Needed</p>
+                  <p className="text-lg font-bold text-primary tabular-nums">{mtgGems.toLocaleString()}</p>
+                </div>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Based on your planned More Than Gems (MTG) event completions in the Event Tracker. Plan your gem spending for each MTG event to get a more detailed breakdown.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
 
       {/* Per-commander breakdown */}
       {commanderBreakdown.length > 0 ? (

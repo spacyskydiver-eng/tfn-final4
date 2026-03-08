@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, useCallback, useRef, useEffect } from 'react'
+import { useMemo, useState, useCallback, useRef, useEffect, memo } from 'react'
 import { createPortal } from 'react-dom'
 import type { TalentTree, TalentNode } from '@/lib/game/talents'
 import type { CommanderTalentConfig } from '@/lib/engine/useCommanderPlanner'
@@ -174,7 +174,7 @@ function formatDescription(template: string | undefined, levelIndex: number, val
   return template.replace(/\$\{1\}/g, String(value))
 }
 
-export function TalentTreeGraph({
+export const TalentTreeGraph = memo(function TalentTreeGraphImpl({
   tree,
   config,
   onConfigChange,
@@ -184,8 +184,11 @@ export function TalentTreeGraph({
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const dragStartRef = useRef({ x: 0, y: 0 })
+  const panRef = useRef(pan)
+  const panPendingRef = useRef<{ x: number; y: number } | null>(null)
+  const rafRef = useRef<number | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [hoverNodeId, setHoverNodeId] = useState<string | null>(null)
   const [pulseNodeId, setPulseNodeId] = useState<string | null>(null)
@@ -281,7 +284,7 @@ export function TalentTreeGraph({
         partial: 'fill-red-400 stroke-red-500',
         maxed: 'fill-red-600 stroke-red-700',
         edge: 'stroke-red-400',
-        glow: 'drop-shadow-[0_0_6px_rgba(239,68,68,0.6)]',
+        glow: 'drop-shadow-[0_0_2px_rgba(239,68,68,0.3)]',
       },
       yellow: {
         unlocked: 'fill-yellow-500 stroke-yellow-600',
@@ -289,7 +292,7 @@ export function TalentTreeGraph({
         partial: 'fill-yellow-400 stroke-yellow-500',
         maxed: 'fill-yellow-600 stroke-yellow-700',
         edge: 'stroke-yellow-400',
-        glow: 'drop-shadow-[0_0_6px_rgba(234,179,8,0.6)]',
+        glow: 'drop-shadow-[0_0_2px_rgba(234,179,8,0.3)]',
       },
       blue: {
         unlocked: 'fill-blue-500 stroke-blue-600',
@@ -297,7 +300,7 @@ export function TalentTreeGraph({
         partial: 'fill-blue-400 stroke-blue-500',
         maxed: 'fill-blue-600 stroke-blue-700',
         edge: 'stroke-blue-400',
-        glow: 'drop-shadow-[0_0_6px_rgba(59,130,246,0.6)]',
+        glow: 'drop-shadow-[0_0_2px_rgba(59,130,246,0.3)]',
       },
     }
     return themes[color]
@@ -400,27 +403,55 @@ export function TalentTreeGraph({
     return () => document.removeEventListener('mousedown', handler)
   }, [selectedNodeId])
 
+  panRef.current = pan
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return
     if (!svgRef.current) return
-    setIsDragging(true)
     const rect = svgRef.current.getBoundingClientRect()
-    setDragStart({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+    dragStartRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+    setIsDragging(true)
   }, [])
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
       if (!isDragging || !svgRef.current) return
       const rect = svgRef.current.getBoundingClientRect()
-      const deltaX = (e.clientX - rect.left - dragStart.x) * (bounds.width / rect.width) / zoom
-      const deltaY = (e.clientY - rect.top - dragStart.y) * (bounds.height / rect.height) / zoom
-      setPan((p) => ({ x: p.x - deltaX, y: p.y - deltaY }))
-      setDragStart({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+      const scaleX = (bounds.width / rect.width) / zoom
+      const scaleY = (bounds.height / rect.height) / zoom
+      const deltaX = (e.clientX - rect.left - dragStartRef.current.x) * scaleX
+      const deltaY = (e.clientY - rect.top - dragStartRef.current.y) * scaleY
+      dragStartRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+      panPendingRef.current = {
+        x: panRef.current.x - deltaX,
+        y: panRef.current.y - deltaY,
+      }
+      if (rafRef.current === null) {
+        rafRef.current = requestAnimationFrame(() => {
+          rafRef.current = null
+          if (panPendingRef.current !== null) {
+            setPan(panPendingRef.current)
+            panRef.current = panPendingRef.current
+            panPendingRef.current = null
+          }
+        })
+      }
     },
-    [isDragging, dragStart, bounds, zoom]
+    [isDragging, bounds.width, bounds.height, zoom]
   )
 
-  const handleMouseUp = useCallback(() => setIsDragging(false), [])
+  const handleMouseUp = useCallback(() => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+    }
+    if (panPendingRef.current !== null) {
+      setPan(panPendingRef.current)
+      panRef.current = panPendingRef.current
+      panPendingRef.current = null
+    }
+    setIsDragging(false)
+  }, [])
 
   const handleZoomIn = useCallback(() => setZoom((z) => Math.min(z + 0.2, 3)), [])
   const handleZoomOut = useCallback(() => setZoom((z) => Math.max(z - 0.2, 0.5)), [])
@@ -492,7 +523,7 @@ export function TalentTreeGraph({
       const stroke = isPreview || isActive || isAvailable ? theme.edgeHex : '#334155' // slate-700
       const opacity = isPreview ? 1 : isActive ? 0.95 : isAvailable ? 0.55 : 0.25
       const strokeWidth = isPreview ? 2.5 : isActive ? 2 : isAvailable ? 1.5 : 1
-      const glow = (isPreview || isActive) ? `drop-shadow(0 0 6px ${theme.glowHex})` : undefined
+      const glow = (isPreview || isActive) ? `drop-shadow(0 0 2px ${theme.glowHex})` : undefined
 
       return (
         <line
@@ -878,23 +909,7 @@ export function TalentTreeGraph({
 
   const legend = (
     <div className="text-[10px] text-muted-foreground flex items-center gap-4 flex-wrap">
-      <div className="flex items-center gap-1">
-        <div className={cn('w-3 h-3 rounded-full', colorClasses.unlocked)} />
-        <span>Available</span>
-      </div>
-      <div className="flex items-center gap-1">
-        <div className={cn('w-3 h-3 rounded-full', colorClasses.partial)} />
-        <span>Partial</span>
-      </div>
-      <div className="flex items-center gap-1">
-        <div className={cn('w-3 h-3 rounded-full', colorClasses.maxed)} />
-        <span>Maxed</span>
-      </div>
-      <div className="flex items-center gap-1">
-        <div className={cn('w-3 h-3 rounded-full', colorClasses.locked)} />
-        <span>Locked</span>
-      </div>
-      <span className="ml-auto">Click node to open panel · Use +/− to level</span>
+      <span>Click node to open panel · Use +/− to level</span>
     </div>
   )
 
@@ -945,4 +960,4 @@ export function TalentTreeGraph({
         )}
     </>
   )
-}
+})

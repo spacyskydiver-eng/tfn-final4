@@ -16,8 +16,6 @@ import {
   Plus,
   Trash2,
   Crown,
-  Gem,
-  Dices,
   TrendingUp,
   Package,
   Users,
@@ -28,9 +26,7 @@ import type { AccountProfile } from '@/lib/engine/types'
 import { VIP_HEADS_PER_DAY } from '@/lib/kvk-engine'
 import { useAuth } from '@/lib/auth-context'
 import { CommandersSection } from '@/components/commander/CommandersSection'
-import { WheelOfFortuneSection } from '@/components/commander/WheelOfFortuneSection'
 import { EventTracker } from '@/components/commander/EventTracker'
-import { GemsPlanner } from '@/components/commander/GemsPlanner'
 import { ProjectionSummary } from '@/components/commander/ProjectionSummary'
 import { ProgressGraph } from '@/components/commander/ProgressGraph'
 import { AdminCommanderManager } from '@/components/commander/AdminCommanderManager'
@@ -203,7 +199,7 @@ export function CommanderContent() {
                     </Select>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Days Until KvK</Label>
+                    <Label className="text-xs">Days to finish goal</Label>
                     <Input
                       type="number"
                       value={activeProfile.daysUntilGoal || ''}
@@ -279,15 +275,13 @@ function ProfileContent({
 }) {
   const { user } = useAuth()
   const [activeSection, setActiveSection] = useState<
-    'commanders' | 'planner' | 'wheel' | 'income' | 'gems' | 'overview' | 'graph' | 'admin'
+    'commanders' | 'planner' | 'income' | 'overview' | 'graph' | 'admin'
   >('commanders')
 
   const TABS: { id: typeof activeSection; label: string; icon: typeof Crown; adminOnly?: boolean }[] = [
     { id: 'commanders', label: 'Commanders', icon: Crown },
     { id: 'planner', label: 'Commander Planner', icon: TrendingUp },
-    { id: 'wheel', label: 'Wheel of Fortune', icon: Dices },
     { id: 'income', label: 'Event Tracker', icon: Package },
-    { id: 'gems', label: 'Gems Planner', icon: Gem },
     { id: 'overview', label: 'Overview', icon: TrendingUp },
     { id: 'graph', label: 'Graph', icon: BarChart3 },
     { id: 'admin', label: 'Admin', icon: Shield, adminOnly: true },
@@ -335,9 +329,7 @@ function ProfileContent({
           onNavigateToInvestments={onNavigateToInvestments}
         />
       )}
-      {activeSection === 'wheel' && <WheelOfFortuneSection profile={profile} onUpdate={onUpdate} />}
       {activeSection === 'income' && <EventTracker profile={profile} onUpdate={onUpdate} />}
-      {activeSection === 'gems' && <GemsPlanner profile={profile} onUpdate={onUpdate} />}
       {activeSection === 'overview' && <ProjectionSummary profile={profile} onUpdate={onUpdate} />}
       {activeSection === 'graph' && <ProgressGraph profile={profile} onUpdate={onUpdate} />}
       {activeSection === 'admin' && <AdminCommanderManager />}

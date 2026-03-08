@@ -1,20 +1,13 @@
 'use client'
 
 import { useMemo } from 'react'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import type { AccountProfile, MtgEventPlan, OccOutcome } from '@/lib/engine/types'
 import { useCommanderPlanner } from '@/lib/engine/useCommanderPlanner'
 import { CommanderGridSelector } from './CommanderGridSelector'
 import { CommanderStatePanel } from './CommanderStatePanel'
 import { CommanderStatsComparison } from './CommanderStatsComparison'
-import {
-  UpgradeCostBreakdown,
-  calcEquipmentCosts,
-  calcLevelCosts,
-  calcSkillCosts,
-} from './UpgradeCostBreakdown'
-import { PlannerSummaryPanel } from './PlannerSummaryPanel'
 import { useEvents } from '@/lib/event-context'
 import { buildMtgRows, buildOccurrenceRows, buildWheelRows } from '@/lib/engine/eventEngine'
 import { buildChartData } from '@/lib/engine/projectionEngine'
@@ -26,7 +19,7 @@ type CommanderPlannerSectionProps = {
   onNavigateToInvestments?: () => void
 }
 
-export function CommanderPlannerSection({ profile, onNavigateToInvestments }: CommanderPlannerSectionProps) {
+export function CommanderPlannerSection({ profile, onUpdate, onNavigateToInvestments }: CommanderPlannerSectionProps) {
   const { loaded, state, selectedEntry, selectCommander, updateSide } = useCommanderPlanner(
     profile.id,
     profile.commanders,
@@ -45,14 +38,16 @@ export function CommanderPlannerSection({ profile, onNavigateToInvestments }: Co
 
   const [outcomes, mtgPlans, wofSpinsByOcc] = useMemo(() => {
     try {
-      const o: Record<string, OccOutcome> = JSON.parse(localStorage.getItem(OUTCOME_KEY) || '{}')
+      const o: Record<string, OccOutcome> = profile.ghOutcomes
+        ? { ...profile.ghOutcomes }
+        : JSON.parse(localStorage.getItem(OUTCOME_KEY) || '{}')
       const m: Record<string, MtgEventPlan> = JSON.parse(localStorage.getItem(MTG_KEY) || '{}')
       const w: Record<string, number> = JSON.parse(localStorage.getItem(WOF_SPINS_KEY) || '{}')
       return [o, m, w]
     } catch {
       return [{}, {}, {}] as [Record<string, OccOutcome>, Record<string, MtgEventPlan>, Record<string, number>]
     }
-  }, [OUTCOME_KEY, MTG_KEY, WOF_SPINS_KEY])
+  }, [OUTCOME_KEY, MTG_KEY, WOF_SPINS_KEY, profile.ghOutcomes])
 
   const profileStartDate = profile.startDate
   const anchorDate = profileStartDate ? new Date(profileStartDate) : today
@@ -182,6 +177,17 @@ export function CommanderPlannerSection({ profile, onNavigateToInvestments }: Co
 
           <CommanderStatsComparison current={selectedEntry.current} target={selectedEntry.target} />
 
+          {/* Talent Editor - Commented out for future use */}
+          {/* 
+          <TalentEditorBlock
+            side={selectedEntry.target}
+            onChange={(patch) => updateSide(selectedEntry.commanderId, 'target', patch)}
+            commanderName={selectedEntry.commanderName}
+          />
+          */}
+
+          {/* Summary cards removed - moved to Overview tab */}
+          {/* 
           {(() => {
             const skillCosts = calcSkillCosts(
               selectedEntry.rarity,
@@ -203,9 +209,9 @@ export function CommanderPlannerSection({ profile, onNavigateToInvestments }: Co
                   rarity={selectedEntry.rarity}
                   current={selectedEntry.current}
                   target={selectedEntry.target}
+                  currentGoldHeads={commanderBaselineHeads}
                 />
 
-                {/* Summary using shared chart/projection engine for head timing */}
                 <PlannerSummaryPanel
                   rarity={selectedEntry.rarity}
                   current={selectedEntry.current}
@@ -222,6 +228,7 @@ export function CommanderPlannerSection({ profile, onNavigateToInvestments }: Co
               </>
             )
           })()}
+          */}
         </>
       )}
     </div>

@@ -1,7 +1,9 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import type { PlannerCommanderSide } from '@/lib/engine/useCommanderPlanner'
 import { computeCommanderStats } from '@/lib/engine/commanderStatsEngine'
 
@@ -11,6 +13,7 @@ type CommanderStatsComparisonProps = {
 }
 
 export function CommanderStatsComparison({ current, target }: CommanderStatsComparisonProps) {
+  const [open, setOpen] = useState(true)
   const currentStats = useMemo(() => computeCommanderStats(current), [current])
   const targetStats = useMemo(() => computeCommanderStats(target), [target])
 
@@ -26,13 +29,22 @@ export function CommanderStatsComparison({ current, target }: CommanderStatsComp
 
   return (
     <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm">Commander Stats Comparison</CardTitle>
-        <p className="text-[11px] text-muted-foreground">
-          Combat impact from equipment (and formation). Base stats and skill bonuses will be added when data is available.
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-3">
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger asChild>
+          <CardHeader className="pb-3 cursor-pointer hover:bg-secondary/30 transition-colors">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <CardTitle className="text-sm">Commander Stats Comparison</CardTitle>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Combat impact from equipment. Base stats and skill bonuses will be added when data is available.
+                </p>
+              </div>
+              {open ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+            </div>
+          </CardHeader>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent className="space-y-3">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="rounded-lg border border-border bg-secondary/20 p-3">
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
@@ -106,7 +118,9 @@ export function CommanderStatsComparison({ current, target }: CommanderStatsComp
             </table>
           </div>
         )}
-      </CardContent>
+          </CardContent>
+        </CollapsibleContent>
+      </Collapsible>
     </Card>
   )
 }

@@ -13,6 +13,7 @@ import {
   Home,
   CrosshairIcon,
   Crown,
+  Map,
 } from "lucide-react";
 
 import { AccountsContent } from "@/components/accounts-content";
@@ -25,6 +26,7 @@ import { SettingsContent } from "@/components/settings-content";
 import { HomeContent } from "@/components/home-content";
 import { KvkContent } from "@/components/kvk-content";
 import { CommanderContent } from "@/components/commander-content";
+import { TerritoryPlannerContent } from "@/components/territory-planner-content";
 
 const tabMeta: Record<string, { label: string; description: string; icon: React.ElementType }> = {
   home: {
@@ -71,6 +73,11 @@ const tabMeta: Record<string, { label: string; description: string; icon: React.
     label: "Progression Plans",
     description: "Plan your growth from day one",
     icon: TrendingUp,
+  },
+  "territory-planner": {
+    label: "Territory Planner",
+    description: "Plan and manage your territory strategy",
+    icon: Map,
   },
   settings: {
     label: "Settings",
@@ -121,6 +128,8 @@ export function ContentPanel({ activeTab, onTabChange }: ContentPanelProps) {
           <KvkContent />
         ) : activeTab === "commander" ? (
           <CommanderContent />
+        ) : activeTab === "territory-planner" ? (
+          <TerritoryPlannerContent />
         ) : activeTab === "settings" ? (
           <SettingsContent />
         ) : (

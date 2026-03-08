@@ -18,6 +18,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 0 * COL,
     y: 2 * ROW,
     parents: [],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
 
   // ===== COLUMN 1 =====
@@ -30,6 +35,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 1 * COL,
     y: 1 * ROW,
     parents: ['quarrying'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
   {
     id: 'handsaw',
@@ -40,6 +50,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 1 * COL,
     y: 3 * ROW,
     parents: ['quarrying'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
 
   // ===== COLUMN 2 =====
@@ -52,6 +67,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 2 * COL,
     y: 0 * ROW,
     parents: ['irrigation'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
   {
     id: 'masonry',
@@ -62,6 +82,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 2 * COL,
     y: 2 * ROW,
     parents: ['irrigation', 'handsaw'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
   {
     id: 'handaxe',
@@ -72,6 +97,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 2 * COL,
     y: 4 * ROW,
     parents: ['handsaw'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
 
   // ===== COLUMN 3 =====
@@ -84,6 +114,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 3 * COL,
     y: 2 * ROW,
     parents: ['masonry'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
 
   // ===== COLUMN 4 =====
@@ -96,6 +131,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 4 * COL,
     y: 0 * ROW,
     parents: ['metallurgy'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
   {
     id: 'writing',
@@ -106,6 +146,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 4 * COL,
     y: 2 * ROW,
     parents: ['metallurgy'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
   {
     id: 'metalworking',
@@ -116,6 +161,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 4 * COL,
     y: 4 * ROW,
     parents: ['metallurgy'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
 
   // ===== COLUMN 5 =====
@@ -128,6 +178,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 5 * COL,
     y: 0 * ROW,
     parents: ['chisel'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
   {
     id: 'multilayer',
@@ -138,6 +193,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 5 * COL,
     y: 2 * ROW,
     parents: ['writing'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
   {
     id: 'placer',
@@ -148,6 +208,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 5 * COL,
     y: 4 * ROW,
     parents: ['metalworking'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
 
   // ===== COLUMN 6+7 =====
@@ -160,6 +225,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 6 * COL,
     y: 0.5 * ROW,
     parents: ['handcart'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
   {
     id: 'jewelry',
@@ -170,6 +240,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 7 * COL,
     y: 2 * ROW,
     parents: ['multilayer'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
 
   // ===== COLUMN 8 =====
@@ -182,6 +257,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 8 * COL,
     y: 1 * ROW,
     parents: ['jewelry'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
   {
     id: 'sawmill',
@@ -192,6 +272,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 8 * COL,
     y: 3 * ROW,
     parents: ['jewelry'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
 
   // ===== COLUMN 9 =====
@@ -204,6 +289,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 9 * COL,
     y: 0 * ROW,
     parents: ['plow'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
   {
     id: 'engineering',
@@ -214,6 +304,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 9 * COL,
     y: 2 * ROW,
     parents: ['plow', 'sawmill'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
   {
     id: 'whipsaw',
@@ -224,6 +319,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 9 * COL,
     y: 4 * ROW,
     parents: ['sawmill'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
 
   // ===== COLUMN 10 =====
@@ -236,6 +336,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 10 * COL,
     y: 2 * ROW,
     parents: ['engineering'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
 
   // ===== COLUMN 11 =====
@@ -248,6 +353,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 11 * COL,
     y: 0 * ROW,
     parents: ['mathematics'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
   {
     id: 'coinage',
@@ -258,6 +368,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 11 * COL,
     y: 4 * ROW,
     parents: ['mathematics'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
 
   // ===== COLUMN 12 =====
@@ -270,6 +385,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 12 * COL,
     y: 0 * ROW,
     parents: ['openpit'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
   {
     id: 'shaftmining',
@@ -280,6 +400,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 12 * COL,
     y: 4 * ROW,
     parents: ['coinage'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
 
   // ===== COLUMN 13 =====
@@ -292,6 +417,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 13 * COL,
     y: 2 * ROW,
     parents: ['mathematics'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
 
   // ===== COLUMN 14+15 =====
@@ -304,6 +434,11 @@ export const economyTree: TechNode[] = [
     x: START_X + 14 * COL,
     y: 0.5 * ROW,
     parents: ['machinery'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
   {
     id: 'cuttingpolishing',
@@ -314,5 +449,10 @@ export const economyTree: TechNode[] = [
     x: START_X + 15 * COL,
     y: 2 * ROW,
     parents: ['machinery'],
+    requirements: {},
+    timeCost: 0,
+    power: 0,
+    mgePoints: 0,
+    resourceCosts: {},
   },
 ]

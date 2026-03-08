@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -46,20 +48,28 @@ export function EventTracker({
   const [outcomes, setOutcomes] = useState<Record<string, OccOutcome>>({})
 
   useEffect(() => {
+    if (profile.ghOutcomes) {
+      setOutcomes(profile.ghOutcomes)
+      return
+    }
     try {
       const raw = localStorage.getItem(OUTCOME_KEY)
       setOutcomes(raw ? JSON.parse(raw) : {})
     } catch {
       setOutcomes({})
     }
-  }, [OUTCOME_KEY])
+  }, [OUTCOME_KEY, profile.ghOutcomes])
 
   useEffect(() => {
     try { localStorage.setItem(OUTCOME_KEY, JSON.stringify(outcomes)) } catch {}
   }, [OUTCOME_KEY, outcomes])
 
   const setOutcome = (occId: string, v: OccOutcome) => {
-    setOutcomes((prev) => ({ ...prev, [occId]: v }))
+    setOutcomes((prev) => {
+      const next = { ...prev, [occId]: v }
+      onUpdate({ ...profile, ghOutcomes: next })
+      return next
+    })
   }
 
   /* ---------- MTG Plans State ---------- */
@@ -125,6 +135,22 @@ export function EventTracker({
     onUpdate({ ...profile, wofUseSocTimeline: !useSocTimeline })
   }
 
+  /* ---------- Collapse State for Cards ---------- */
+  const [expandedSections, setExpandedSections] = useState({
+    activeEvents: true,
+    upcomingEvents: true,
+    mtgPlanner: true,
+    wheelPlanner: true,
+    summary: true,
+  })
+
+  const toggleSection = (section: keyof typeof expandedSections) => {
+    setExpandedSections((prev) => ({
+      ...prev,
+      [section]: !prev[section],
+    }))
+  }
+
   /* ---------- Commander Assignment per Wheel ---------- */
   const wofAssignments = profile.wofCommanderAssignments ?? {}
   const setWheelCommander = (key: string, commanderId: string) => {
@@ -176,8 +202,17 @@ export function EventTracker({
       {/* Active GH Events */}
       {activeEvents.length > 0 && (
         <Card className="border-primary/40 bg-primary/5">
-          <CardContent className="py-4 space-y-2">
-            <p className="text-sm font-semibold text-primary">Active Gold Head Events (log results)</p>
+          <Collapsible open={expandedSections.activeEvents} onOpenChange={() => toggleSection('activeEvents')}>
+            <CollapsibleTrigger asChild>
+              <CardHeader className="pb-3 cursor-pointer hover:bg-primary/10 transition-colors">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">Active Gold Head Events</CardTitle>
+                  {expandedSections.activeEvents ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </div>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <CardContent className="py-4 space-y-2">
             {activeEvents.map((ev) => (
               <div key={ev.id} className="flex items-center justify-between gap-3">
                 <div className="text-sm text-foreground">
@@ -211,17 +246,26 @@ export function EventTracker({
             <p className="text-xs text-muted-foreground">
               While an event is active, it counts as <span className="font-semibold">0</span> until logged.
             </p>
-          </CardContent>
+              </CardContent>
+            </CollapsibleContent>
+          </Collapsible>
         </Card>
       )}
 
       {/* Upcoming GH Events */}
       {upcomingEvents.length > 0 && (
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Upcoming Gold Head Events (until goal)</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1">
+          <Collapsible open={expandedSections.upcomingEvents} onOpenChange={() => toggleSection('upcomingEvents')}>
+            <CollapsibleTrigger asChild>
+              <CardHeader className="pb-3 cursor-pointer hover:bg-secondary/30 transition-colors">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">Upcoming Gold Head Events</CardTitle>
+                  {expandedSections.upcomingEvents ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </div>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+            <CardContent className="space-y-1">
             {upcomingEvents.map((ev) => {
               const start = new Date(ev.startDate)
               const diff = Math.ceil((start.getTime() - today.getTime()) / 86400000)
@@ -231,19 +275,28 @@ export function EventTracker({
                 </p>
               )
             })}
-          </CardContent>
+            </CardContent>
+            </CollapsibleContent>
+          </Collapsible>
         </Card>
       )}
 
       {/* MTG Per-Day Tracker */}
       {mtgRows.length > 0 && (
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Package className="h-4 w-4 text-primary" />
-              More Than Gems Tracker
-            </CardTitle>
-          </CardHeader>
+          <Collapsible open={expandedSections.mtgPlanner} onOpenChange={() => toggleSection('mtgPlanner')}>
+            <CollapsibleTrigger asChild>
+              <CardHeader className="pb-3 cursor-pointer hover:bg-secondary/30 transition-colors">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Package className="h-4 w-4 text-primary" />
+                    More Than Gems Tracker
+                  </CardTitle>
+                  {expandedSections.mtgPlanner ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </div>
+              </CardHeader>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
           <CardContent className="space-y-4">
             <p className="text-xs text-muted-foreground">
               Each MTG event lasts 2 days. Select your gem spending per day. Default: skip.
@@ -354,6 +407,8 @@ export function EventTracker({
               </div>
             </div>
           </CardContent>
+          </CollapsibleContent>
+        </Collapsible>
         </Card>
       )}
 

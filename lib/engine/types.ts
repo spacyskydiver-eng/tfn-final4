@@ -11,6 +11,10 @@ export type CommanderGoal = {
   currentSkills: CommanderSkillSet
   targetSkills: CommanderSkillSet
   allocationPct: number
+  currentEquipment?: Record<string, string> // slot -> equipmentId
+  targetEquipment?: Record<string, string> // slot -> equipmentId
+  /** Optional one-time planned heads applied on day 0 (preview only). */
+  plannedHeads?: number
 }
 
 export type AccountProfile = {
@@ -28,12 +32,16 @@ export type AccountProfile = {
   wofCommanderAssignments?: Record<string, string>
   /** Whether to use SoC timeline mode in Wheel Tracker */
   wofUseSocTimeline?: boolean
+  /** Logged outcomes for non-wheel GH events (keyed by category_start_end). */
+  ghOutcomes?: Record<string, OccOutcome>
   /** Profile tracking start date (YYYY-MM-DD). Events before this are ignored. */
   startDate?: string
   /** Current gold heads the user already owns */
   currentGoldHeads?: number
   /** User-recorded actual progress entries: { [YYYY-MM-DD]: totalGoldHeads } */
   actualProgress?: Record<string, number>
+  /** How universal heads are allocated: percent (default) or sequential fill. */
+  allocationMode?: 'percent' | 'sequential'
 }
 
 export type OccOutcome = 'default' | 'win' | 'loss' | 'complete' | 'skip' | null

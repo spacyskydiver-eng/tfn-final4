@@ -29,10 +29,10 @@ export type PlannerCommanderSide = {
   equipment: Partial<Record<PlannerEquipmentSlot, string>> // Equipment.id
   formation: PlannerFormationType | null
   ownedFlags: Partial<Record<PlannerEquipmentSlot, boolean>> // per-slot "already owned" for target
-  /** Talent presets: 3 presets per commander, activePreset (1-3), presets map. */
+  /** Talent presets: 3 presets per commander, each preset stores config per tree. */
   talentPresets?: {
     activePreset: 1 | 2 | 3
-    presets: Record<1 | 2 | 3, CommanderTalentConfig>
+    presets: Record<1 | 2 | 3, { byTree: Record<string, CommanderTalentConfig> }>
   }
   /** Legacy: single talent config (for backward compatibility). */
   talentConfig?: CommanderTalentConfig

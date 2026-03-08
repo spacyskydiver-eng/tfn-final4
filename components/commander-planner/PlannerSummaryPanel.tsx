@@ -88,10 +88,9 @@ export function PlannerSummaryPanel({
           <Progress value={overallPct} className="h-2.5" />
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <SummaryStat label="Rarity" value={rarity === 'legendary' ? 'Legendary' : 'Epic'} />
           <SummaryStat label="Remaining Heads Needed" value={remainingHeadsNeeded.toLocaleString()} />
-          <SummaryStat label="XP Required" value={levelXpRequired.toLocaleString()} />
           <SummaryStat label="Gold for Equipment" value={equipment.gold.toLocaleString()} />
         </div>
 

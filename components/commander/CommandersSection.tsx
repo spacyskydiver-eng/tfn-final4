@@ -27,12 +27,14 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { Badge } from '@/components/ui/badge'
-import { Plus, Trash2, Crown, ChevronsUpDown, Check, TrendingUp } from 'lucide-react'
+import { Plus, Trash2, Crown, ChevronsUpDown, Check, TrendingUp, Shield, X, ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { AccountProfile, CommanderGoal } from '@/lib/engine/types'
 import type { CommanderSkillSet } from '@/lib/kvk-engine'
 import { calcCommanderNeeds } from '@/lib/engine/commanderEngine'
 import { getCommanderRoster, getCommanderSeasons, type CommanderEntry } from '@/lib/commander-data'
+import { EQUIPMENT_DB, type Equipment, RARITY_COLORS, STAT_LABELS } from '@/lib/game/equipment'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 
 /* ---- Searchable Commander Combobox ---- */
 
@@ -100,7 +102,262 @@ function createDefaultCommander(name?: string): CommanderGoal {
     currentSkills: [5, 1, 1, 1],
     targetSkills: [5, 5, 1, 1],
     allocationPct: 100,
+    currentEquipment: {},
+    targetEquipment: {},
   }
+}
+
+/* ---- Equipment slot selector ---- */
+
+function EquipmentSlotDisplay({
+  slot,
+  equipment,
+  isActive,
+  onClick,
+}: {
+  slot: string
+  equipment?: Equipment
+  isActive: boolean
+  onClick: () => void
+}) {
+  const rc = equipment ? RARITY_COLORS[equipment.rarity] : null
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex flex-col items-center gap-1 rounded-lg border px-2 py-2 transition-colors ${
+        isActive ? 'border-primary bg-primary/10' : 'border-border bg-secondary/30 hover:bg-secondary/50'
+      }`}
+    >
+      <div
+        className={
+          rc
+            ? `flex h-8 w-8 items-center justify-center rounded-md border text-xs font-semibold ${rc.bg} ${rc.border} ${rc.text}`
+            : 'flex h-8 w-8 items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground'
+        }
+      >
+        <Shield className={`h-4 w-4 ${rc ? rc.text : 'text-muted-foreground'}`} />
+      </div>
+      <span className="text-[10px] font-medium text-foreground capitalize line-clamp-1 max-w-[50px]">
+        {slot === 'accessory' ? 'Acc' : slot}
+      </span>
+      {equipment && <span className="text-[9px] text-muted-foreground line-clamp-1 max-w-[60px]">{equipment.name}</span>}
+    </button>
+  )
+}
+
+/* ---- Equipment section component ---- */
+
+function EquipmentSection({
+  cmdId,
+  currentEquipment,
+  targetEquipment,
+  onUpdateCurrent,
+  onUpdateTarget,
+}: {
+  cmdId: string
+  currentEquipment: Record<string, string>
+  targetEquipment: Record<string, string>
+  onUpdateCurrent: (eq: Record<string, string>) => void
+  onUpdateTarget: (eq: Record<string, string>) => void
+}) {
+  const [activeSlot, setActiveSlot] = useState<string | null>(null)
+  const [editMode, setEditMode] = useState<'current' | 'target'>('current')
+  const [search, setSearch] = useState('')
+  const [open, setOpen] = useState(true)
+
+  const slots = ['helmet', 'weapon', 'chest', 'gloves', 'boots', 'accessory']
+
+  const getCurrentEquip = (slot: string) => {
+    const id = currentEquipment[slot]
+    return id ? EQUIPMENT_DB.find((e) => e.id === id) : undefined
+  }
+
+  const getTargetEquip = (slot: string) => {
+    const id = targetEquipment[slot]
+    return id ? EQUIPMENT_DB.find((e) => e.id === id) : undefined
+  }
+
+  const getVisibleEquipment = () => {
+    if (!activeSlot) return []
+    let list = EQUIPMENT_DB.filter((e) => e.slot === activeSlot)
+    if (search.trim()) {
+      list = list.filter((e) => e.name.toLowerCase().includes(search.toLowerCase()))
+    }
+    return list
+  }
+
+  const handleEquipSelect = (equipmentId: string) => {
+    if (!activeSlot) return
+    const currentMap = editMode === 'current' ? { ...currentEquipment } : { ...targetEquipment }
+    currentMap[activeSlot] = equipmentId
+    if (editMode === 'current') {
+      onUpdateCurrent(currentMap)
+    } else {
+      onUpdateTarget(currentMap)
+    }
+    setActiveSlot(null)
+    setSearch('')
+  }
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border border-border px-3 py-2 hover:bg-secondary/30 transition-colors">
+        <Label className="text-xs font-medium cursor-pointer">Equipment</Label>
+        {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-3 space-y-3">
+        <div className="flex gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              setEditMode('current')
+              setActiveSlot(null)
+            }}
+            className={`text-[10px] px-2 py-1 rounded border transition-colors ${
+              editMode === 'current'
+                ? 'border-primary bg-primary/20 text-primary'
+                : 'border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/50'
+            }`}
+          >
+            Current
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setEditMode('target')
+              setActiveSlot(null)
+            }}
+            className={`text-[10px] px-2 py-1 rounded border transition-colors ${
+              editMode === 'target'
+                ? 'border-primary bg-primary/20 text-primary'
+                : 'border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/50'
+            }`}
+          >
+            Target
+          </button>
+        </div>
+
+        {/* Equipment slots - vertical layout like CommanderStatePanel */}
+        <div className="space-y-2">
+          {slots.map((slot) => {
+            const equip = editMode === 'current' ? getCurrentEquip(slot) : getTargetEquip(slot)
+            const rc = equip ? RARITY_COLORS[equip.rarity] : null
+            return (
+              <div
+                key={slot}
+                className="flex items-start justify-between rounded-md border border-border bg-secondary/30 px-2.5 py-2 gap-2"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveSlot((prev) => (prev === slot ? null : slot))
+                    setSearch('')
+                  }}
+                  className="flex-1 text-left"
+                >
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={
+                        rc
+                          ? `flex h-7 w-7 items-center justify-center rounded-md border text-[10px] font-semibold ${rc.bg} ${rc.border} ${rc.text}`
+                          : 'flex h-7 w-7 items-center justify-center rounded-md border border-dashed border-border text-[10px] text-muted-foreground'
+                      }
+                    >
+                      <Shield className={`h-3.5 w-3.5 ${rc ? rc.text : 'text-muted-foreground'}`} />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[11px] font-medium text-foreground capitalize">
+                        {slot === 'accessory' ? 'Accessory' : slot}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground line-clamp-1">
+                        {equip ? equip.name : 'Select equipment'}
+                      </span>
+                    </div>
+                  </div>
+                  {equip && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {equip.stats.map((s) => (
+                        <span key={s.type} className="text-[9px] text-muted-foreground">
+                          {STAT_LABELS[s.type]} <span className="text-green-400">+{s.value}%</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </button>
+                {equip && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const currentMap = editMode === 'current' ? { ...currentEquipment } : { ...targetEquipment }
+                      delete currentMap[slot]
+                      if (editMode === 'current') {
+                        onUpdateCurrent(currentMap)
+                      } else {
+                        onUpdateTarget(currentMap)
+                      }
+                    }}
+                    className="text-muted-foreground hover:text-destructive h-6 w-6 flex items-center justify-center"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Equipment selector (inline) */}
+        {activeSlot && (
+          <div className="space-y-2 rounded-lg border border-border bg-background/60 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-muted-foreground">
+                Select {activeSlot === 'accessory' ? 'Accessory' : activeSlot}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveSlot(null)
+                  setSearch('')
+                }}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+            <input
+              type="text"
+              placeholder="Search equipment..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full h-7 px-2 text-xs rounded border border-input bg-background"
+            />
+            <div className="max-h-40 space-y-1 overflow-y-auto">
+              {getVisibleEquipment().length === 0 && (
+                <p className="text-[11px] text-muted-foreground text-center py-2">No equipment found.</p>
+              )}
+              {getVisibleEquipment().map((eq) => {
+                const rc = RARITY_COLORS[eq.rarity]
+                return (
+                  <button
+                    key={eq.id}
+                    type="button"
+                    onClick={() => handleEquipSelect(eq.id)}
+                    className={`w-full flex items-center gap-2 p-1.5 rounded text-left text-[10px] border transition-colors ${rc.bg} ${rc.border} hover:opacity-80`}
+                  >
+                    <Shield className={`h-3 w-3 flex-shrink-0 ${rc.text}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className={`font-semibold text-[10px] ${rc.text} line-clamp-1`}>{eq.name}</div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  )
 }
 
 export function CommandersSection({
@@ -364,6 +621,17 @@ export function CommandersSection({
                       />
                     </div>
                   )}
+
+                  {/* Equipment Section - moved to commander planner tab */}
+                  {/* 
+                  <EquipmentSection 
+                    cmdId={cmd.id} 
+                    currentEquipment={cmd.currentEquipment || {}}
+                    targetEquipment={cmd.targetEquipment || {}}
+                    onUpdateCurrent={(eq) => updateCommander(cmd.id, { currentEquipment: eq })}
+                    onUpdateTarget={(eq) => updateCommander(cmd.id, { targetEquipment: eq })}
+                  />
+                  */}
                 </CardContent>
               </Card>
             )

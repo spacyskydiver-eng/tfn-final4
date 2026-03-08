@@ -51,14 +51,14 @@ export interface MaterialType {
 /* ------------------------------------------------------------------ */
 
 export const SLOT_META: Record<EquipmentSlot, { label: string; row: number; col: number }> = {
-  helmet:      { label: 'Helmet',      row: 0, col: 1 },
-  weapon:      { label: 'Weapon',      row: 1, col: 0 },
-  chest:       { label: 'Chest',       row: 1, col: 2 },
-  gloves:      { label: 'Gloves',      row: 2, col: 0 },
-  legs:        { label: 'Legs',        row: 2, col: 2 },
-  boots:       { label: 'Boots',       row: 3, col: 1 },
-  accessory_1: { label: 'Ring',        row: 4, col: 0 },
-  accessory_2: { label: 'Amulet',      row: 4, col: 2 },
+  helmet:      { label: 'Helmet',       row: 0, col: 1 },
+  chest:       { label: 'Chestplate',   row: 1, col: 1 },
+  weapon:      { label: 'Weapon',       row: 2, col: 0 },
+  legs:        { label: 'Legs',         row: 2, col: 1 },
+  gloves:      { label: 'Gloves',       row: 2, col: 2 },
+  accessory_1: { label: 'Accessory',    row: 3, col: 0 },
+  accessory_2: { label: 'Accessory',    row: 3, col: 2 },
+  boots:       { label: 'Boots',        row: 4, col: 1 },
 }
 
 export const SLOT_ORDER: EquipmentSlot[] = [

@@ -14,6 +14,7 @@ export type UpgradeCostBreakdownProps = {
   rarity: 'legendary' | 'epic'
   current: PlannerCommanderSide
   target: PlannerCommanderSide
+  currentGoldHeads?: number
 }
 
 export type SkillCostResult = {
@@ -34,8 +35,43 @@ export type EquipmentCostResult = {
   totals: ReturnType<typeof computeCraftingTotals>
 }
 
+// Legendary commander skill upgrade costs (16 sequential upgrades)
+const LEGENDARY_SKILL_UPGRADE_COSTS = [10, 10, 15, 15, 30, 30, 40, 40, 45, 45, 50, 50, 75, 75, 80, 80]
+
 function getHeadsPerLevel(rarity: 'legendary' | 'epic') {
   return rarity === 'legendary' ? HEADS_PER_SKILL_LEVEL_LEGENDARY : HEADS_PER_SKILL_LEVEL_EPIC
+}
+
+/** Calculate total upgrades used from skill digits (1-5 per skill) */
+function getTotalUpgradesUsed(skills: CommanderSkillSet): number {
+  let total = 0
+  for (let i = 0; i < 4; i++) {
+    total += Math.max(0, skills[i] - 1) // Level 1 = 0 upgrades, Level 5 = 4 upgrades
+  }
+  return total
+}
+
+/** Calculate heads cost using legendary upgrade system (for legendary commanders only) */
+function calcLegendarySkillCost(
+  currentSkills: CommanderSkillSet,
+  targetSkills: CommanderSkillSet,
+): SkillCostResult {
+  const currentUpgrades = getTotalUpgradesUsed(currentSkills)
+  const targetUpgrades = getTotalUpgradesUsed(targetSkills)
+
+  // Cost is sum of sequential upgrade costs
+  let invested = 0
+  let needed = 0
+
+  for (let i = 0; i < currentUpgrades; i++) {
+    invested += LEGENDARY_SKILL_UPGRADE_COSTS[i] ?? 0
+  }
+
+  for (let i = currentUpgrades; i < targetUpgrades; i++) {
+    needed += LEGENDARY_SKILL_UPGRADE_COSTS[i] ?? 0
+  }
+
+  return { invested, needed, total: invested + needed }
 }
 
 export function calcSkillCosts(
@@ -43,6 +79,9 @@ export function calcSkillCosts(
   currentSkills: CommanderSkillSet,
   targetSkills: CommanderSkillSet,
 ): SkillCostResult {
+  if (rarity === 'legendary') {
+    return calcLegendarySkillCost(currentSkills, targetSkills)
+  }
   const headsPerLevel = getHeadsPerLevel(rarity)
   const res = calcHeadsNeeded(headsPerLevel, currentSkills, targetSkills)
   return res
@@ -80,7 +119,7 @@ export function calcEquipmentCosts(
   return { itemsToCraft: toCraft, totals }
 }
 
-export function UpgradeCostBreakdown({ rarity, current, target }: UpgradeCostBreakdownProps) {
+export function UpgradeCostBreakdown({ rarity, current, target, currentGoldHeads = 0 }: UpgradeCostBreakdownProps) {
   const skillResult = useMemo(
     () => calcSkillCosts(rarity, current.skills, target.skills),
     [rarity, current.skills, target.skills],
@@ -99,59 +138,54 @@ export function UpgradeCostBreakdown({ rarity, current, target }: UpgradeCostBre
   const alreadyCompletedHeads = skillResult.invested
   const remainingHeads = skillResult.needed
   const totalHeadsForUpgrade = skillResult.total
-  const skillPathPct = totalHeadsForUpgrade > 0 ? Math.min(100, Math.round((alreadyCompletedHeads / totalHeadsForUpgrade) * 100)) : 0
+  
+  // Show progress: if target is set, show path progress; if target not set but has heads, show available heads
+  let skillPathPct = 0
+  let displayInvested = alreadyCompletedHeads
+  let displayRemaining = remainingHeads
+  let displayTotal = totalHeadsForUpgrade
+  
+  if (totalHeadsForUpgrade > 0) {
+    skillPathPct = Math.min(100, Math.round((alreadyCompletedHeads / totalHeadsForUpgrade) * 100))
+  } else if (currentGoldHeads > 0) {
+    // No target set yet, but show available heads
+    displayInvested = 0
+    displayRemaining = currentGoldHeads
+    displayTotal = currentGoldHeads
+    skillPathPct = 0
+  }
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       {/* Skill Progress (current → target) */}
       <Card className="border-primary/30 bg-primary/5">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm">Skill Progress (current → target)</CardTitle>
+          <CardTitle className="text-sm">Skill Progress {totalHeadsForUpgrade > 0 ? '(current → target)' : '(available heads)'}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
             <span>Current: {current.skills.join('-')}</span>
-            <span>Target: {target.skills.join('-')}</span>
+            <span>Target: {target.skills.join('-') || '—'}</span>
           </div>
           <div className="grid grid-cols-3 gap-3 text-center text-xs">
             <div>
-              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Done (path)</p>
-              <p className="text-sm font-bold tabular-nums text-foreground">{alreadyCompletedHeads}</p>
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{totalHeadsForUpgrade > 0 ? 'Done (path)' : 'Available'}</p>
+              <p className="text-sm font-bold tabular-nums text-foreground">{displayInvested}</p>
             </div>
             <div>
-              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Remaining</p>
-              <p className="text-sm font-bold tabular-nums text-primary">{remainingHeads}</p>
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{totalHeadsForUpgrade > 0 ? 'Remaining' : 'To allocate'}</p>
+              <p className="text-sm font-bold tabular-nums text-primary">{displayRemaining}</p>
             </div>
             <div>
-              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Total for upgrade</p>
-              <p className="text-sm font-bold tabular-nums text-foreground">{totalHeadsForUpgrade}</p>
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</p>
+              <p className="text-sm font-bold tabular-nums text-foreground">{displayTotal}</p>
             </div>
           </div>
           <Progress value={skillPathPct} className="h-2" />
-          <p className="text-[10px] text-muted-foreground text-center">{skillPathPct}% of the skill upgrade path completed</p>
-        </CardContent>
-      </Card>
-
-      {/* Level */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm">Level Upgrades</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">From Level</span>
-            <span className="font-semibold tabular-nums">{current.level}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">To Level</span>
-            <span className="font-semibold tabular-nums">{target.level}</span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Total XP Required</span>
-            <span className="font-semibold tabular-nums">{levelResult.xpRequired.toLocaleString()}</span>
-          </div>
-          <p className="text-[10px] text-muted-foreground">
-            XP is modeled with a simple placeholder curve for now. Swap the model in <code>xpEngine.ts</code> later without touching UI.
+          <p className="text-[10px] text-muted-foreground text-center">
+            {totalHeadsForUpgrade > 0 
+              ? `${skillPathPct}% of the skill upgrade path completed`
+              : `Set a target skill level to see upgrade path. You have ${currentGoldHeads} heads available.`}
           </p>
         </CardContent>
       </Card>

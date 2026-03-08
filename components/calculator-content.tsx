@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import TechTree from '@/components/tech-tree/TechTree'
 import { economyTree } from '@/lib/tech-tree/economy'
 import { militaryTree } from '@/lib/tech-tree/military'
+import { expandBuildingsForCH } from '@/lib/game/buildings'
 
 
 /* ---------------------------- icons ---------------------------- */
@@ -183,6 +184,14 @@ function buildingDeps(abstractId: string, lvl: number): Requirement[] {
     if (lvl >= 5) req.push({ id: 'tavern', level: lvl })
   }
 
+  if (abstractId === 'scout_camp') {
+    req.push({ id: 'wall', level: lvl })
+  }
+
+  if (abstractId === 'alliance_center') {
+    req.push({ id: 'city_hall', level: lvl })
+  }
+
   return req
 }
 
@@ -205,6 +214,7 @@ function pickHighestByPrefix(map: Record<string, number>, prefix: string) {
 function resolveRequirementId(reqId: string, baseBuildings: Record<string, number>) {
   if (reqId === 'farm') return pickHighestByPrefix(baseBuildings, 'farm_') ?? 'farm_1'
   if (reqId === 'quarry') return pickHighestByPrefix(baseBuildings, 'quarry_') ?? 'quarry_1'
+  if (reqId === 'hospital') return pickHighestByPrefix(baseBuildings, 'hospital_') ?? 'hospital_1'
 
   if (reqId === 'lumber') {
     return (
@@ -267,15 +277,54 @@ function computeDerivedGoals(account: Account, manualOverrides: Record<string, n
     goals[id] = clampInt(manualOverrides[id], LVL_MIN, LVL_MAX)
   }
 
+  // Expand resource buildings and hospitals based on target CH level
+  const targetCH = goals.city_hall ?? account.cityHall
+  const expandedAtTargetCH = expandBuildingsForCH(goals, targetCH)
+  
+  // Add any newly expanded buildings to goals (hospitals and resource slots)
+  for (const id in expandedAtTargetCH) {
+    if (!(id in goals)) {
+      goals[id] = expandedAtTargetCH[id]
+    }
+  }
+
+  // Remove generic 'hospital' if we have expanded hospital slots (hospital_1, hospital_2, etc.)
+  const hasExpandedHospitals = Object.keys(goals).some(id => id.startsWith('hospital_'))
+  if (hasExpandedHospitals && 'hospital' in goals) {
+    delete goals['hospital']
+  }
+
+  // Remove generic resource buildings if we have expanded slots
+  const resourceTypes = ['farm', 'quarry', 'lumber_mill', 'gold_mine']
+  for (const type of resourceTypes) {
+    const hasExpandedSlots = Object.keys(goals).some(id => id.startsWith(`${type}_`))
+    if (hasExpandedSlots && type in goals) {
+      delete goals[type]
+    }
+    // Also check for the underscore version (e.g., 'lumber' -> 'lumber_mill')
+    if (type === 'lumber_mill') {
+      const hasLumberSlots = Object.keys(goals).some(id => id.startsWith('lumber'))
+      if (hasLumberSlots && 'lumber' in goals) {
+        delete goals['lumber']
+      }
+    }
+    if (type === 'gold_mine') {
+      const hasGoldSlots = Object.keys(goals).some(id => id.startsWith('gold'))
+      if (hasGoldSlots && 'goldmine' in goals) {
+        delete goals['goldmine']
+      }
+    }
+  }
+
   let changed = true
   while (changed) {
     changed = false
     const snapshot = { ...goals }
     const visited = new Set<string>()
 
-    const targetCH = goals.city_hall ?? account.cityHall
-    if (targetCH > account.cityHall) {
-      for (let lvl = account.cityHall + 1; lvl <= targetCH; lvl++) {
+    const tCH = goals.city_hall ?? account.cityHall
+    if (tCH > account.cityHall) {
+      for (let lvl = account.cityHall + 1; lvl <= tCH; lvl++) {
         const reqs = CITY_HALL_REQUIREMENTS[lvl] ?? []
         for (const r of reqs) {
           applyReq(r, goals, baseBuildings, visited)
@@ -436,22 +485,23 @@ export function CalculatorContent() {
   const buildingMinutesNeeded = useMemo(() => {
     if (!selectedAccount) return 0
     let minutes = 0
-    for (const id in derivedGoals) {
-      const cur = selectedAccount.buildingLevels[id] ?? 1
-      const goal = derivedGoals[id]
-      minutes += Math.max(0, goal - cur) * 60
-    }
+    // Building time comes from building data structure if available
+    // For now, defaults to 0 until building costs are defined
     return minutes
   }, [selectedAccount, derivedGoals])
 
   /* ---------- RESEARCH TIME ---------- */
   const researchMinutesNeeded = useMemo(() => {
     if (!selectedAccount) return 0
+    const allTech = [...economyTree, ...militaryTree]
     let minutes = 0
     for (const id in techGoals) {
       const cur = selectedAccount.techLevels[id] ?? 0
       const goal = techGoals[id] ?? cur
-      minutes += Math.max(0, goal - cur) * 90
+      const diff = Math.max(0, goal - cur)
+      const node = allTech.find(t => t.id === id)
+      const timeCostPerLevel = (node?.timeCost ?? 0) / 60 // Convert seconds to minutes
+      minutes += diff * timeCostPerLevel
     }
     return minutes
   }, [selectedAccount, techGoals])
@@ -468,30 +518,28 @@ export function CalculatorContent() {
   const buildingResourcesNeeded = useMemo(() => {
     if (!selectedAccount) return { food: 0, wood: 0, stone: 0, gold: 0 }
     const totals = { food: 0, wood: 0, stone: 0, gold: 0 }
-    for (const id in derivedGoals) {
-      const cur = selectedAccount.buildingLevels[id] ?? 1
-      const goal = derivedGoals[id]
-      const diff = Math.max(0, goal - cur)
-      totals.food += diff * 1000
-      totals.wood += diff * 1000
-      totals.stone += diff * 800
-      totals.gold += diff * 500
-    }
+    // Building costs come from building data structure if available
+    // For now, defaults to 0 until building costs are defined
     return totals
   }, [selectedAccount, derivedGoals])
 
   /* ---------- RESEARCH RESOURCES ---------- */
   const researchResourcesNeeded = useMemo(() => {
     if (!selectedAccount) return { food: 0, wood: 0, stone: 0, gold: 0 }
+    const allTech = [...economyTree, ...militaryTree]
     const totals = { food: 0, wood: 0, stone: 0, gold: 0 }
     for (const id in techGoals) {
       const cur = selectedAccount.techLevels[id] ?? 0
       const goal = techGoals[id] ?? cur
       const diff = Math.max(0, goal - cur)
-      totals.food += diff * 600
-      totals.wood += diff * 600
-      totals.stone += diff * 400
-      totals.gold += diff * 300
+      const node = allTech.find(t => t.id === id)
+      const resourceCosts = node?.resourceCosts ?? {}
+      
+      for (const [resourceType, costPerLevel] of Object.entries(resourceCosts)) {
+        if (resourceType === 'food' || resourceType === 'wood' || resourceType === 'stone' || resourceType === 'gold') {
+          (totals as any)[resourceType] += diff * (costPerLevel as number)
+        }
+      }
     }
     return totals
   }, [selectedAccount, techGoals])
@@ -784,7 +832,45 @@ export function CalculatorContent() {
       {selectedAccount && grouped && (
         <Card className="border-border bg-card">
           <CardHeader>
-            <CardTitle className="text-foreground">Building Goals</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-foreground">Building Goals</CardTitle>
+              <div className="flex gap-2">
+                <Button 
+                  onClick={() => {
+                    const maxGoals: Record<string, number> = {}
+                    
+                    // Add all core buildings to 25 (excluding hospital as it gets expanded to hospital_1,2,3,4)
+                    const coreBuildings = [
+                      'city_hall', 'wall', 'watchtower', 'castle', 'academy',
+                      'barracks', 'archery_range', 'stable', 'siege_workshop',
+                      'storehouse', 'tavern', 'scout_camp', 'alliance_center', 'trading_post'
+                    ]
+                    for (const id of coreBuildings) {
+                      maxGoals[id] = 25
+                    }
+                    
+                    // Add all resource buildings and hospitals with proper slots at CH 25
+                    const allBuildings = expandBuildingsForCH({}, 25)
+                    for (const id in allBuildings) {
+                      maxGoals[id] = 25
+                    }
+                    
+                    setManualGoals(maxGoals)
+                  }} 
+                  variant="outline" 
+                  size="sm"
+                >
+                  Max All
+                </Button>
+                <Button 
+                  onClick={() => setManualGoals({})} 
+                  variant="outline" 
+                  size="sm"
+                >
+                  Reset
+                </Button>
+              </div>
+            </div>
           </CardHeader>
 
           <CardContent className="space-y-6">

@@ -45,14 +45,30 @@ export function computeCommanderStats(side: PlannerCommanderSide): CommanderStat
   const loadout = buildLoadoutFromSide(side)
   const raw = getLoadoutStats(loadout)
 
-  // Add talent bonuses (stat keys from talents may match StatType)
-  // Support both presets (new) and legacy talentConfig
-  const talentConfig = side.talentPresets
+  // Add talent bonuses: from presets (byTree or legacy shape) or legacy talentConfig
+  const presetValue = side.talentPresets
     ? side.talentPresets.presets[side.talentPresets.activePreset]
-    : side.talentConfig
+    : null
 
-  if (talentConfig?.treeType && talentConfig.nodes) {
-    const talentBonus = getTalentStatBonuses(talentConfig)
+  if (presetValue && 'byTree' in presetValue && typeof presetValue.byTree === 'object') {
+    for (const config of Object.values(presetValue.byTree)) {
+      if (!config?.treeType || !config.nodes) continue
+      const talentBonus = getTalentStatBonuses(config)
+      for (const [stat, value] of Object.entries(talentBonus)) {
+        if (value > 0 && stat in raw) {
+          raw[stat as StatType] += value
+        }
+      }
+    }
+  } else if (presetValue && 'treeType' in presetValue && presetValue.nodes) {
+    const talentBonus = getTalentStatBonuses(presetValue)
+    for (const [stat, value] of Object.entries(talentBonus)) {
+      if (value > 0 && stat in raw) {
+        raw[stat as StatType] += value
+      }
+    }
+  } else if (side.talentConfig?.treeType && side.talentConfig.nodes) {
+    const talentBonus = getTalentStatBonuses(side.talentConfig)
     for (const [stat, value] of Object.entries(talentBonus)) {
       if (value > 0 && stat in raw) {
         raw[stat as StatType] += value

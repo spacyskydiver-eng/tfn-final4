@@ -237,29 +237,29 @@ function LoadoutGrid({
         </Button>
       </div>
 
-      <div className="flex flex-col items-center gap-8 py-2">
+      <div className="flex flex-col items-center gap-6 py-2">
         {/* Row 0 - Helmet */}
         <div className="flex justify-center">
           <EquipmentSlotDiamond slot="helmet" equipped={loadout.helmet} onClick={() => onSlotClick('helmet')} isActive={activeSlot === 'helmet'} />
         </div>
-        {/* Row 1 - Weapon + Chest */}
-        <div className="flex gap-12 justify-center">
-          <EquipmentSlotDiamond slot="weapon" equipped={loadout.weapon} onClick={() => onSlotClick('weapon')} isActive={activeSlot === 'weapon'} />
+        {/* Row 1 - Chestplate */}
+        <div className="flex justify-center">
           <EquipmentSlotDiamond slot="chest" equipped={loadout.chest} onClick={() => onSlotClick('chest')} isActive={activeSlot === 'chest'} />
         </div>
-        {/* Row 2 - Gloves + Legs */}
+        {/* Row 2 - Weapon + Legs + Gloves */}
         <div className="flex gap-12 justify-center">
-          <EquipmentSlotDiamond slot="gloves" equipped={loadout.gloves} onClick={() => onSlotClick('gloves')} isActive={activeSlot === 'gloves'} />
+          <EquipmentSlotDiamond slot="weapon" equipped={loadout.weapon} onClick={() => onSlotClick('weapon')} isActive={activeSlot === 'weapon'} />
           <EquipmentSlotDiamond slot="legs" equipped={loadout.legs} onClick={() => onSlotClick('legs')} isActive={activeSlot === 'legs'} />
+          <EquipmentSlotDiamond slot="gloves" equipped={loadout.gloves} onClick={() => onSlotClick('gloves')} isActive={activeSlot === 'gloves'} />
         </div>
-        {/* Row 3 - Boots */}
-        <div className="flex justify-center">
-          <EquipmentSlotDiamond slot="boots" equipped={loadout.boots} onClick={() => onSlotClick('boots')} isActive={activeSlot === 'boots'} />
-        </div>
-        {/* Row 4 - Accessories */}
+        {/* Row 3 - Accessories (halfway between legs and boots) */}
         <div className="flex gap-12 justify-center">
           <EquipmentSlotDiamond slot="accessory_1" equipped={loadout.accessory_1} onClick={() => onSlotClick('accessory_1')} isActive={activeSlot === 'accessory_1'} />
           <EquipmentSlotDiamond slot="accessory_2" equipped={loadout.accessory_2} onClick={() => onSlotClick('accessory_2')} isActive={activeSlot === 'accessory_2'} />
+        </div>
+        {/* Row 4 - Boots */}
+        <div className="flex justify-center">
+          <EquipmentSlotDiamond slot="boots" equipped={loadout.boots} onClick={() => onSlotClick('boots')} isActive={activeSlot === 'boots'} />
         </div>
       </div>
     </div>
