@@ -20,6 +20,7 @@ import {
   CrosshairIcon,
   Crown,
   Map,
+  Boxes,
 } from "lucide-react";
 function UserFooter({ collapsed }: { collapsed: boolean }) {
   const { user, loading, login, logout } = useAuth();
@@ -91,6 +92,7 @@ const navItems = [
   { id: "accounts", label: "Accounts", icon: Users },
   { id: "calculator", label: "Calculator", icon: Calculator },
   { id: "progression-plans", label: "Progression Plans", icon: TrendingUp },
+  { id: "bundles", label: "Bundles", icon: Boxes },
   { id: "territory-planner", label: "Territory Planner", icon: Map },
   { id: "settings", label: "Settings", icon: Settings },
 ];
