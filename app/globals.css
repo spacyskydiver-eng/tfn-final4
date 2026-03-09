@@ -46,6 +46,13 @@
     --glow: 262 80% 60%;
   }
 }
+@keyframes forge-float {
+  0%,100% { transform: translateY(0px) scale(1); }
+  50%      { transform: translateY(-14px) scale(1.02); }
+}
+.forge-float {
+  animation: forge-float 3.2s ease-in-out infinite;
+}
 @keyframes fadeIn {
   from { opacity: 0; transform: translate(-50%, 8px); }
   to { opacity: 1; transform: translate(-50%, 0); }

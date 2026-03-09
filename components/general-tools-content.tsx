@@ -30,6 +30,7 @@ import { expandBuildingsForCH } from '@/lib/game/buildings'
 import { economyTree } from '@/lib/tech-tree/economy'
 import { militaryTree } from '@/lib/tech-tree/military'
 import { EquipmentCalculator } from '@/components/equipment-calculator'
+import { EquipmentForge } from '@/components/equipment-forge'
 import { MgeCalculator } from '@/components/mge-calculator'
 import { GemsPlanner } from '@/components/commander/GemsPlanner'
 import { WheelOfFortuneSection } from '@/components/commander/WheelOfFortuneSection'
@@ -384,7 +385,7 @@ export function GeneralToolsContent() {
           {activeTool === 'vip-level' && <VipLevelCalc />}
           {activeTool === 'buildings' && <BuildingsCalc />}
           {activeTool === 'technology' && <TechnologyCalc />}
-          {activeTool === 'equipment' && <EquipmentCalculator />}
+          {activeTool === 'equipment' && <EquipmentForge />}
           {activeTool === 'mge' && <MgeCalculator />}
           {activeTool === 'gems' && profile && <GemsPlanner profile={profile} onUpdate={updateProfile} />}
           {activeTool === 'wheel' && profile && <WheelOfFortuneSection profile={profile} onUpdate={updateProfile} />}
