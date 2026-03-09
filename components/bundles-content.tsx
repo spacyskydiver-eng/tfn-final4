@@ -1,399 +1,1135 @@
-"use client";
+"use client"
 
-import { useEffect, useMemo, useState } from "react";
-import Image from "next/image";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
+import React, { useEffect, useMemo, useState } from "react"
+import Image from "next/image"
+import {
+  Plus, Trash2, Pencil, Check, ChevronDown,
+  LayoutList, LayoutGrid, GitCompare, Sigma, Tag, X,
+} from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Separator } from "@/components/ui/separator"
+import { cn } from "@/lib/utils"
+import { useTheme } from "@/lib/theme-context"
 
-type BundleColumn = {
-  id: string;
-  name: string;
-  price: number;
-  maxPurchase: number;
-  icon: string;
-};
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-type BundleItem = {
-  id: string;
-  label: string;
-  icon: string;
-  values: Record<string, number>;
-};
+type RowType = "number" | "days" | "currency"
+type ViewMode = "tables" | "cards" | "compare" | "totals"
 
-type BundleState = {
-  columns: BundleColumn[];
-  items: BundleItem[];
-};
-
-type IconOption = { id: string; label: string; src: string };
-
-const STORAGE_KEY = "bundles-state-v1";
-
-function makeIcon(fill: string, letter?: string) {
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' width='64' height='64'><rect rx='10' ry='10' x='4' y='4' width='56' height='56' fill='${fill}'/><text x='32' y='38' font-family='Inter,Arial' font-size='22' text-anchor='middle' fill='white' font-weight='700'>${letter ?? ""}</text></svg>`;
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+type TierColumn = {
+  id: string
+  icon: string
+  name: string
+  price: number
+  maxPurchase: number
 }
 
-const iconOptions: IconOption[] = [
-  { id: "stone_chest", label: "Stone Chest", src: "/images/bundle/stone_chest.png" },
-  { id: "iron_chest", label: "Iron Chest", src: "/images/bundle/iron_chest.png" },
-  { id: "bronze_chest", label: "Bronze Chest", src: "/images/bundle/bronze_chest.png" },
-  { id: "silver_chest", label: "Silver Chest", src: "/images/bundle/silver_chest.png" },
-  { id: "gold_chest", label: "Gold Chest", src: "/images/bundle/gold_chest.png" },
-  { id: "alliance_wood", label: "Alliance Wooden", src: "/images/bundle/Alliance_Wooden_Chest.webp" },
-  { id: "alliance_iron", label: "Alliance Iron", src: "/images/bundle/Alliance_Iron_Chest.webp" },
-  { id: "alliance_bronze", label: "Alliance Bronze", src: "/images/bundle/Alliance_Bronze_Chest.webp" },
-  { id: "common_mat", label: "Common Mat Chest", src: "/images/bundle/common_mat_chest.png" },
-  { id: "uncommon_mat", label: "Uncommon Mat Chest", src: "/images/bundle/uncommon_mat_chest.png" },
-  { id: "epic_mat", label: "Epic Mat Chest", src: "/images/bundle/epic_mat_chest.png" },
-  { id: "legendary_mat", label: "Legendary Mat Chest", src: "/images/bundle/legendary_mat_chest.png" },
-  { id: "epic_form", label: "Epic Formation Chest", src: "/images/bundle/epic_formation_chest.png" },
-  { id: "gem", label: "Gem", src: "/images/bundle/gem.png" },
-  { id: "item_gem", label: "Blue Gem", src: "/images/bundle/Item_Gem.webp" },
-  { id: "vip", label: "VIP", src: "/images/bundle/vip_point.png" },
-  { id: "crystal", label: "Crystal", src: "/images/bundle/crystal.png" },
-  { id: "relic", label: "Relic Coins", src: "/images/bundle/relic_coins.png" },
-  { id: "exhibit", label: "Exhibit Coin", src: "/images/bundle/exhibit_coin.png" },
-  { id: "conversion_stone", label: "Conversion Stone", src: "/images/bundle/conversion_stone.png" },
+type BundleRow = {
+  id: string
+  icon: string
+  label: string
+  values: Record<string, number>
+  rowType: RowType
+}
+
+type Bundle = {
+  id: string
+  name: string
+  category: string
+  columns: TierColumn[]
+  rows: BundleRow[]
+}
+
+type AppState = {
+  bundles: Bundle[]
+  categories: string[]
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const DEFAULT_CATEGORIES = ["Daily", "Monthly", "KvK 1", "KvK 2", "KvK 3", "KvK", "Events", "SoC"]
+
+// ─── Icon Library ─────────────────────────────────────────────────────────────
+
+export const ALL_ICONS = [
+  { id: "stone_chest",         label: "Stone Chest",         src: "/images/bundle/stone_chest.png" },
+  { id: "iron_chest",          label: "Iron Chest",          src: "/images/bundle/iron_chest.png" },
+  { id: "bronze_chest",        label: "Bronze Chest",        src: "/images/bundle/bronze_chest.png" },
+  { id: "silver_chest",        label: "Silver Chest",        src: "/images/bundle/silver_chest.png" },
+  { id: "gold_chest",          label: "Gold Chest",          src: "/images/bundle/gold_chest.png" },
+  { id: "alliance_wood",       label: "Alliance Wooden",     src: "/images/bundle/Alliance_Wooden_Chest.webp" },
+  { id: "alliance_iron",       label: "Alliance Iron",       src: "/images/bundle/Alliance_Iron_Chest.webp" },
+  { id: "alliance_bronze",     label: "Alliance Bronze",     src: "/images/bundle/Alliance_Bronze_Chest.webp" },
+  { id: "common_mat",          label: "Common Mat",          src: "/images/bundle/common_mat_chest.png" },
+  { id: "uncommon_mat",        label: "Uncommon Mat",        src: "/images/bundle/uncommon_mat_chest.png" },
+  { id: "epic_mat",            label: "Epic Mat",            src: "/images/bundle/epic_mat_chest.png" },
+  { id: "legendary_mat",       label: "Legendary Mat",       src: "/images/bundle/legendary_mat_chest.png" },
+  { id: "epic_form",           label: "Epic Formation",      src: "/images/bundle/epic_formation_chest.png" },
+  { id: "gem",                 label: "Gem",                 src: "/images/bundle/gem.png" },
+  { id: "item_gem",            label: "Blue Gem",            src: "/images/bundle/Item_Gem.webp" },
+  { id: "vip",                 label: "VIP",                 src: "/images/bundle/vip_point.png" },
+  { id: "crystal",             label: "Crystal",             src: "/images/bundle/crystal.png" },
+  { id: "crystal_key",         label: "Crystal Key",         src: "/images/bundle/crystal_key.png" },
+  { id: "relic",               label: "Relic Coins",         src: "/images/bundle/relic_coins.png" },
+  { id: "exhibit",             label: "Exhibit Coin",        src: "/images/bundle/exhibit_coin.png" },
+  { id: "conversion_stone",    label: "Conversion Stone",    src: "/images/bundle/conversion_stone.png" },
   { id: "transmutation_stone", label: "Transmutation Stone", src: "/images/bundle/transmutation_stone.png" },
-  { id: "passport", label: "Passport", src: "/images/bundle/passport_item.png" },
-  { id: "level3_pick", label: "Level 3 Pick One", src: "/images/bundle/level_3_pick_one.png" },
-  { id: "speed_heal", label: "Healing Speed", src: "/images/bundle/healing_speed.png" },
-  { id: "speed_training", label: "Training Speed", src: "/images/bundle/training_speed.png" },
-  { id: "speed_universal", label: "Universal Speed", src: "/images/bundle/universal_speed.png" },
-  { id: "speed_target", label: "Target Speed", src: "/images/bundle/edited-photo.png" },
-  { id: "map", label: "Map", src: "/images/bundle/edited-photo.png" },
-  { id: "food", label: "Food", src: "/images/bundle/food.png" },
-  { id: "wood", label: "Wood", src: "/images/bundle/wood.png" },
-  { id: "stone", label: "Stone", src: "/images/bundle/stone_chest.png" },
-  { id: "gold_key", label: "Gold Key", src: "/images/bundle/gold_key.png" },
-  { id: "silver_key", label: "Silver Key", src: "/images/bundle/silver_key.png" },
-];
+  { id: "passport",            label: "Passport",            src: "/images/bundle/passport_item.png" },
+  { id: "level3_pick",         label: "Level 3 Pick One",    src: "/images/bundle/level_3_pick_one.png" },
+  { id: "speed_heal",          label: "Healing Speed",       src: "/images/bundle/healing_speed.png" },
+  { id: "speed_training",      label: "Training Speed",      src: "/images/bundle/training_speed.png" },
+  { id: "speed_universal",     label: "Universal Speed",     src: "/images/bundle/universal_speed.png" },
+  { id: "food",                label: "Food",                src: "/images/bundle/food.png" },
+  { id: "wood",                label: "Wood",                src: "/images/bundle/wood.png" },
+  { id: "gold_key",            label: "Gold Key",            src: "/images/bundle/gold_key.png" },
+  { id: "silver_key",          label: "Silver Key",          src: "/images/bundle/silver_key.png" },
+  { id: "brand_new_star",      label: "Brand New Star",      src: "/images/bundle/brand_new_star.png" },
+  { id: "dazzling_star",       label: "Dazzling Star",       src: "/images/bundle/dazzling_star.png" },
+  { id: "blessed_brand",       label: "Blessed Brand New",   src: "/images/bundle/blessed_brand_new_star.png" },
+  { id: "blessed_dazzling",    label: "Blessed Dazzling",    src: "/images/bundle/blessed_dazzling_star.png" },
+  { id: "bundle_brand",        label: "Bundle Brand New",    src: "/images/bundle/bundle_bran_new_star.png" },
+  { id: "bundle_dazzling",     label: "Bundle Dazzling",     src: "/images/bundle/bundle_dazzling_star.png" },
+  { id: "edited",              label: "Other",               src: "/images/bundle/edited-photo.png" },
+]
 
-const defaultState: BundleState = {
-  columns: [
-    { id: "stone", name: "Stone Chest", price: 5, maxPurchase: 1, icon: "/images/bundle/stone_chest.png" },
-    { id: "iron", name: "Iron Chest", price: 10, maxPurchase: 1, icon: "/images/bundle/iron_chest.png" },
-    { id: "bronze", name: "Bronze Chest", price: 20, maxPurchase: 1, icon: "/images/bundle/bronze_chest.png" },
-    { id: "silver", name: "Silver Chest", price: 50, maxPurchase: 1, icon: "/images/bundle/silver_chest.png" },
-    { id: "gold", name: "Gold Chest", price: 100, maxPurchase: 1, icon: "/images/bundle/gold_chest.png" },
-  ],
-  items: [
+function iconForSrc(src: string) {
+  return ALL_ICONS.find(i => i.src === src)
+}
+
+// ─── Default Data ─────────────────────────────────────────────────────────────
+
+const DEFAULT_STATE: AppState = {
+  categories: [...DEFAULT_CATEGORIES],
+  bundles: [
     {
-      id: "gems_red",
-      label: "Gems",
-      icon: "/images/bundle/gem.png",
-      values: { stone: 1050, iron: 2200, bronze: 4600, silver: 12000, gold: 25000 },
-    },
-    {
-      id: "gems_blue",
-      label: "Blue Gems",
-      icon: "/images/bundle/Item_Gem.webp",
-      values: { stone: 250000, iron: 500000, bronze: 800000, silver: 2500000, gold: 5000000 },
-    },
-    {
-      id: "speed_days",
-      label: "Speedups (minutes)",
-      icon: "/images/bundle/universal_speed.png",
-      values: { stone: 230, iron: 750, bronze: 960, silver: 2460, gold: 4080 },
-    },
-    {
-      id: "resources_food",
-      label: "Food",
-      icon: "/images/bundle/food.png",
-      values: { stone: 250000, iron: 5000000, bronze: 2250000, silver: 6000000, gold: 20000000 },
-    },
-    {
-      id: "resources_wood",
-      label: "Wood",
-      icon: "/images/bundle/wood.png",
-      values: { stone: 250000, iron: 5000000, bronze: 2250000, silver: 6000000, gold: 20000000 },
-    },
-    {
-      id: "resources_stone",
-      label: "Stone",
-      icon: "/images/bundle/conversion_stone.png",
-      values: { stone: 187500, iron: 3750000, bronze: 1687500, silver: 4500000, gold: 15000000 },
-    },
-    {
-      id: "resources_gold",
-      label: "Gold",
-      icon: "/images/bundle/exhibit_coin.png",
-      values: { stone: 0, iron: 2000000, bronze: 600000, silver: 2000000, gold: 8000000 },
-    },
-    {
-      id: "vip",
-      label: "VIP",
-      icon: "/images/bundle/vip_point.png",
-      values: { stone: 1025, iron: 1000, bronze: 2000, silver: 1100, gold: 6000 },
+      id: "call_of_ancients",
+      name: "Call of the Ancients",
+      category: "Daily",
+      columns: [
+        { id: "t1", icon: "/images/bundle/stone_chest.png",  name: "Stone Chest",  price: 5,   maxPurchase: 1 },
+        { id: "t2", icon: "/images/bundle/iron_chest.png",   name: "Iron Chest",   price: 10,  maxPurchase: 1 },
+        { id: "t3", icon: "/images/bundle/bronze_chest.png", name: "Bronze Chest", price: 20,  maxPurchase: 1 },
+        { id: "t4", icon: "/images/bundle/silver_chest.png", name: "Silver Chest", price: 50,  maxPurchase: 1 },
+        { id: "t5", icon: "/images/bundle/gold_chest.png",   name: "Gold Chest",   price: 100, maxPurchase: 3 },
+      ],
+      rows: [
+        { id: "gems",      label: "Gem",              icon: "/images/bundle/gem.png",              values: { t1: 1050,   t2: 2200,    t3: 4600,    t4: 12000,   t5: 25000    }, rowType: "number" },
+        { id: "training",  label: "Training Speed",   icon: "/images/bundle/training_speed.png",   values: { t1: 360,    t2: 720,     t3: 1500,    t4: 3600,    t5: 6000     }, rowType: "days"   },
+        { id: "healing",   label: "Healing Speed",    icon: "/images/bundle/healing_speed.png",    values: { t1: 50,     t2: 100,     t3: 150,     t4: 200,     t5: 250      }, rowType: "days"   },
+        { id: "universal", label: "Universal Speed",  icon: "/images/bundle/universal_speed.png",  values: { t1: 600,    t2: 1200,    t3: 2700,    t4: 7200,    t5: 15600    }, rowType: "days"   },
+        { id: "food",      label: "Food",             icon: "/images/bundle/food.png",             values: { t1: 600000, t2: 1250000, t3: 2250000, t4: 6750000, t5: 17500000 }, rowType: "number" },
+        { id: "wood",      label: "Wood",             icon: "/images/bundle/wood.png",             values: { t1: 600000, t2: 1250000, t3: 2250000, t4: 6750000, t5: 17500000 }, rowType: "number" },
+        { id: "stone_r",   label: "Conversion Stone", icon: "/images/bundle/conversion_stone.png", values: { t1: 450000, t2: 937500,  t3: 1687500, t4: 5062500, t5: 13125000 }, rowType: "number" },
+        { id: "gold_r",    label: "Exhibit Coin",     icon: "/images/bundle/exhibit_coin.png",     values: { t1: 75000,  t2: 150000,  t3: 300000,  t4: 1000000, t5: 3000000  }, rowType: "number" },
+        { id: "relic",     label: "Relic Coins",      icon: "/images/bundle/relic_coins.png",      values: { t1: 525,    t2: 1000,    t3: 2000,    t4: 4000,    t5: 5000     }, rowType: "number" },
+      ],
     },
   ],
-};
+}
 
-function IconPicker({ value, onChange }: { value: string; onChange: (src: string) => void }) {
-  const [customUrl, setCustomUrl] = useState("");
+const STORAGE_KEY = "bundles-state-v3"
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function fmt(n: number): string {
+  return n.toLocaleString("en-US")
+}
+
+function rowTotal(row: BundleRow, columns: TierColumn[]): number {
+  return columns.reduce((acc, col) => acc + (row.values[col.id] ?? 0) * col.maxPurchase, 0)
+}
+
+function rowTotalFmt(row: BundleRow, columns: TierColumn[]): string {
+  const sum = rowTotal(row, columns)
+  if (row.rowType === "days") return `${(sum / 1440).toFixed(2)} Days`
+  if (row.rowType === "currency") return `$${fmt(sum)}`
+  return fmt(sum)
+}
+
+function priceTotal(columns: TierColumn[]): string {
+  const sum = columns.reduce((acc, col) => acc + col.price * col.maxPurchase, 0)
+  return `$${fmt(sum)}`
+}
+
+/** Format a raw number for display in compare/totals, using the item's rowType */
+function fmtRaw(raw: number, rowType: RowType): string {
+  if (rowType === "days") return `${(raw / 1440).toFixed(2)}d`
+  if (rowType === "currency") return `$${fmt(raw)}`
+  return fmt(raw)
+}
+
+function themeColors(hue: number) {
+  const s = 48
+  return {
+    headerGrad: `linear-gradient(135deg, hsl(${hue},${s}%,20%), hsl(${hue},${s}%,28%))`,
+    iconRow:    `hsl(${hue},${s}%,16%)`,
+    rowEven:    `hsl(${hue},${s}%,12%)`,
+    rowOdd:     `hsl(${hue},${s}%,15%)`,
+    footer:     `hsl(${hue},${s}%,10%)`,
+    card:       `hsl(${hue},${s}%,13%)`,
+    cardBorder: `hsl(${hue},${s}%,28%)`,
+  }
+}
+
+// ─── Icon Picker Dialog ───────────────────────────────────────────────────────
+
+function IconPickerDialog({
+  open, current, onSelect, onClose,
+}: {
+  open: boolean
+  current: string
+  onSelect: (src: string, label: string) => void
+  onClose: () => void
+}) {
+  const [customUrl, setCustomUrl] = useState("")
+  const [customLabel, setCustomLabel] = useState("")
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
     reader.onload = () => {
-      if (typeof reader.result === "string") onChange(reader.result);
-    };
-    reader.readAsDataURL(file);
+      if (typeof reader.result === "string") {
+        onSelect(reader.result, file.name.replace(/\.[^.]+$/, ""))
+        onClose()
+      }
+    }
+    reader.readAsDataURL(file)
   }
 
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <div className="h-10 w-10 overflow-hidden rounded-md border border-border bg-secondary">
-          {value ? (
-            <Image src={value} alt="icon" width={40} height={40} className="h-full w-full object-cover" />
-          ) : (
-            <div className="h-full w-full" />
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Choose Icon</DialogTitle></DialogHeader>
+        <div className="grid grid-cols-5 gap-1.5 max-h-64 overflow-y-auto rounded-lg border border-border p-2">
+          {ALL_ICONS.map((opt) => (
+            <button
+              key={opt.id}
+              title={opt.label}
+              onClick={() => { onSelect(opt.src, opt.label); onClose() }}
+              className={cn(
+                "flex flex-col items-center gap-1 rounded-lg border p-1.5 transition hover:border-primary/60 hover:bg-primary/10",
+                current === opt.src ? "border-primary bg-primary/20" : "border-transparent bg-muted/30"
+              )}
+            >
+              <Image src={opt.src} alt={opt.label} width={36} height={36} className="h-9 w-9 object-contain" />
+              <span className="text-[9px] text-center leading-tight text-muted-foreground line-clamp-2">{opt.label}</span>
+            </button>
+          ))}
+        </div>
+        <Separator />
+        <div className="space-y-2">
+          <div className="flex gap-2 items-center">
+            <Input placeholder="Paste image URL..." value={customUrl} onChange={(e) => setCustomUrl(e.target.value)} className="h-9 flex-1" />
+            <label className="flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-input px-3 text-sm text-muted-foreground hover:text-foreground transition">
+              Upload
+              <input type="file" accept="image/*" className="hidden" onChange={handleFile} />
+            </label>
+          </div>
+          {customUrl && (
+            <div className="flex gap-2 items-center">
+              <Input placeholder="Name for this icon..." value={customLabel} onChange={(e) => setCustomLabel(e.target.value)} className="h-9 flex-1" />
+              <Button size="sm" variant="outline" disabled={!customLabel.trim()} onClick={() => { onSelect(customUrl.trim(), customLabel.trim()); onClose() }}>Use</Button>
+            </div>
           )}
         </div>
-        <label className="text-xs text-muted-foreground">Icon</label>
-      </div>
-      <div className="grid grid-cols-5 gap-2 max-h-48 overflow-y-auto rounded-md border border-border p-2 bg-secondary/30">
-        {iconOptions.map((opt) => (
-          <button
-            key={opt.id}
-            onClick={() => onChange(opt.src)}
-            className={cn(
-              "flex h-14 flex-col items-center justify-center gap-1 rounded-md border border-transparent bg-background/60 p-1 text-[11px] font-medium transition hover:border-primary/50 hover:text-primary",
-              value === opt.src && "border-primary text-primary"
-            )}
-          >
-            <Image src={opt.src} alt={opt.label} width={32} height={32} className="h-8 w-8" />
-            <span className="truncate">{opt.label}</span>
-          </button>
-        ))}
-      </div>
-      <div className="flex items-center gap-2">
-        <Input
-          placeholder="Custom image URL"
-          value={customUrl}
-          onChange={(e) => setCustomUrl(e.target.value)}
-          className="h-9"
-        />
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            if (customUrl.trim()) {
-              onChange(customUrl.trim());
-              setCustomUrl("");
-            }
-          }}
-        >
-          Use URL
-        </Button>
-        <label className="flex h-9 cursor-pointer items-center gap-2 rounded-md border border-border px-3 text-sm text-muted-foreground hover:text-foreground">
-          Upload
-          <input type="file" accept="image/*" className="hidden" onChange={handleFile} />
-        </label>
-      </div>
-    </div>
-  );
+      </DialogContent>
+    </Dialog>
+  )
 }
 
+// ─── Category Manage Dialog ───────────────────────────────────────────────────
+
+function CategoryManageDialog({
+  open, categories, onUpdate, onClose,
+}: {
+  open: boolean
+  categories: string[]
+  onUpdate: (cats: string[]) => void
+  onClose: () => void
+}) {
+  const [newCat, setNewCat] = useState("")
+
+  function addCat() {
+    const trimmed = newCat.trim()
+    if (!trimmed || categories.includes(trimmed)) return
+    onUpdate([...categories, trimmed])
+    setNewCat("")
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader><DialogTitle>Manage Categories</DialogTitle></DialogHeader>
+        <div className="flex flex-wrap gap-2 min-h-[44px] p-1 rounded-lg border border-border bg-muted/20">
+          {categories.map(cat => (
+            <div key={cat} className="flex items-center gap-1 rounded-full bg-primary/15 border border-primary/30 pl-3 pr-1.5 py-1 text-sm text-primary">
+              {cat}
+              <button onClick={() => onUpdate(categories.filter(c => c !== cat))} className="text-primary/50 hover:text-red-400 transition ml-0.5">
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+          {categories.length === 0 && <span className="text-xs text-muted-foreground px-1 py-1">No categories yet</span>}
+        </div>
+        <Separator />
+        <div className="flex gap-2">
+          <Input
+            placeholder="New category name..."
+            value={newCat}
+            onChange={e => setNewCat(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && addCat()}
+            className="h-9 flex-1"
+          />
+          <Button size="sm" onClick={addCat} disabled={!newCat.trim() || categories.includes(newCat.trim())}>
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Bundle Table (Tables view) ───────────────────────────────────────────────
+
+function BundleTable({
+  bundle, editMode, categories, onUpdate, onDelete,
+}: {
+  bundle: Bundle
+  editMode: boolean
+  categories: string[]
+  onUpdate: (b: Bundle) => void
+  onDelete: () => void
+}) {
+  const { currentColor } = useTheme()
+  const [collapsed, setCollapsed] = useState(false)
+  const [picker, setPicker] = useState<{ current: string; cb: (src: string, label: string) => void } | null>(null)
+
+  const colors = themeColors(currentColor.hue)
+  const totalCols = bundle.columns.length + 2 + (editMode ? 1 : 0)
+
+  function setColIcon(id: string, icon: string, name: string) {
+    onUpdate({ ...bundle, columns: bundle.columns.map(c => c.id === id ? { ...c, icon, name } : c) })
+  }
+  function setColName(id: string, name: string) {
+    onUpdate({ ...bundle, columns: bundle.columns.map(c => c.id === id ? { ...c, name } : c) })
+  }
+  function setColPrice(id: string, price: number) {
+    onUpdate({ ...bundle, columns: bundle.columns.map(c => c.id === id ? { ...c, price } : c) })
+  }
+  function setColMax(id: string, maxPurchase: number) {
+    onUpdate({ ...bundle, columns: bundle.columns.map(c => c.id === id ? { ...c, maxPurchase } : c) })
+  }
+  function deleteCol(id: string) {
+    const columns = bundle.columns.filter(c => c.id !== id)
+    const rows = bundle.rows.map(r => { const v = { ...r.values }; delete v[id]; return { ...r, values: v } })
+    onUpdate({ ...bundle, columns, rows })
+  }
+  function addColumn() {
+    const id = `col_${Date.now()}`
+    const columns = [...bundle.columns, { id, icon: "/images/bundle/stone_chest.png", name: "Stone Chest", price: 0, maxPurchase: 1 }]
+    const rows = bundle.rows.map(r => ({ ...r, values: { ...r.values, [id]: 0 } }))
+    onUpdate({ ...bundle, columns, rows })
+  }
+  function setRowIcon(id: string, icon: string, label: string) {
+    onUpdate({ ...bundle, rows: bundle.rows.map(r => r.id === id ? { ...r, icon, label } : r) })
+  }
+  function setRowLabel(id: string, label: string) {
+    onUpdate({ ...bundle, rows: bundle.rows.map(r => r.id === id ? { ...r, label } : r) })
+  }
+  function setRowType(id: string, rowType: RowType) {
+    onUpdate({ ...bundle, rows: bundle.rows.map(r => r.id === id ? { ...r, rowType } : r) })
+  }
+  function setCell(rowId: string, colId: string, value: number) {
+    onUpdate({ ...bundle, rows: bundle.rows.map(r => r.id === rowId ? { ...r, values: { ...r.values, [colId]: value } } : r) })
+  }
+  function deleteRow(id: string) {
+    onUpdate({ ...bundle, rows: bundle.rows.filter(r => r.id !== id) })
+  }
+  function addRow() {
+    const id = `row_${Date.now()}`
+    const values: Record<string, number> = {}
+    bundle.columns.forEach(c => (values[c.id] = 0))
+    onUpdate({ ...bundle, rows: [...bundle.rows, { id, icon: "/images/bundle/gem.png", label: "Gem", values, rowType: "number" }] })
+  }
+
+  return (
+    <>
+      {picker && <IconPickerDialog open current={picker.current} onSelect={picker.cb} onClose={() => setPicker(null)} />}
+
+      <div className="overflow-x-auto rounded-xl border border-white/10 shadow-lg shadow-black/40">
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr style={{ background: colors.headerGrad }}>
+              <th colSpan={totalCols} className="px-5 py-3 text-left">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                    <button onClick={() => setCollapsed(c => !c)} className="text-white/70 hover:text-white transition flex-shrink-0">
+                      <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", collapsed && "-rotate-90")} />
+                    </button>
+                    {editMode ? (
+                      <>
+                        <Input
+                          value={bundle.name}
+                          onChange={e => onUpdate({ ...bundle, name: e.target.value })}
+                          className="h-8 w-56 bg-white/10 border-white/20 text-white font-bold italic text-base focus-visible:ring-white/30"
+                        />
+                        <Select value={bundle.category || ""} onValueChange={v => onUpdate({ ...bundle, category: v })}>
+                          <SelectTrigger className="h-8 w-36 bg-white/10 border-white/20 text-white text-xs gap-1">
+                            <Tag className="h-3 w-3 flex-shrink-0 text-white/60" />
+                            <SelectValue placeholder="Category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {categories.map(cat => (
+                              <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold italic text-white text-base tracking-wide">{bundle.name}</span>
+                        {bundle.category && (
+                          <Badge variant="outline" className="text-white/70 border-white/30 text-[11px] h-5 py-0 px-2">{bundle.category}</Badge>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {editMode && (
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-300 hover:bg-red-500/20 flex-shrink-0" onClick={onDelete}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              </th>
+            </tr>
+
+            {!collapsed && (
+              <tr style={{ background: colors.iconRow }}>
+                <th className="w-20 px-3 py-2" />
+                {bundle.columns.map(col => (
+                  <th key={col.id} className="px-3 py-2 text-center">
+                    <div className="flex flex-col items-center gap-1">
+                      <button
+                        disabled={!editMode}
+                        onClick={() => editMode && setPicker({ current: col.icon, cb: (src, name) => setColIcon(col.id, src, name) })}
+                        className={cn("rounded-lg p-0.5 transition", editMode && "hover:ring-2 hover:ring-primary/60 cursor-pointer")}
+                      >
+                        <Image src={col.icon} alt={col.name} width={56} height={56} className="h-14 w-14 object-contain" />
+                      </button>
+                      {editMode ? (
+                        <Input value={col.name} onChange={e => setColName(col.id, e.target.value)} className="h-6 w-28 text-center text-[11px] bg-white/10 border-white/20 text-white mt-0.5" />
+                      ) : (
+                        <span className="text-[11px] text-white/60 text-center max-w-[80px] leading-tight line-clamp-2">{col.name}</span>
+                      )}
+                      {editMode && (
+                        <button onClick={() => deleteCol(col.id)} className="text-red-400/60 hover:text-red-400 transition mt-0.5"><Trash2 className="h-3 w-3" /></button>
+                      )}
+                    </div>
+                  </th>
+                ))}
+                <th className="px-4 py-2 text-right text-xs font-semibold text-white/60 uppercase tracking-widest">Total</th>
+                {editMode && <th className="w-8" />}
+              </tr>
+            )}
+          </thead>
+
+          {!collapsed && (
+            <tbody>
+              <tr style={{ background: colors.rowEven }} className="border-t border-white/10">
+                <td className="px-4 py-2.5 font-semibold italic text-white/80 text-sm whitespace-nowrap">Price</td>
+                {bundle.columns.map(col => (
+                  <td key={col.id} className="px-3 py-2.5 text-center text-white/80">
+                    {editMode
+                      ? <Input type="number" value={col.price} onChange={e => setColPrice(col.id, Number(e.target.value) || 0)} className="h-8 w-20 mx-auto text-center bg-white/10 border-white/20 text-white" />
+                      : <span>${col.price}</span>}
+                  </td>
+                ))}
+                <td className="px-4 py-2.5 text-right font-bold italic text-white">{priceTotal(bundle.columns)}</td>
+                {editMode && <td />}
+              </tr>
+
+              <tr style={{ background: colors.rowOdd }} className="border-t border-white/10">
+                <td className="px-4 py-2.5 font-semibold italic text-white/80 text-sm whitespace-nowrap">Max Purchase</td>
+                {bundle.columns.map(col => (
+                  <td key={col.id} className="px-3 py-2.5 text-center text-white/80">
+                    {editMode
+                      ? <Input type="number" value={col.maxPurchase} onChange={e => setColMax(col.id, Math.max(1, Number(e.target.value) || 1))} className="h-8 w-20 mx-auto text-center bg-white/10 border-white/20 text-white" />
+                      : <span>{col.maxPurchase}</span>}
+                  </td>
+                ))}
+                <td />{editMode && <td />}
+              </tr>
+
+              {bundle.rows.map((row, idx) => (
+                <tr key={row.id} className="border-t border-white/10" style={{ background: idx % 2 === 0 ? colors.rowEven : colors.rowOdd }}>
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <button
+                        disabled={!editMode}
+                        onClick={() => editMode && setPicker({ current: row.icon, cb: (src, label) => setRowIcon(row.id, src, label) })}
+                        className={cn("rounded-lg p-0.5 flex-shrink-0 transition", editMode && "hover:ring-2 hover:ring-primary/60 cursor-pointer")}
+                      >
+                        <Image src={row.icon} alt={row.label} width={40} height={40} className="h-10 w-10 object-contain" />
+                      </button>
+                      {editMode ? (
+                        <div className="space-y-1">
+                          <Input value={row.label} onChange={e => setRowLabel(row.id, e.target.value)} className="h-6 w-28 text-[11px] bg-white/10 border-white/20 text-white" />
+                          <Select value={row.rowType} onValueChange={v => setRowType(row.id, v as RowType)}>
+                            <SelectTrigger className="h-6 w-24 text-[10px] bg-white/10 border-white/20 text-white px-1.5"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="number">Number</SelectItem>
+                              <SelectItem value="days">Days</SelectItem>
+                              <SelectItem value="currency">Currency</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-white/70 max-w-[72px] leading-tight line-clamp-2">{row.label}</span>
+                      )}
+                    </div>
+                  </td>
+                  {bundle.columns.map(col => (
+                    <td key={`${row.id}-${col.id}`} className="px-3 py-2.5 text-center text-white/80">
+                      {editMode
+                        ? <Input type="number" value={row.values[col.id] ?? 0} onChange={e => setCell(row.id, col.id, Number(e.target.value) || 0)} className="h-8 w-24 mx-auto text-center bg-white/10 border-white/20 text-white" />
+                        : <span>{fmt(row.values[col.id] ?? 0)}</span>}
+                    </td>
+                  ))}
+                  <td className="px-4 py-2.5 text-right font-bold italic text-white whitespace-nowrap">{rowTotalFmt(row, bundle.columns)}</td>
+                  {editMode && (
+                    <td className="pr-2 text-center">
+                      <button onClick={() => deleteRow(row.id)} className="text-red-400/60 hover:text-red-400 transition"><Trash2 className="h-3.5 w-3.5" /></button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          )}
+
+          {!collapsed && editMode && (
+            <tfoot>
+              <tr style={{ background: colors.footer }} className="border-t border-white/10">
+                <td colSpan={totalCols} className="px-3 py-2">
+                  <div className="flex gap-2">
+                    <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5 text-white/60 hover:text-white hover:bg-white/10 border border-white/20" onClick={addRow}>
+                      <Plus className="h-3 w-3" /> Add Row
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5 text-white/60 hover:text-white hover:bg-white/10 border border-white/20" onClick={addColumn}>
+                      <Plus className="h-3 w-3" /> Add Column
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+    </>
+  )
+}
+
+// ─── Bundle Card (Cards view) ─────────────────────────────────────────────────
+
+function BundleCard({ bundle }: { bundle: Bundle }) {
+  const { currentColor } = useTheme()
+  const colors = themeColors(currentColor.hue)
+  const totalPrice = bundle.columns.reduce((a, c) => a + c.price * c.maxPurchase, 0)
+
+  return (
+    <div className="rounded-xl border border-white/10 overflow-hidden shadow-lg shadow-black/30" style={{ background: colors.card }}>
+      <div className="px-4 py-3 flex items-center justify-between gap-2" style={{ background: colors.headerGrad }}>
+        <span className="font-bold italic text-white text-sm tracking-wide truncate">{bundle.name}</span>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {bundle.category && (
+            <Badge variant="outline" className="text-white/60 border-white/25 text-[10px] h-5 py-0 px-2">{bundle.category}</Badge>
+          )}
+          <Badge variant="outline" className="text-white border-white/30 text-xs">${totalPrice}</Badge>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-white/10" style={{ background: colors.iconRow }}>
+        {bundle.columns.map(col => (
+          <div key={col.id} className="flex flex-col items-center gap-0.5 flex-1 min-w-0">
+            <Image src={col.icon} alt={col.name} width={36} height={36} className="h-9 w-9 object-contain" />
+            <span className="text-[9px] text-white/50 text-center leading-tight truncate w-full">{col.name}</span>
+            <span className="text-[10px] text-white/70 font-medium">${col.price}</span>
+            {col.maxPurchase > 1 && <span className="text-[9px] text-primary/80">x{col.maxPurchase}</span>}
+          </div>
+        ))}
+      </div>
+
+      <div className="divide-y divide-white/5">
+        {bundle.rows.map((row, idx) => (
+          <div key={row.id} className="flex items-center gap-2.5 px-3 py-1.5" style={{ background: idx % 2 === 0 ? colors.rowEven : colors.rowOdd }}>
+            <Image src={row.icon} alt={row.label} width={28} height={28} className="h-7 w-7 object-contain flex-shrink-0" />
+            <span className="text-xs text-white/70 flex-1 min-w-0 truncate">{row.label}</span>
+            <span className="text-xs font-bold text-white whitespace-nowrap">{rowTotalFmt(row, bundle.columns)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Compare View ─────────────────────────────────────────────────────────────
+
+function CompareView({ bundles, categories }: { bundles: Bundle[]; categories: string[] }) {
+  const { currentColor } = useTheme()
+  const colors = themeColors(currentColor.hue)
+  const [selectedIds, setSelectedIds] = useState<string[]>(bundles.slice(0, 2).map(b => b.id))
+  const [filterCat, setFilterCat] = useState("All")
+
+  const visibleBundles = filterCat === "All" ? bundles : bundles.filter(b => b.category === filterCat)
+  const selected = visibleBundles.filter(b => selectedIds.includes(b.id))
+
+  const allItems = useMemo(() => {
+    const seen = new Map<string, { icon: string; label: string; rowType: RowType }>()
+    selected.forEach(bundle => {
+      bundle.rows.forEach(row => {
+        if (!seen.has(row.label)) seen.set(row.label, { icon: row.icon, label: row.label, rowType: row.rowType })
+      })
+    })
+    return Array.from(seen.values())
+  }, [selected])
+
+  return (
+    <div className="space-y-4">
+      {/* Category filter */}
+      <div className="flex flex-wrap gap-1.5">
+        {["All", ...categories].map(cat => (
+          <button
+            key={cat}
+            onClick={() => setFilterCat(cat)}
+            className={cn(
+              "px-3 py-1 rounded-full text-xs font-medium border transition",
+              filterCat === cat
+                ? "border-primary bg-primary/20 text-primary"
+                : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+            )}
+          >{cat}</button>
+        ))}
+      </div>
+
+      {/* Bundle selector */}
+      <div className="flex flex-wrap gap-2">
+        {visibleBundles.map(b => (
+          <button
+            key={b.id}
+            onClick={() => setSelectedIds(prev => prev.includes(b.id) ? prev.filter(id => id !== b.id) : [...prev, b.id])}
+            className={cn(
+              "px-3 py-1.5 rounded-lg border text-sm font-medium transition",
+              selectedIds.includes(b.id)
+                ? "border-primary bg-primary/20 text-primary"
+                : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+            )}
+          >{b.name}</button>
+        ))}
+      </div>
+
+      {selected.length < 1 && <p className="text-sm text-muted-foreground">Select at least one bundle above.</p>}
+
+      {selected.length > 0 && (
+        <div className="overflow-x-auto rounded-xl border border-white/10 shadow-lg shadow-black/40">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr style={{ background: colors.iconRow }}>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-white/60 uppercase tracking-widest w-36">Item</th>
+                {selected.map(b => (
+                  <th key={b.id} className="px-4 py-3 text-center min-w-[120px]">
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="flex gap-1 flex-wrap justify-center">
+                        {b.columns.slice(0, 4).map(col => (
+                          <Image key={col.id} src={col.icon} alt={col.name} width={24} height={24} className="h-6 w-6 object-contain" />
+                        ))}
+                        {b.columns.length > 4 && <span className="text-[10px] text-white/50 self-end">+{b.columns.length - 4}</span>}
+                      </div>
+                      <span className="text-xs font-semibold text-white leading-tight">{b.name}</span>
+                      {b.category && <span className="text-[10px] text-primary/70">{b.category}</span>}
+                      <span className="text-[10px] text-white/50">{priceTotal(b.columns)}</span>
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {allItems.map((item, idx) => {
+                // Raw numeric totals for each selected bundle (null if item absent)
+                const raws = selected.map(b => {
+                  const row = b.rows.find(r => r.label === item.label)
+                  return row ? rowTotal(row, b.columns) : null
+                })
+                const validRaws = raws.filter((r): r is number => r !== null)
+                const maxRaw = validRaws.length > 0 ? Math.max(...validRaws) : 0
+                const allEqual = validRaws.length > 1 && validRaws.every(r => r === validRaws[0])
+                const multipleSelected = selected.length > 1
+
+                return (
+                  <tr key={item.label} className="border-t border-white/10" style={{ background: idx % 2 === 0 ? colors.rowEven : colors.rowOdd }}>
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <Image src={item.icon} alt={item.label} width={28} height={28} className="h-7 w-7 object-contain flex-shrink-0" />
+                        <span className="text-xs text-white/70 leading-tight">{item.label}</span>
+                      </div>
+                    </td>
+                    {selected.map((b, bi) => {
+                      const raw = raws[bi]
+                      if (raw === null) {
+                        return (
+                          <td key={b.id} className="px-4 py-2.5 text-center text-white/25 text-sm">—</td>
+                        )
+                      }
+
+                      const fmtValue = (() => {
+                        if (item.rowType === "days") return `${(raw / 1440).toFixed(2)} Days`
+                        if (item.rowType === "currency") return `$${fmt(raw)}`
+                        return fmt(raw)
+                      })()
+
+                      const isBest = multipleSelected && !allEqual && raw === maxRaw
+                      const isLower = multipleSelected && raw < maxRaw
+                      const isEqual = multipleSelected && allEqual
+                      const diff = maxRaw - raw  // how much less than best (0 if best/equal)
+                      const diffStr = fmtRaw(diff, item.rowType)
+
+                      return (
+                        <td key={b.id} className="px-4 py-2.5 text-center">
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className={cn(
+                              "font-semibold text-sm",
+                              isBest ? "text-green-400" : isLower ? "text-white/75" : "text-white/85"
+                            )}>
+                              {fmtValue}
+                            </span>
+                            {isEqual  && <span className="text-[10px] text-blue-400/80">= equal</span>}
+                            {isBest   && <span className="text-[10px] text-green-400/80">▲ best</span>}
+                            {isLower  && <span className="text-[10px] text-red-400/80">▼ -{diffStr}</span>}
+                          </div>
+                        </td>
+                      )
+                    })}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Totals / Add Together View ───────────────────────────────────────────────
+
+function TotalsView({ bundles, categories }: { bundles: Bundle[]; categories: string[] }) {
+  const { currentColor } = useTheme()
+  const colors = themeColors(currentColor.hue)
+  const [selectedIds, setSelectedIds] = useState<string[]>(bundles.map(b => b.id))
+  const [filterCat, setFilterCat] = useState("All")
+
+  // spendQty[bundleId][colId] = how many of that tier to purchase
+  const [spendQty, setSpendQty] = useState<Record<string, Record<string, number>>>(() => {
+    const init: Record<string, Record<string, number>> = {}
+    bundles.forEach(b => {
+      init[b.id] = {}
+      b.columns.forEach(c => { init[b.id][c.id] = c.maxPurchase })
+    })
+    return init
+  })
+
+  // Keep spendQty up to date if bundles change (new bundles added, or columns added)
+  useEffect(() => {
+    setSpendQty(prev => {
+      const updated = { ...prev }
+      bundles.forEach(b => {
+        if (!updated[b.id]) {
+          updated[b.id] = {}
+          b.columns.forEach(c => { updated[b.id][c.id] = c.maxPurchase })
+        } else {
+          b.columns.forEach(c => {
+            if (updated[b.id][c.id] === undefined) {
+              updated[b.id][c.id] = c.maxPurchase
+            }
+          })
+        }
+      })
+      return updated
+    })
+  }, [bundles])
+
+  function getQty(bundleId: string, colId: string, maxPurchase: number): number {
+    const v = spendQty[bundleId]?.[colId]
+    return v !== undefined ? v : maxPurchase
+  }
+
+  function setQty(bundleId: string, colId: string, qty: number, maxPurchase: number) {
+    setSpendQty(prev => ({
+      ...prev,
+      [bundleId]: { ...(prev[bundleId] ?? {}), [colId]: Math.max(0, Math.min(maxPurchase, qty)) },
+    }))
+  }
+
+  const visibleBundles = filterCat === "All" ? bundles : bundles.filter(b => b.category === filterCat)
+  const selected = visibleBundles.filter(b => selectedIds.includes(b.id))
+
+  // Aggregate item totals using custom spend quantities
+  const combined = useMemo(() => {
+    const map = new Map<string, { icon: string; label: string; rowType: RowType; total: number }>()
+    selected.forEach(bundle => {
+      bundle.rows.forEach(row => {
+        const total = bundle.columns.reduce((acc, col) => {
+          const qty = getQty(bundle.id, col.id, col.maxPurchase)
+          return acc + (row.values[col.id] ?? 0) * qty
+        }, 0)
+        if (map.has(row.label)) {
+          const ex = map.get(row.label)!
+          map.set(row.label, { ...ex, total: ex.total + total })
+        } else {
+          map.set(row.label, { icon: row.icon, label: row.label, rowType: row.rowType, total })
+        }
+      })
+    })
+    return Array.from(map.values())
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, spendQty])
+
+  const totalSpend = selected.reduce((acc, b) => {
+    return acc + b.columns.reduce((s, c) => s + c.price * getQty(b.id, c.id, c.maxPurchase), 0)
+  }, 0)
+
+  function formatTotal(rowType: RowType, total: number): string {
+    if (rowType === "days") return `${(total / 1440).toFixed(2)} Days`
+    if (rowType === "currency") return `$${fmt(total)}`
+    return fmt(total)
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Category filter */}
+      <div className="flex flex-wrap gap-1.5">
+        {["All", ...categories].map(cat => (
+          <button
+            key={cat}
+            onClick={() => setFilterCat(cat)}
+            className={cn(
+              "px-3 py-1 rounded-full text-xs font-medium border transition",
+              filterCat === cat
+                ? "border-primary bg-primary/20 text-primary"
+                : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+            )}
+          >{cat}</button>
+        ))}
+      </div>
+
+      {/* Bundle toggle chips + total spend */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <span className="text-sm text-muted-foreground">Include:</span>
+        {visibleBundles.map(b => (
+          <button
+            key={b.id}
+            onClick={() => setSelectedIds(prev => prev.includes(b.id) ? prev.filter(id => id !== b.id) : [...prev, b.id])}
+            className={cn(
+              "px-3 py-1.5 rounded-lg border text-sm font-medium transition",
+              selectedIds.includes(b.id)
+                ? "border-primary bg-primary/20 text-primary"
+                : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+            )}
+          >{b.name}</button>
+        ))}
+        <span className="ml-auto text-sm font-semibold text-foreground">Total spend: ${fmt(totalSpend)}</span>
+      </div>
+
+      {selected.length === 0 && (
+        <p className="text-sm text-muted-foreground">Select bundles above to see combined totals.</p>
+      )}
+
+      {selected.length > 0 && (
+        <>
+          {/* ── Per-bundle spending tier configuration ── */}
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-widest">Spending Configuration — adjust how many of each tier you plan to buy</p>
+            {selected.map(b => {
+              const bundleSpend = b.columns.reduce((s, c) => s + c.price * getQty(b.id, c.id, c.maxPurchase), 0)
+              return (
+                <div key={b.id} className="rounded-xl border border-white/10 overflow-hidden" style={{ background: colors.card }}>
+                  <div className="flex items-center justify-between px-4 py-2" style={{ background: colors.iconRow }}>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold italic text-white">{b.name}</span>
+                      {b.category && <Badge variant="outline" className="text-white/60 border-white/25 text-[10px] h-5 py-0 px-2">{b.category}</Badge>}
+                    </div>
+                    <span className="text-sm font-bold text-white">${fmt(bundleSpend)}</span>
+                  </div>
+                  <div className="flex gap-3 px-4 py-3 overflow-x-auto">
+                    {b.columns.map(col => {
+                      const qty = getQty(b.id, col.id, col.maxPurchase)
+                      const colSpend = col.price * qty
+                      return (
+                        <div key={col.id} className="flex flex-col items-center gap-1.5 min-w-[68px]">
+                          <Image src={col.icon} alt={col.name} width={36} height={36} className="h-9 w-9 object-contain" />
+                          <span className="text-[10px] text-white/55 text-center leading-tight max-w-[68px] line-clamp-2">{col.name}</span>
+                          <span className="text-[10px] text-white/40">${col.price} each</span>
+                          {/* Qty stepper */}
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => setQty(b.id, col.id, qty - 1, col.maxPurchase)}
+                              disabled={qty === 0}
+                              className="h-6 w-6 rounded-md bg-white/10 hover:bg-white/20 disabled:opacity-30 text-white text-sm flex items-center justify-center transition font-bold"
+                            >−</button>
+                            <span className="text-sm font-bold text-white w-6 text-center tabular-nums">{qty}</span>
+                            <button
+                              onClick={() => setQty(b.id, col.id, qty + 1, col.maxPurchase)}
+                              disabled={qty >= col.maxPurchase}
+                              className="h-6 w-6 rounded-md bg-white/10 hover:bg-white/20 disabled:opacity-30 text-white text-sm flex items-center justify-center transition font-bold"
+                            >+</button>
+                          </div>
+                          <span className="text-[9px] text-white/30">max {col.maxPurchase}</span>
+                          <span className="text-[10px] font-semibold text-primary/80">${colSpend}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* ── Combined item totals grid ── */}
+          <div>
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-widest mb-3">Combined Totals</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              {combined.map(item => (
+                <div
+                  key={item.label}
+                  className="rounded-xl border border-white/10 flex flex-col items-center gap-1.5 px-3 py-3 text-center shadow"
+                  style={{ background: colors.card }}
+                >
+                  <Image src={item.icon} alt={item.label} width={48} height={48} className="h-12 w-12 object-contain" />
+                  <span className="text-[11px] text-white/60 leading-tight">{item.label}</span>
+                  <span className="text-sm font-bold text-white">{formatTotal(item.rowType, item.total)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─── View Toggle Button ───────────────────────────────────────────────────────
+
+function ViewBtn({ active, onClick, icon: Icon, label }: {
+  active: boolean; onClick: () => void; icon: React.ElementType; label: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={label}
+      className={cn(
+        "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition",
+        active ? "border-primary bg-primary/20 text-primary" : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+      )}
+    >
+      <Icon className="h-4 w-4" />
+      <span className="hidden sm:inline">{label}</span>
+    </button>
+  )
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
 export function BundlesContent() {
-  const [state, setState] = useState<BundleState>(defaultState);
+  const [appState, setAppState] = useState<AppState>(DEFAULT_STATE)
+  const [editMode, setEditMode] = useState(false)
+  const [viewMode, setViewMode] = useState<ViewMode>("tables")
+  const [filterCategory, setFilterCategory] = useState("All")
+  const [catDialogOpen, setCatDialogOpen] = useState(false)
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = localStorage.getItem(STORAGE_KEY)
       if (raw) {
-        const parsed = JSON.parse(raw) as BundleState;
-        setState(parsed);
+        const parsed = JSON.parse(raw) as Partial<AppState>
+        const migrated: AppState = {
+          categories: parsed.categories ?? [...DEFAULT_CATEGORIES],
+          bundles: (parsed.bundles ?? []).map(b => ({
+            ...b,
+            category: b.category ?? "Daily",
+            columns: (b.columns ?? []).map(c => ({
+              ...c,
+              name: c.name ?? iconForSrc(c.icon)?.label ?? "Column",
+            })),
+            rows: (b.rows ?? []).map(r => ({
+              ...r,
+              label: r.label ?? iconForSrc(r.icon)?.label ?? "Item",
+            })),
+          })),
+        }
+        setAppState(migrated)
       }
-    } catch {
-      /* ignore */
-    }
-  }, []);
+    } catch { /* ignore */ }
+  }, [])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  }, [state]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(appState))
+  }, [appState])
 
-  const totals = useMemo(() => {
-    const result: Record<string, number> = {};
-    state.items.forEach((item) => {
-      for (const col of state.columns) {
-        const v = item.values[col.id] ?? 0;
-        result[item.id] = (result[item.id] || 0) + v;
-      }
-    });
-    return result;
-  }, [state.items, state.columns]);
-
-  function updateColumn(id: string, patch: Partial<BundleColumn>) {
-    setState((prev) => ({
-      ...prev,
-      columns: prev.columns.map((c) => (c.id === id ? { ...c, ...patch } : c)),
-    }));
+  function updateBundle(id: string, updated: Bundle) {
+    setAppState(prev => ({ ...prev, bundles: prev.bundles.map(b => b.id === id ? updated : b) }))
+  }
+  function deleteBundle(id: string) {
+    setAppState(prev => ({ ...prev, bundles: prev.bundles.filter(b => b.id !== id) }))
+  }
+  function addBundle() {
+    const id = `bundle_${Date.now()}`
+    const cols: TierColumn[] = [
+      { id: "t1", icon: "/images/bundle/stone_chest.png",  name: "Stone Chest",  price: 5,   maxPurchase: 1 },
+      { id: "t2", icon: "/images/bundle/iron_chest.png",   name: "Iron Chest",   price: 10,  maxPurchase: 1 },
+      { id: "t3", icon: "/images/bundle/bronze_chest.png", name: "Bronze Chest", price: 20,  maxPurchase: 1 },
+      { id: "t4", icon: "/images/bundle/silver_chest.png", name: "Silver Chest", price: 50,  maxPurchase: 1 },
+      { id: "t5", icon: "/images/bundle/gold_chest.png",   name: "Gold Chest",   price: 100, maxPurchase: 1 },
+    ]
+    const newBundle: Bundle = {
+      id,
+      name: "New Bundle",
+      category: appState.categories[0] ?? "Daily",
+      columns: cols,
+      rows: [{ id: "row1", icon: "/images/bundle/gem.png", label: "Gem", values: { t1: 0, t2: 0, t3: 0, t4: 0, t5: 0 }, rowType: "number" }],
+    }
+    setAppState(prev => ({ ...prev, bundles: [...prev.bundles, newBundle] }))
+  }
+  function resetAll() {
+    if (confirm("Reset all bundles to default? This cannot be undone.")) {
+      setAppState(DEFAULT_STATE)
+      setFilterCategory("All")
+    }
+  }
+  function updateCategories(categories: string[]) {
+    setAppState(prev => ({ ...prev, categories }))
   }
 
-  function updateItem(id: string, patch: Partial<BundleItem>) {
-    setState((prev) => ({
-      ...prev,
-      items: prev.items.map((r) => (r.id === id ? { ...r, ...patch } : r)),
-    }));
-  }
-
-  function updateCell(itemId: string, colId: string, value: number) {
-    setState((prev) => ({
-      ...prev,
-      items: prev.items.map((r) =>
-        r.id === itemId ? { ...r, values: { ...r.values, [colId]: value } } : r
-      ),
-    }));
-  }
-
-  function addColumn() {
-    const nextIndex = state.columns.length + 1;
-    const icon = iconOptions[nextIndex % iconOptions.length]?.src ?? iconOptions[0].src;
-    const id = `col_${nextIndex}`;
-    setState((prev) => ({
-      ...prev,
-      columns: [...prev.columns, { id, name: `Bundle ${nextIndex}`, price: 0, maxPurchase: 1, icon }],
-      items: prev.items.map((item) => ({
-        ...item,
-        values: { ...item.values, [id]: 0 },
-      })),
-    }));
-  }
-
-  function addRow() {
-    const id = `item_${Date.now()}`;
-    const newValues: Record<string, number> = {};
-    state.columns.forEach((c) => (newValues[c.id] = 0));
-    setState((prev) => ({
-      ...prev,
-      items: [
-        ...prev.items,
-        {
-          id,
-          label: "New Item",
-          icon: iconOptions[0].src,
-          values: newValues,
-        },
-      ],
-    }));
-  }
-
-  function resetState() {
-    setState(defaultState);
-  }
+  // Bundles visible in the current filter
+  const filteredBundles = filterCategory === "All"
+    ? appState.bundles
+    : appState.bundles.filter(b => b.category === filterCategory)
 
   return (
-    <div className="space-y-6">
-      <Card className="border-border bg-card">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Bundles</CardTitle>
-            <p className="text-sm text-muted-foreground">Customize bundle values, icons, and totals. Data is saved locally for signed and unsigned users.</p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={addColumn}>Add Column</Button>
-            <Button variant="outline" size="sm" onClick={addRow}>Add Row</Button>
-            <Button variant="outline" size="sm" onClick={resetState}>Reset</Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-secondary/40">
-                  <th className="w-56 px-4 py-3 text-left text-xs uppercase tracking-wide text-muted-foreground">Item</th>
-                  {state.columns.map((col) => (
-                    <th key={col.id} className="min-w-[140px] px-4 py-3 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                      <div className="flex items-center gap-2">
-                        <div className="h-10 w-10 overflow-hidden rounded-md border border-border bg-secondary">
-                          <Image src={col.icon} alt={col.name} width={40} height={40} className="h-full w-full object-cover" />
-                        </div>
-                        <div className="space-y-1">
-                          <Input
-                            value={col.name}
-                            onChange={(e) => updateColumn(col.id, { name: e.target.value })}
-                            className="h-8 text-sm"
-                          />
-                          <IconPicker value={col.icon} onChange={(src) => updateColumn(col.id, { icon: src })} />
-                        </div>
-                      </div>
-                    </th>
-                  ))}
-                  <th className="min-w-[140px] px-4 py-3 text-right text-xs uppercase tracking-wide text-muted-foreground">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-t border-border/60 bg-background">
-                  <td className="px-4 py-3 text-left font-semibold">Price ($)</td>
-                  {state.columns.map((col) => (
-                    <td key={col.id} className="px-4 py-3">
-                      <Input
-                        type="number"
-                        value={col.price}
-                        onChange={(e) => updateColumn(col.id, { price: Number(e.target.value) || 0 })}
-                        className="h-9 text-right"
-                      />
-                    </td>
-                  ))}
-                  <td className="px-4 py-3 text-right font-semibold">${state.columns.reduce((s, c) => s + (c.price || 0), 0)}</td>
-                </tr>
-                <tr className="border-t border-border/60 bg-background">
-                  <td className="px-4 py-3 text-left font-semibold">Max Purchase</td>
-                  {state.columns.map((col) => (
-                    <td key={col.id} className="px-4 py-3">
-                      <Input
-                        type="number"
-                        value={col.maxPurchase}
-                        onChange={(e) => updateColumn(col.id, { maxPurchase: Number(e.target.value) || 0 })}
-                        className="h-9 text-right"
-                      />
-                    </td>
-                  ))}
-                  <td className="px-4 py-3 text-right font-semibold">{state.columns.reduce((s, c) => s + (c.maxPurchase || 0), 0)}</td>
-                </tr>
+    <div className="space-y-5">
+      <CategoryManageDialog
+        open={catDialogOpen}
+        categories={appState.categories}
+        onUpdate={updateCategories}
+        onClose={() => setCatDialogOpen(false)}
+      />
 
-                {state.items.map((item, idx) => (
-                  <tr key={item.id} className={cn("border-t border-border/60", idx % 2 === 0 ? "bg-secondary/20" : "bg-background") }>
-                    <td className="px-4 py-4 align-top">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 overflow-hidden rounded-md border border-border bg-secondary">
-                          <Image src={item.icon} alt={item.label} width={40} height={40} className="h-full w-full object-cover" />
-                        </div>
-                        <div className="space-y-2 w-full">
-                          <Input
-                            value={item.label}
-                            onChange={(e) => updateItem(item.id, { label: e.target.value })}
-                            className="h-9"
-                          />
-                          <IconPicker value={item.icon} onChange={(src) => updateItem(item.id, { icon: src })} />
-                        </div>
-                      </div>
-                    </td>
-                    {state.columns.map((col) => (
-                      <td key={`${item.id}-${col.id}`} className="px-4 py-4 align-top">
-                        <Input
-                          type="number"
-                          value={item.values[col.id] ?? 0}
-                          onChange={(e) => updateCell(item.id, col.id, Number(e.target.value) || 0)}
-                          className="h-9 text-right"
-                        />
-                      </td>
-                    ))}
-                    <td className="px-4 py-4 text-right font-semibold">{totals[item.id] ?? 0}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* ── Top bar ── */}
+      <div className="flex flex-wrap items-start gap-3 justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-foreground">Bundles</h2>
+          <p className="text-sm text-muted-foreground">Track, compare and add bundle rewards together.</p>
+        </div>
+
+        <div className="flex flex-wrap gap-2 items-center">
+          {/* View switcher */}
+          <div className="flex gap-1 border border-border rounded-lg p-1">
+            <ViewBtn active={viewMode === "tables"}  onClick={() => setViewMode("tables")}  icon={LayoutList} label="Tables"  />
+            <ViewBtn active={viewMode === "cards"}   onClick={() => setViewMode("cards")}   icon={LayoutGrid} label="Cards"   />
+            <ViewBtn active={viewMode === "compare"} onClick={() => setViewMode("compare")} icon={GitCompare} label="Compare" />
+            <ViewBtn active={viewMode === "totals"}  onClick={() => setViewMode("totals")}  icon={Sigma}      label="Totals"  />
           </div>
-        </CardContent>
-      </Card>
+
+          {/* Edit controls (tables view only) */}
+          {viewMode === "tables" && (
+            <>
+              <Button variant={editMode ? "default" : "outline"} size="sm" onClick={() => setEditMode(e => !e)} className="gap-1.5">
+                {editMode ? <><Check className="h-4 w-4" /> Done</> : <><Pencil className="h-4 w-4" /> Edit</>}
+              </Button>
+              {editMode && (
+                <>
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={addBundle}>
+                    <Plus className="h-4 w-4" /> Add Bundle
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCatDialogOpen(true)}>
+                    <Tag className="h-4 w-4" /> Categories
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-red-400 hover:text-red-300 border-red-400/30 hover:border-red-400/60" onClick={resetAll}>
+                    Reset All
+                  </Button>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ── Category filter chips (Tables + Cards) ── */}
+      {(viewMode === "tables" || viewMode === "cards") && appState.categories.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 items-center">
+          {["All", ...appState.categories].map(cat => (
+            <button
+              key={cat}
+              onClick={() => setFilterCategory(cat)}
+              className={cn(
+                "px-3 py-1 rounded-full text-xs font-medium border transition",
+                filterCategory === cat
+                  ? "border-primary bg-primary/20 text-primary"
+                  : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+              )}
+            >{cat}</button>
+          ))}
+        </div>
+      )}
+
+      {/* ── Views ── */}
+      {viewMode === "tables" && (
+        <div className="space-y-8">
+          {filteredBundles.map(bundle => (
+            <BundleTable
+              key={bundle.id}
+              bundle={bundle}
+              editMode={editMode}
+              categories={appState.categories}
+              onUpdate={updated => updateBundle(bundle.id, updated)}
+              onDelete={() => deleteBundle(bundle.id)}
+            />
+          ))}
+          {filteredBundles.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-4 rounded-xl border border-dashed border-border">
+              <p className="text-sm">{appState.bundles.length === 0 ? "No bundles yet." : `No bundles in "${filterCategory}".`}</p>
+              {appState.bundles.length === 0 && (
+                <Button size="sm" onClick={() => { setEditMode(true); addBundle() }} className="gap-1.5">
+                  <Plus className="h-4 w-4" /> Add your first bundle
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {viewMode === "cards" && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {filteredBundles.map(bundle => (
+            <BundleCard key={bundle.id} bundle={bundle} />
+          ))}
+          {filteredBundles.length === 0 && (
+            <p className="col-span-full text-sm text-muted-foreground text-center py-16">
+              {appState.bundles.length === 0 ? "No bundles yet. Switch to Tables view and add one." : `No bundles in "${filterCategory}".`}
+            </p>
+          )}
+        </div>
+      )}
+
+      {viewMode === "compare" && (
+        <CompareView bundles={appState.bundles} categories={appState.categories} />
+      )}
+
+      {viewMode === "totals" && (
+        <TotalsView bundles={appState.bundles} categories={appState.categories} />
+      )}
     </div>
-  );
+  )
 }
