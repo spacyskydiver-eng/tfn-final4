@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from "react"
 import Image from "next/image"
 import {
   Plus, Trash2, Pencil, Check, ChevronDown,
-  LayoutList, LayoutGrid, GitCompare, Sigma, Tag, X,
+  LayoutList, LayoutGrid, SlidersHorizontal, Tag, X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,7 +18,7 @@ import { useTheme } from "@/lib/theme-context"
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type RowType = "number" | "days" | "currency"
-type ViewMode = "tables" | "cards" | "compare" | "totals"
+type ViewMode = "tables" | "cards" | "plan"
 
 type TierColumn = {
   id: string
@@ -155,9 +155,8 @@ function priceTotal(columns: TierColumn[]): string {
   return `$${fmt(sum)}`
 }
 
-/** Format a raw number for display in compare/totals, using the item's rowType */
 function fmtRaw(raw: number, rowType: RowType): string {
-  if (rowType === "days") return `${(raw / 1440).toFixed(2)}d`
+  if (rowType === "days") return `${(raw / 1440).toFixed(2)} Days`
   if (rowType === "currency") return `$${fmt(raw)}`
   return fmt(raw)
 }
@@ -265,7 +264,7 @@ function CategoryManageDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader><DialogTitle>Manage Categories</DialogTitle></DialogHeader>
-        <div className="flex flex-wrap gap-2 min-h-[44px] p-1 rounded-lg border border-border bg-muted/20">
+        <div className="flex flex-wrap gap-2 min-h-[44px] p-2 rounded-lg border border-border bg-muted/20">
           {categories.map(cat => (
             <div key={cat} className="flex items-center gap-1 rounded-full bg-primary/15 border border-primary/30 pl-3 pr-1.5 py-1 text-sm text-primary">
               {cat}
@@ -545,13 +544,10 @@ function BundleCard({ bundle }: { bundle: Bundle }) {
       <div className="px-4 py-3 flex items-center justify-between gap-2" style={{ background: colors.headerGrad }}>
         <span className="font-bold italic text-white text-sm tracking-wide truncate">{bundle.name}</span>
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          {bundle.category && (
-            <Badge variant="outline" className="text-white/60 border-white/25 text-[10px] h-5 py-0 px-2">{bundle.category}</Badge>
-          )}
+          {bundle.category && <Badge variant="outline" className="text-white/60 border-white/25 text-[10px] h-5 py-0 px-2">{bundle.category}</Badge>}
           <Badge variant="outline" className="text-white border-white/30 text-xs">${totalPrice}</Badge>
         </div>
       </div>
-
       <div className="flex items-center gap-2 px-3 py-2 border-b border-white/10" style={{ background: colors.iconRow }}>
         {bundle.columns.map(col => (
           <div key={col.id} className="flex flex-col items-center gap-0.5 flex-1 min-w-0">
@@ -562,7 +558,6 @@ function BundleCard({ bundle }: { bundle: Bundle }) {
           </div>
         ))}
       </div>
-
       <div className="divide-y divide-white/5">
         {bundle.rows.map((row, idx) => (
           <div key={row.id} className="flex items-center gap-2.5 px-3 py-1.5" style={{ background: idx % 2 === 0 ? colors.rowEven : colors.rowOdd }}>
@@ -576,162 +571,16 @@ function BundleCard({ bundle }: { bundle: Bundle }) {
   )
 }
 
-// ─── Compare View ─────────────────────────────────────────────────────────────
+// ─── Plan View (Spending + Compare + Combined Totals) ─────────────────────────
 
-function CompareView({ bundles, categories }: { bundles: Bundle[]; categories: string[] }) {
+function PlanView({ bundles, categories }: { bundles: Bundle[]; categories: string[] }) {
   const { currentColor } = useTheme()
   const colors = themeColors(currentColor.hue)
-  const [selectedIds, setSelectedIds] = useState<string[]>(bundles.slice(0, 2).map(b => b.id))
-  const [filterCat, setFilterCat] = useState("All")
 
-  const visibleBundles = filterCat === "All" ? bundles : bundles.filter(b => b.category === filterCat)
-  const selected = visibleBundles.filter(b => selectedIds.includes(b.id))
-
-  const allItems = useMemo(() => {
-    const seen = new Map<string, { icon: string; label: string; rowType: RowType }>()
-    selected.forEach(bundle => {
-      bundle.rows.forEach(row => {
-        if (!seen.has(row.label)) seen.set(row.label, { icon: row.icon, label: row.label, rowType: row.rowType })
-      })
-    })
-    return Array.from(seen.values())
-  }, [selected])
-
-  return (
-    <div className="space-y-4">
-      {/* Category filter */}
-      <div className="flex flex-wrap gap-1.5">
-        {["All", ...categories].map(cat => (
-          <button
-            key={cat}
-            onClick={() => setFilterCat(cat)}
-            className={cn(
-              "px-3 py-1 rounded-full text-xs font-medium border transition",
-              filterCat === cat
-                ? "border-primary bg-primary/20 text-primary"
-                : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
-            )}
-          >{cat}</button>
-        ))}
-      </div>
-
-      {/* Bundle selector */}
-      <div className="flex flex-wrap gap-2">
-        {visibleBundles.map(b => (
-          <button
-            key={b.id}
-            onClick={() => setSelectedIds(prev => prev.includes(b.id) ? prev.filter(id => id !== b.id) : [...prev, b.id])}
-            className={cn(
-              "px-3 py-1.5 rounded-lg border text-sm font-medium transition",
-              selectedIds.includes(b.id)
-                ? "border-primary bg-primary/20 text-primary"
-                : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
-            )}
-          >{b.name}</button>
-        ))}
-      </div>
-
-      {selected.length < 1 && <p className="text-sm text-muted-foreground">Select at least one bundle above.</p>}
-
-      {selected.length > 0 && (
-        <div className="overflow-x-auto rounded-xl border border-white/10 shadow-lg shadow-black/40">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr style={{ background: colors.iconRow }}>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-white/60 uppercase tracking-widest w-36">Item</th>
-                {selected.map(b => (
-                  <th key={b.id} className="px-4 py-3 text-center min-w-[120px]">
-                    <div className="flex flex-col items-center gap-1">
-                      <div className="flex gap-1 flex-wrap justify-center">
-                        {b.columns.slice(0, 4).map(col => (
-                          <Image key={col.id} src={col.icon} alt={col.name} width={24} height={24} className="h-6 w-6 object-contain" />
-                        ))}
-                        {b.columns.length > 4 && <span className="text-[10px] text-white/50 self-end">+{b.columns.length - 4}</span>}
-                      </div>
-                      <span className="text-xs font-semibold text-white leading-tight">{b.name}</span>
-                      {b.category && <span className="text-[10px] text-primary/70">{b.category}</span>}
-                      <span className="text-[10px] text-white/50">{priceTotal(b.columns)}</span>
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {allItems.map((item, idx) => {
-                // Raw numeric totals for each selected bundle (null if item absent)
-                const raws = selected.map(b => {
-                  const row = b.rows.find(r => r.label === item.label)
-                  return row ? rowTotal(row, b.columns) : null
-                })
-                const validRaws = raws.filter((r): r is number => r !== null)
-                const maxRaw = validRaws.length > 0 ? Math.max(...validRaws) : 0
-                const allEqual = validRaws.length > 1 && validRaws.every(r => r === validRaws[0])
-                const multipleSelected = selected.length > 1
-
-                return (
-                  <tr key={item.label} className="border-t border-white/10" style={{ background: idx % 2 === 0 ? colors.rowEven : colors.rowOdd }}>
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-center gap-2">
-                        <Image src={item.icon} alt={item.label} width={28} height={28} className="h-7 w-7 object-contain flex-shrink-0" />
-                        <span className="text-xs text-white/70 leading-tight">{item.label}</span>
-                      </div>
-                    </td>
-                    {selected.map((b, bi) => {
-                      const raw = raws[bi]
-                      if (raw === null) {
-                        return (
-                          <td key={b.id} className="px-4 py-2.5 text-center text-white/25 text-sm">—</td>
-                        )
-                      }
-
-                      const fmtValue = (() => {
-                        if (item.rowType === "days") return `${(raw / 1440).toFixed(2)} Days`
-                        if (item.rowType === "currency") return `$${fmt(raw)}`
-                        return fmt(raw)
-                      })()
-
-                      const isBest = multipleSelected && !allEqual && raw === maxRaw
-                      const isLower = multipleSelected && raw < maxRaw
-                      const isEqual = multipleSelected && allEqual
-                      const diff = maxRaw - raw  // how much less than best (0 if best/equal)
-                      const diffStr = fmtRaw(diff, item.rowType)
-
-                      return (
-                        <td key={b.id} className="px-4 py-2.5 text-center">
-                          <div className="flex flex-col items-center gap-0.5">
-                            <span className={cn(
-                              "font-semibold text-sm",
-                              isBest ? "text-green-400" : isLower ? "text-white/75" : "text-white/85"
-                            )}>
-                              {fmtValue}
-                            </span>
-                            {isEqual  && <span className="text-[10px] text-blue-400/80">= equal</span>}
-                            {isBest   && <span className="text-[10px] text-green-400/80">▲ best</span>}
-                            {isLower  && <span className="text-[10px] text-red-400/80">▼ -{diffStr}</span>}
-                          </div>
-                        </td>
-                      )
-                    })}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Totals / Add Together View ───────────────────────────────────────────────
-
-function TotalsView({ bundles, categories }: { bundles: Bundle[]; categories: string[] }) {
-  const { currentColor } = useTheme()
-  const colors = themeColors(currentColor.hue)
   const [selectedIds, setSelectedIds] = useState<string[]>(bundles.map(b => b.id))
   const [filterCat, setFilterCat] = useState("All")
 
-  // spendQty[bundleId][colId] = how many of that tier to purchase
+  // spendQty[bundleId][colId] = how many of that tier to buy
   const [spendQty, setSpendQty] = useState<Record<string, Record<string, number>>>(() => {
     const init: Record<string, Record<string, number>> = {}
     bundles.forEach(b => {
@@ -741,29 +590,28 @@ function TotalsView({ bundles, categories }: { bundles: Bundle[]; categories: st
     return init
   })
 
-  // Keep spendQty up to date if bundles change (new bundles added, or columns added)
+  // Sync spendQty when bundles change (new bundles / columns added)
   useEffect(() => {
     setSpendQty(prev => {
-      const updated = { ...prev }
+      const next = { ...prev }
       bundles.forEach(b => {
-        if (!updated[b.id]) {
-          updated[b.id] = {}
-          b.columns.forEach(c => { updated[b.id][c.id] = c.maxPurchase })
+        if (!next[b.id]) {
+          next[b.id] = {}
+          b.columns.forEach(c => { next[b.id][c.id] = c.maxPurchase })
         } else {
           b.columns.forEach(c => {
-            if (updated[b.id][c.id] === undefined) {
-              updated[b.id][c.id] = c.maxPurchase
+            if (next[b.id][c.id] === undefined) {
+              next[b.id][c.id] = c.maxPurchase
             }
           })
         }
       })
-      return updated
+      return next
     })
   }, [bundles])
 
   function getQty(bundleId: string, colId: string, maxPurchase: number): number {
-    const v = spendQty[bundleId]?.[colId]
-    return v !== undefined ? v : maxPurchase
+    return spendQty[bundleId]?.[colId] ?? maxPurchase
   }
 
   function setQty(bundleId: string, colId: string, qty: number, maxPurchase: number) {
@@ -776,13 +624,22 @@ function TotalsView({ bundles, categories }: { bundles: Bundle[]; categories: st
   const visibleBundles = filterCat === "All" ? bundles : bundles.filter(b => b.category === filterCat)
   const selected = visibleBundles.filter(b => selectedIds.includes(b.id))
 
-  // Aggregate item totals using custom spend quantities
+  // Unique items across selected bundles
+  const allItems = useMemo(() => {
+    const seen = new Map<string, { icon: string; label: string; rowType: RowType }>()
+    selected.forEach(b => b.rows.forEach(r => {
+      if (!seen.has(r.label)) seen.set(r.label, { icon: r.icon, label: r.label, rowType: r.rowType })
+    }))
+    return Array.from(seen.values())
+  }, [selected])
+
+  // Spending-adjusted item totals (combined across all selected bundles)
   const combined = useMemo(() => {
     const map = new Map<string, { icon: string; label: string; rowType: RowType; total: number }>()
-    selected.forEach(bundle => {
-      bundle.rows.forEach(row => {
-        const total = bundle.columns.reduce((acc, col) => {
-          const qty = getQty(bundle.id, col.id, col.maxPurchase)
+    selected.forEach(b => {
+      b.rows.forEach(row => {
+        const total = b.columns.reduce((acc, col) => {
+          const qty = spendQty[b.id]?.[col.id] ?? col.maxPurchase
           return acc + (row.values[col.id] ?? 0) * qty
         }, 0)
         if (map.has(row.label)) {
@@ -794,12 +651,11 @@ function TotalsView({ bundles, categories }: { bundles: Bundle[]; categories: st
       })
     })
     return Array.from(map.values())
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, spendQty])
 
-  const totalSpend = selected.reduce((acc, b) => {
-    return acc + b.columns.reduce((s, c) => s + c.price * getQty(b.id, c.id, c.maxPurchase), 0)
-  }, 0)
+  const totalSpend = selected.reduce((acc, b) =>
+    acc + b.columns.reduce((s, c) => s + c.price * getQty(b.id, c.id, c.maxPurchase), 0), 0
+  )
 
   function formatTotal(rowType: RowType, total: number): string {
     if (rowType === "days") return `${(total / 1440).toFixed(2)} Days`
@@ -807,8 +663,10 @@ function TotalsView({ bundles, categories }: { bundles: Bundle[]; categories: st
     return fmt(total)
   }
 
+  const multiBundle = selected.length > 1
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Category filter */}
       <div className="flex flex-wrap gap-1.5">
         {["All", ...categories].map(cat => (
@@ -825,9 +683,9 @@ function TotalsView({ bundles, categories }: { bundles: Bundle[]; categories: st
         ))}
       </div>
 
-      {/* Bundle toggle chips + total spend */}
+      {/* Bundle selector + total */}
       <div className="flex flex-wrap gap-2 items-center">
-        <span className="text-sm text-muted-foreground">Include:</span>
+        <span className="text-xs font-medium text-muted-foreground uppercase tracking-widest">Bundles:</span>
         {visibleBundles.map(b => (
           <button
             key={b.id}
@@ -840,67 +698,218 @@ function TotalsView({ bundles, categories }: { bundles: Bundle[]; categories: st
             )}
           >{b.name}</button>
         ))}
-        <span className="ml-auto text-sm font-semibold text-foreground">Total spend: ${fmt(totalSpend)}</span>
+        {selected.length > 0 && (
+          <span className="ml-auto text-sm font-bold text-foreground tabular-nums">Total: ${fmt(totalSpend)}</span>
+        )}
       </div>
 
       {selected.length === 0 && (
-        <p className="text-sm text-muted-foreground">Select bundles above to see combined totals.</p>
+        <p className="text-sm text-muted-foreground py-6 text-center">Select at least one bundle above.</p>
       )}
 
       {selected.length > 0 && (
         <>
-          {/* ── Per-bundle spending tier configuration ── */}
+          {/* ─── SECTION 1: SPENDING CONFIGURATION ─── */}
           <div className="space-y-2">
-            <p className="text-xs text-muted-foreground font-medium uppercase tracking-widest">Spending Configuration — adjust how many of each tier you plan to buy</p>
-            {selected.map(b => {
-              const bundleSpend = b.columns.reduce((s, c) => s + c.price * getQty(b.id, c.id, c.maxPurchase), 0)
-              return (
-                <div key={b.id} className="rounded-xl border border-white/10 overflow-hidden" style={{ background: colors.card }}>
-                  <div className="flex items-center justify-between px-4 py-2" style={{ background: colors.iconRow }}>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold italic text-white">{b.name}</span>
-                      {b.category && <Badge variant="outline" className="text-white/60 border-white/25 text-[10px] h-5 py-0 px-2">{b.category}</Badge>}
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Spending Configuration</p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {selected.map(b => {
+                const bundleSpend = b.columns.reduce((s, c) => s + c.price * getQty(b.id, c.id, c.maxPurchase), 0)
+                return (
+                  <div key={b.id} className="rounded-xl border border-white/10 overflow-hidden">
+                    {/* Bundle header */}
+                    <div
+                      className="flex items-center justify-between px-4 py-2.5"
+                      style={{ background: colors.iconRow }}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-semibold italic text-white text-sm truncate">{b.name}</span>
+                        {b.category && (
+                          <Badge variant="outline" className="text-white/60 border-white/25 text-[10px] h-5 py-0 px-2 flex-shrink-0">{b.category}</Badge>
+                        )}
+                      </div>
+                      <span className="font-bold text-white text-sm flex-shrink-0 ml-3 tabular-nums">${fmt(bundleSpend)}</span>
                     </div>
-                    <span className="text-sm font-bold text-white">${fmt(bundleSpend)}</span>
-                  </div>
-                  <div className="flex gap-3 px-4 py-3 overflow-x-auto">
-                    {b.columns.map(col => {
-                      const qty = getQty(b.id, col.id, col.maxPurchase)
-                      const colSpend = col.price * qty
-                      return (
-                        <div key={col.id} className="flex flex-col items-center gap-1.5 min-w-[68px]">
-                          <Image src={col.icon} alt={col.name} width={36} height={36} className="h-9 w-9 object-contain" />
-                          <span className="text-[10px] text-white/55 text-center leading-tight max-w-[68px] line-clamp-2">{col.name}</span>
-                          <span className="text-[10px] text-white/40">${col.price} each</span>
-                          {/* Qty stepper */}
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              onClick={() => setQty(b.id, col.id, qty - 1, col.maxPurchase)}
-                              disabled={qty === 0}
-                              className="h-6 w-6 rounded-md bg-white/10 hover:bg-white/20 disabled:opacity-30 text-white text-sm flex items-center justify-center transition font-bold"
-                            >−</button>
-                            <span className="text-sm font-bold text-white w-6 text-center tabular-nums">{qty}</span>
-                            <button
-                              onClick={() => setQty(b.id, col.id, qty + 1, col.maxPurchase)}
-                              disabled={qty >= col.maxPurchase}
-                              className="h-6 w-6 rounded-md bg-white/10 hover:bg-white/20 disabled:opacity-30 text-white text-sm flex items-center justify-center transition font-bold"
-                            >+</button>
+
+                    {/* Tier rows — compact single-line each */}
+                    <div className="divide-y divide-white/5">
+                      {b.columns.map((col, idx) => {
+                        const qty = getQty(b.id, col.id, col.maxPurchase)
+                        const colSpend = col.price * qty
+                        return (
+                          <div
+                            key={col.id}
+                            className="flex items-center gap-3 px-4 py-2"
+                            style={{ background: idx % 2 === 0 ? colors.rowEven : colors.rowOdd }}
+                          >
+                            {/* Icon */}
+                            <Image
+                              src={col.icon}
+                              alt={col.name}
+                              width={32}
+                              height={32}
+                              className="h-8 w-8 object-contain flex-shrink-0"
+                            />
+                            {/* Name + meta */}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-white/85 leading-tight truncate">{col.name}</p>
+                              <p className="text-[10px] text-white/40 leading-tight">${col.price} each · max {col.maxPurchase}</p>
+                            </div>
+                            {/* Stepper */}
+                            <div className="flex items-center gap-1.5 flex-shrink-0">
+                              <button
+                                onClick={() => setQty(b.id, col.id, qty - 1, col.maxPurchase)}
+                                disabled={qty === 0}
+                                className="h-7 w-7 rounded-md bg-white/10 hover:bg-white/20 active:bg-white/30 disabled:opacity-25 disabled:cursor-not-allowed text-white flex items-center justify-center transition-colors select-none text-base font-bold leading-none"
+                                aria-label="Decrease"
+                              >−</button>
+                              <span className="text-sm font-bold text-white w-5 text-center tabular-nums select-none">{qty}</span>
+                              <button
+                                onClick={() => setQty(b.id, col.id, qty + 1, col.maxPurchase)}
+                                disabled={qty >= col.maxPurchase}
+                                className="h-7 w-7 rounded-md bg-white/10 hover:bg-white/20 active:bg-white/30 disabled:opacity-25 disabled:cursor-not-allowed text-white flex items-center justify-center transition-colors select-none text-base font-bold leading-none"
+                                aria-label="Increase"
+                              >+</button>
+                            </div>
+                            {/* Tier subtotal */}
+                            <span className="text-sm font-semibold text-primary/90 w-16 text-right tabular-nums flex-shrink-0">
+                              ${fmt(colSpend)}
+                            </span>
                           </div>
-                          <span className="text-[9px] text-white/30">max {col.maxPurchase}</span>
-                          <span className="text-[10px] font-semibold text-primary/80">${colSpend}</span>
-                        </div>
-                      )
-                    })}
+                        )
+                      })}
+                    </div>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
           </div>
 
-          {/* ── Combined item totals grid ── */}
-          <div>
-            <p className="text-xs text-muted-foreground font-medium uppercase tracking-widest mb-3">Combined Totals</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+          {/* ─── SECTION 2: ITEM COMPARISON ─── */}
+          {multiBundle && allItems.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
+                Item Comparison <span className="normal-case font-normal">— values reflect spending configuration above</span>
+              </p>
+              <div className="overflow-x-auto rounded-xl border border-white/10 shadow-lg shadow-black/40">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr style={{ background: colors.iconRow }}>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-white/60 uppercase tracking-widest w-36">Item</th>
+                      {selected.map(b => {
+                        const bSpend = b.columns.reduce((s, c) => s + c.price * getQty(b.id, c.id, c.maxPurchase), 0)
+                        return (
+                          <th key={b.id} className="px-4 py-3 text-center min-w-[130px]">
+                            <div className="flex flex-col items-center gap-0.5">
+                              <div className="flex gap-1 flex-wrap justify-center">
+                                {b.columns.slice(0, 4).map(col => (
+                                  <Image key={col.id} src={col.icon} alt={col.name} width={20} height={20} className="h-5 w-5 object-contain" />
+                                ))}
+                                {b.columns.length > 4 && <span className="text-[10px] text-white/50 self-end">+{b.columns.length - 4}</span>}
+                              </div>
+                              <span className="text-xs font-semibold text-white leading-tight">{b.name}</span>
+                              {b.category && <span className="text-[10px] text-primary/70">{b.category}</span>}
+                              <span className="text-[10px] text-white/50 tabular-nums">${fmt(bSpend)}</span>
+                            </div>
+                          </th>
+                        )
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allItems.map((item, idx) => {
+                      // Spending-adjusted raw totals per selected bundle (null = item absent)
+                      const raws = selected.map(b => {
+                        const row = b.rows.find(r => r.label === item.label)
+                        if (!row) return null
+                        return b.columns.reduce((acc, col) => {
+                          const qty = spendQty[b.id]?.[col.id] ?? col.maxPurchase
+                          return acc + (row.values[col.id] ?? 0) * qty
+                        }, 0)
+                      })
+
+                      const validRaws = raws.filter((r): r is number => r !== null)
+                      const sortedDesc = [...validRaws].sort((a, b) => b - a)
+                      const maxRaw = sortedDesc[0] ?? 0
+                      const secondRaw = sortedDesc[1]   // undefined if only 1 valid entry
+                      const allEqual = validRaws.length > 1 && validRaws.every(r => r === validRaws[0])
+
+                      return (
+                        <tr key={item.label} className="border-t border-white/10" style={{ background: idx % 2 === 0 ? colors.rowEven : colors.rowOdd }}>
+                          <td className="px-3 py-2.5">
+                            <div className="flex items-center gap-2">
+                              <Image src={item.icon} alt={item.label} width={28} height={28} className="h-7 w-7 object-contain flex-shrink-0" />
+                              <span className="text-xs text-white/70 leading-tight">{item.label}</span>
+                            </div>
+                          </td>
+                          {selected.map((b, bi) => {
+                            const raw = raws[bi]
+
+                            if (raw === null) {
+                              return <td key={b.id} className="px-4 py-2.5 text-center text-white/25 text-sm">—</td>
+                            }
+
+                            const fmtValue = (() => {
+                              if (item.rowType === "days") return `${(raw / 1440).toFixed(2)} Days`
+                              if (item.rowType === "currency") return `$${fmt(raw)}`
+                              return fmt(raw)
+                            })()
+
+                            // Compute indicators
+                            const isBest  = !allEqual && raw === maxRaw
+                            const isLower = !allEqual && raw < maxRaw
+                            // For the best: how much more than 2nd place?
+                            const lead = secondRaw !== undefined ? raw - secondRaw : 0
+                            const isTied = isBest && lead === 0
+                            // For lower: how much behind the best?
+                            const diff = maxRaw - raw
+
+                            return (
+                              <td key={b.id} className="px-4 py-2.5 text-center">
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <span className={cn(
+                                    "font-semibold text-sm tabular-nums",
+                                    isBest && !isTied ? "text-green-400"
+                                      : isLower ? "text-white/70"
+                                      : "text-white/85"
+                                  )}>{fmtValue}</span>
+
+                                  {/* All same value */}
+                                  {allEqual && (
+                                    <span className="text-[10px] text-blue-400/80">= equal</span>
+                                  )}
+                                  {/* Clear winner: show how much more than 2nd place */}
+                                  {isBest && !isTied && !allEqual && (
+                                    <span className="text-[10px] text-green-400/80">▲ +{fmtRaw(lead, item.rowType)}</span>
+                                  )}
+                                  {/* Tied for best */}
+                                  {isTied && !allEqual && (
+                                    <span className="text-[10px] text-blue-400/80">= tied</span>
+                                  )}
+                                  {/* Lower: show how much less than best */}
+                                  {isLower && (
+                                    <span className="text-[10px] text-red-400/80">▼ -{fmtRaw(diff, item.rowType)}</span>
+                                  )}
+                                </div>
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ─── SECTION 3: COMBINED TOTALS ─── */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
+              Combined Totals
+              <span className="normal-case font-normal ml-1">— ${fmt(totalSpend)} total spend across {selected.length} bundle{selected.length !== 1 ? "s" : ""}</span>
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
               {combined.map(item => (
                 <div
                   key={item.label}
@@ -909,7 +918,7 @@ function TotalsView({ bundles, categories }: { bundles: Bundle[]; categories: st
                 >
                   <Image src={item.icon} alt={item.label} width={48} height={48} className="h-12 w-12 object-contain" />
                   <span className="text-[11px] text-white/60 leading-tight">{item.label}</span>
-                  <span className="text-sm font-bold text-white">{formatTotal(item.rowType, item.total)}</span>
+                  <span className="text-sm font-bold text-white tabular-nums">{formatTotal(item.rowType, item.total)}</span>
                 </div>
               ))}
             </div>
@@ -994,9 +1003,7 @@ export function BundlesContent() {
       { id: "t5", icon: "/images/bundle/gold_chest.png",   name: "Gold Chest",   price: 100, maxPurchase: 1 },
     ]
     const newBundle: Bundle = {
-      id,
-      name: "New Bundle",
-      category: appState.categories[0] ?? "Daily",
+      id, name: "New Bundle", category: appState.categories[0] ?? "Daily",
       columns: cols,
       rows: [{ id: "row1", icon: "/images/bundle/gem.png", label: "Gem", values: { t1: 0, t2: 0, t3: 0, t4: 0, t5: 0 }, rowType: "number" }],
     }
@@ -1008,11 +1015,7 @@ export function BundlesContent() {
       setFilterCategory("All")
     }
   }
-  function updateCategories(categories: string[]) {
-    setAppState(prev => ({ ...prev, categories }))
-  }
 
-  // Bundles visible in the current filter
   const filteredBundles = filterCategory === "All"
     ? appState.bundles
     : appState.bundles.filter(b => b.category === filterCategory)
@@ -1022,7 +1025,7 @@ export function BundlesContent() {
       <CategoryManageDialog
         open={catDialogOpen}
         categories={appState.categories}
-        onUpdate={updateCategories}
+        onUpdate={cats => setAppState(prev => ({ ...prev, categories: cats }))}
         onClose={() => setCatDialogOpen(false)}
       />
 
@@ -1030,19 +1033,16 @@ export function BundlesContent() {
       <div className="flex flex-wrap items-start gap-3 justify-between">
         <div>
           <h2 className="text-xl font-bold text-foreground">Bundles</h2>
-          <p className="text-sm text-muted-foreground">Track, compare and add bundle rewards together.</p>
+          <p className="text-sm text-muted-foreground">Track, compare and plan your bundle spending.</p>
         </div>
 
         <div className="flex flex-wrap gap-2 items-center">
-          {/* View switcher */}
           <div className="flex gap-1 border border-border rounded-lg p-1">
-            <ViewBtn active={viewMode === "tables"}  onClick={() => setViewMode("tables")}  icon={LayoutList} label="Tables"  />
-            <ViewBtn active={viewMode === "cards"}   onClick={() => setViewMode("cards")}   icon={LayoutGrid} label="Cards"   />
-            <ViewBtn active={viewMode === "compare"} onClick={() => setViewMode("compare")} icon={GitCompare} label="Compare" />
-            <ViewBtn active={viewMode === "totals"}  onClick={() => setViewMode("totals")}  icon={Sigma}      label="Totals"  />
+            <ViewBtn active={viewMode === "tables"} onClick={() => setViewMode("tables")} icon={LayoutList}       label="Tables" />
+            <ViewBtn active={viewMode === "cards"}  onClick={() => setViewMode("cards")}  icon={LayoutGrid}       label="Cards"  />
+            <ViewBtn active={viewMode === "plan"}   onClick={() => setViewMode("plan")}   icon={SlidersHorizontal} label="Plan"   />
           </div>
 
-          {/* Edit controls (tables view only) */}
           {viewMode === "tables" && (
             <>
               <Button variant={editMode ? "default" : "outline"} size="sm" onClick={() => setEditMode(e => !e)} className="gap-1.5">
@@ -1066,9 +1066,9 @@ export function BundlesContent() {
         </div>
       </div>
 
-      {/* ── Category filter chips (Tables + Cards) ── */}
+      {/* Category filter chips (Tables + Cards) */}
       {(viewMode === "tables" || viewMode === "cards") && appState.categories.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 items-center">
+        <div className="flex flex-wrap gap-1.5">
           {["All", ...appState.categories].map(cat => (
             <button
               key={cat}
@@ -1098,7 +1098,7 @@ export function BundlesContent() {
             />
           ))}
           {filteredBundles.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-4 rounded-xl border border-dashed border-border">
+            <div className="flex flex-col items-center justify-center py-20 gap-4 rounded-xl border border-dashed border-border text-muted-foreground">
               <p className="text-sm">{appState.bundles.length === 0 ? "No bundles yet." : `No bundles in "${filterCategory}".`}</p>
               {appState.bundles.length === 0 && (
                 <Button size="sm" onClick={() => { setEditMode(true); addBundle() }} className="gap-1.5">
@@ -1112,9 +1112,7 @@ export function BundlesContent() {
 
       {viewMode === "cards" && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filteredBundles.map(bundle => (
-            <BundleCard key={bundle.id} bundle={bundle} />
-          ))}
+          {filteredBundles.map(bundle => <BundleCard key={bundle.id} bundle={bundle} />)}
           {filteredBundles.length === 0 && (
             <p className="col-span-full text-sm text-muted-foreground text-center py-16">
               {appState.bundles.length === 0 ? "No bundles yet. Switch to Tables view and add one." : `No bundles in "${filterCategory}".`}
@@ -1123,12 +1121,8 @@ export function BundlesContent() {
         </div>
       )}
 
-      {viewMode === "compare" && (
-        <CompareView bundles={appState.bundles} categories={appState.categories} />
-      )}
-
-      {viewMode === "totals" && (
-        <TotalsView bundles={appState.bundles} categories={appState.categories} />
+      {viewMode === "plan" && (
+        <PlanView bundles={appState.bundles} categories={appState.categories} />
       )}
     </div>
   )
