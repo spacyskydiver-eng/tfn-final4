@@ -38,6 +38,7 @@ import {
   Dices,
 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
+import { BundlePlannerCard } from '@/components/bundle-planner-card'
 import {
   KVK_TYPES,
   type KvkTypeId,
@@ -1944,24 +1945,11 @@ function ExtrasSection({ run, onUpdate }: { run: KvkRun; onUpdate: (r: KvkRun) =
       <h3 className="text-lg font-semibold text-foreground">Additional Sections</h3>
 
       {/* Bundle Planner */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Package className="h-4 w-4 text-primary" />
-            Bundle Planner
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Track bundles available during this KvK. Admins can configure bundle AP rewards, crystal rewards, and purchase limits.
-            Estimated additional AP, honor potential, and crystal gains will show here.
-          </p>
-          <div className="rounded-lg border border-border bg-secondary/20 p-6 text-center">
-            <Package className="mx-auto h-8 w-8 text-muted-foreground/30 mb-2" />
-            <p className="text-xs text-muted-foreground">Bundle configuration coming soon. Admins will define bundle data here.</p>
-          </div>
-        </CardContent>
-      </Card>
+      <BundlePlannerCard
+        storageKey={`kvk_bundle_plan_${run.id}`}
+        title="Bundle Planner"
+        description="Plan the bundles you'll purchase during this KvK. Tracks total cost and resources gained."
+      />
 
       {/* Save prompt for non-authenticated */}
       <Card>

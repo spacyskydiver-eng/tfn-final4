@@ -73,6 +73,17 @@ export type ThemeSettings = {
   backgroundId: string
   backgroundOpacity: number
   parallaxEnabled: boolean
+  // Cursor glow
+  cursorGlowEnabled: boolean
+  cursorGlowColor: string | null  // null = theme colour
+  cursorGlowSize: number          // radius px, 80-400
+  cursorGlowOpacity: number       // 0-100
+  // Mouse trail
+  mouseTrailEnabled: boolean
+  mouseTrailIcon: string | null   // null = dots; path = image
+  mouseTrailLength: number        // 5-30 particles
+  mouseTrailSize: number          // 12-56 px
+  mouseTrailColor: string | null  // null = theme colour
 }
 
 const DEFAULT_THEME: ThemeSettings = {
@@ -80,6 +91,15 @@ const DEFAULT_THEME: ThemeSettings = {
   backgroundId: 'none',
   backgroundOpacity: 15,
   parallaxEnabled: true,
+  cursorGlowEnabled: false,
+  cursorGlowColor: null,
+  cursorGlowSize: 220,
+  cursorGlowOpacity: 35,
+  mouseTrailEnabled: false,
+  mouseTrailIcon: null,
+  mouseTrailLength: 14,
+  mouseTrailSize: 22,
+  mouseTrailColor: null,
 }
 
 type ThemeContextType = {
@@ -88,6 +108,15 @@ type ThemeContextType = {
   setBackground: (id: string) => void
   setBackgroundOpacity: (v: number) => void
   setParallaxEnabled: (v: boolean) => void
+  setCursorGlowEnabled: (v: boolean) => void
+  setCursorGlowColor: (v: string | null) => void
+  setCursorGlowSize: (v: number) => void
+  setCursorGlowOpacity: (v: number) => void
+  setMouseTrailEnabled: (v: boolean) => void
+  setMouseTrailIcon: (v: string | null) => void
+  setMouseTrailLength: (v: number) => void
+  setMouseTrailSize: (v: number) => void
+  setMouseTrailColor: (v: string | null) => void
   currentColor: ColorPreset
   currentBackground: BackgroundPreset
 }
@@ -160,6 +189,42 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setSettings(prev => ({ ...prev, parallaxEnabled: v }))
   }, [])
 
+  const setCursorGlowEnabled = useCallback((v: boolean) => {
+    setSettings(prev => ({ ...prev, cursorGlowEnabled: v }))
+  }, [])
+
+  const setCursorGlowColor = useCallback((v: string | null) => {
+    setSettings(prev => ({ ...prev, cursorGlowColor: v }))
+  }, [])
+
+  const setCursorGlowSize = useCallback((v: number) => {
+    setSettings(prev => ({ ...prev, cursorGlowSize: Math.min(400, Math.max(80, v)) }))
+  }, [])
+
+  const setCursorGlowOpacity = useCallback((v: number) => {
+    setSettings(prev => ({ ...prev, cursorGlowOpacity: Math.min(100, Math.max(5, v)) }))
+  }, [])
+
+  const setMouseTrailEnabled = useCallback((v: boolean) => {
+    setSettings(prev => ({ ...prev, mouseTrailEnabled: v }))
+  }, [])
+
+  const setMouseTrailIcon = useCallback((v: string | null) => {
+    setSettings(prev => ({ ...prev, mouseTrailIcon: v }))
+  }, [])
+
+  const setMouseTrailLength = useCallback((v: number) => {
+    setSettings(prev => ({ ...prev, mouseTrailLength: Math.min(30, Math.max(3, v)) }))
+  }, [])
+
+  const setMouseTrailSize = useCallback((v: number) => {
+    setSettings(prev => ({ ...prev, mouseTrailSize: Math.min(56, Math.max(10, v)) }))
+  }, [])
+
+  const setMouseTrailColor = useCallback((v: string | null) => {
+    setSettings(prev => ({ ...prev, mouseTrailColor: v }))
+  }, [])
+
   return (
     <ThemeContext.Provider
       value={{
@@ -168,6 +233,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         setBackground,
         setBackgroundOpacity,
         setParallaxEnabled,
+        setCursorGlowEnabled,
+        setCursorGlowColor,
+        setCursorGlowSize,
+        setCursorGlowOpacity,
+        setMouseTrailEnabled,
+        setMouseTrailIcon,
+        setMouseTrailLength,
+        setMouseTrailSize,
+        setMouseTrailColor,
         currentColor,
         currentBackground,
       }}

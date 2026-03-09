@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { CalendarDays, Package, FileText, Save } from 'lucide-react'
+import { BundlePlannerCard } from '@/components/bundle-planner-card'
 
 export function PlannerContent() {
   const [draft, setDraft] = useState<any>(null)
@@ -57,27 +58,11 @@ export function PlannerContent() {
       </Card>
 
       {/* BUNDLES */}
-      <Card className="border-border bg-card">
-        <CardHeader>
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
-              <Package className="h-5 w-5" />
-            </div>
-            <CardTitle className="text-foreground">Bundles</CardTitle>
-          </div>
-        </CardHeader>
-
-        <CardContent>
-          <div className="flex flex-col items-center justify-center py-8 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary mb-3">
-              <Package className="h-6 w-6 text-muted-foreground" />
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Bundles will appear here.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      <BundlePlannerCard
+        storageKey="planner_bundle_plan_v1"
+        title="Bundle Planner"
+        description="Plan the bundles you'll purchase for this progression goal. Tracks total cost and resources gained."
+      />
 
       {/* RESULT */}
       <Card className="border-border bg-card">

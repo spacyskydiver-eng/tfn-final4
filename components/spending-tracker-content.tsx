@@ -1,31 +1,31 @@
 "use client"
 
-import React, { useEffect, useMemo, useState } from "react"
+import React, { useMemo, useRef, useState } from "react"
 import Image from "next/image"
-import {
-  Plus, Trash2, Pencil, Check, ChevronLeft, ChevronRight,
-  CalendarDays, BarChart3, Clock, LayoutList, TrendingUp, X,
-  Receipt, Bell, Download,
-} from "lucide-react"
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
-  PieChart, Pie, Cell,
-} from "recharts"
+import { Plus, Trash2, ChevronDown, CalendarPlus, BarChart2, List, Calendar, X, Search, RefreshCw, AlertTriangle, BarChart, LineChart as LineChartIcon, AreaChart } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
-import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
 import { useTheme } from "@/lib/theme-context"
+import {
+  BarChart as RBarChart, Bar,
+  LineChart as RLineChart, Line,
+  AreaChart as RAreaChart, Area,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend,
+  ReferenceLine,
+} from "recharts"
+import { TRACKER_KEY, todayUTC, refreshStatusLabel } from "@/components/bundles-content"
+import type { Bundle } from "@/components/bundles-content"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type RowType = "number" | "days" | "currency"
+type RowType     = "number" | "days" | "currency"
 type EntryStatus = "planned" | "purchased"
-type ViewMode = "timeline" | "calendar" | "stats"
 
 type TrackerItem = {
   label: string
@@ -38,14 +38,16 @@ type TrackerBundle = {
   bundleId: string
   bundleName: string
   category: string
-  spendQty: Record<string, number>
+  refreshType?: Bundle["refreshType"]
+  rollingDays?: number
+  spendQty?: Record<string, number>
   cost: number
   items: TrackerItem[]
 }
 
-export type TrackerEntry = {
+type TrackerEntry = {
   id: string
-  date: string         // YYYY-MM-DD
+  date: string            // YYYY-MM-DD UTC
   bundles: TrackerBundle[]
   currency: string
   totalCost: number
@@ -53,316 +55,360 @@ export type TrackerEntry = {
   notes: string
 }
 
-// Minimal bundle types for reading from DB
-type DbCol  = { id: string; icon: string; name: string; price: number; maxPurchase: number }
-type DbRow  = { id: string; icon: string; label: string; values: Record<string, number>; rowType: RowType }
-type DbBundle = { id: string; name: string; category: string; columns: DbCol[]; rows: DbRow[] }
+// Minimal bundle shape from bundles localStorage
+type DbBundle = Pick<Bundle, "id" | "name" | "category" | "refreshType" | "rollingDays" | "monthlyDay" | "columns" | "rows">
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-export const TRACKER_KEY = "spending-tracker-v1"
-const BUNDLES_KEY = "bundles-state-v3"
-const CURRENCIES: Record<string, string> = { USD: "$", GBP: "£", EUR: "€", AUD: "A$", CAD: "C$" }
+const BUNDLES_KEY   = "bundles-state-v3"
+const CURRENCY_SYMBOLS: Record<string, string> = { USD: "$", GBP: "£", EUR: "€", AUD: "A$", CAD: "C$" }
+const PIE_COLORS = ["#8b5cf6", "#6366f1", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#ec4899", "#84cc16"]
 
-const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"]
-const SHORT_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
-
-const PIE_COLORS = ["#8b5cf6","#06b6d4","#10b981","#f59e0b","#ef4444","#ec4899","#6366f1","#14b8a6"]
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function fmt(n: number): string { return n.toLocaleString("en-US") }
-
-function fmtAmt(n: number, currency: string): string {
-  const sym = CURRENCIES[currency] ?? "$"
-  if (n < 0.01) return `${sym}0`
-  return `${sym}${n.toFixed(2)}`
-}
-
-function fmtRaw(raw: number, rowType: RowType): string {
-  if (rowType === "days") return `${(raw / 1440).toFixed(2)} Days`
-  if (rowType === "currency") return `$${fmt(raw)}`
-  return fmt(raw)
-}
-
-function todayStr(): string {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-}
-
-function formatDate(dateStr: string): string {
-  const d = new Date(dateStr + "T12:00:00")
-  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })
-}
-
-function getYearMonth(dateStr: string): string { return dateStr.slice(0, 7) }
-
-function getMonthLabel(ym: string): string {
-  const [year, month] = ym.split("-").map(Number)
-  return `${MONTH_NAMES[month - 1]} ${year}`
-}
-
-function loadDbBundles(): DbBundle[] {
-  try {
-    const raw = localStorage.getItem(BUNDLES_KEY)
-    if (raw) {
-      const p = JSON.parse(raw)
-      return Array.isArray(p?.bundles) ? p.bundles : []
-    }
-  } catch { /* ignore */ }
-  return []
-}
+// ─── Storage helpers ─────────────────────────────────────────────────────────
 
 function loadEntries(): TrackerEntry[] {
   try {
     const raw = localStorage.getItem(TRACKER_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      return Array.isArray(parsed) ? parsed : []
-    }
-  } catch { /* ignore */ }
-  return []
+    return raw ? JSON.parse(raw) : []
+  } catch { return [] }
 }
 
 function saveEntries(entries: TrackerEntry[]): void {
-  try { localStorage.setItem(TRACKER_KEY, JSON.stringify(entries)) } catch { /* ignore */ }
+  try {
+    localStorage.setItem(TRACKER_KEY, JSON.stringify(entries))
+  } catch { /* ignore */ }
 }
+
+function loadBundles(): DbBundle[] {
+  try {
+    const raw = localStorage.getItem(BUNDLES_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return (parsed.bundles ?? []) as DbBundle[]
+  } catch { return [] }
+}
+
+// ─── Refresh helpers ──────────────────────────────────────────────────────────
+
+// Check whether a bundle is "available" given existing tracker entries
+function isBundleAvailable(bundle: DbBundle, entries: TrackerEntry[]): boolean {
+  const rType = bundle.refreshType ?? "daily"
+  if (rType === "none") return true
+
+  const today = todayUTC()
+  const purchased = entries.filter(
+    e => e.status === "purchased" && e.bundles.some(b => b.bundleId === bundle.id)
+  )
+  if (purchased.length === 0) return true
+
+  if (rType === "daily") {
+    return !purchased.some(e => e.date === today)
+  }
+  if (rType === "monthly") {
+    const day = bundle.monthlyDay ?? 1
+    const now = new Date()
+    const resetThisMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+    // available if no purchase on or after the most recent reset date
+    return !purchased.some(e => e.date >= resetThisMonth)
+  }
+  if (rType === "rolling") {
+    const days = bundle.rollingDays ?? 30
+    const lastDate = purchased.map(e => e.date).sort().pop()!
+    const last = new Date(lastDate + "T00:00:00Z")
+    last.setUTCDate(last.getUTCDate() + days)
+    return new Date() >= last
+  }
+  return true
+}
+
+function refreshWarningLabel(bundle: DbBundle, entries: TrackerEntry[]): string | null {
+  const fakeBundle: Bundle = {
+    id: bundle.id, name: bundle.name, category: bundle.category,
+    refreshType: bundle.refreshType ?? "daily",
+    rollingDays: bundle.rollingDays ?? 30,
+    monthlyDay: bundle.monthlyDay ?? 1,
+    columns: bundle.columns, rows: bundle.rows,
+  }
+  const today = todayUTC()
+  const purchased = entries.filter(e => e.status === "purchased" && e.bundles.some(b => b.bundleId === bundle.id))
+  if (purchased.length === 0) return null
+
+  const lastPurchaseDates: Record<string, string> = {}
+  if (purchased.length > 0) lastPurchaseDates[bundle.id] = purchased.map(e => e.date).sort().pop()!
+
+  const status = refreshStatusLabel(fakeBundle, lastPurchaseDates)
+  if (status.available) return null
+  return status.label
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getLast12Months(): string[] {
   const months: string[] = []
   const now = new Date()
   for (let i = 11; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`)
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1))
+    months.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`)
   }
   return months
 }
 
-// ─── Add / Edit Entry Dialog ──────────────────────────────────────────────────
+// All months that have any entry (purchased or planned), plus all upcoming planned months
+function getAllRelevantMonths(entries: TrackerEntry[]): string[] {
+  const set = new Set<string>()
+  // Always include last 12 months for continuity
+  getLast12Months().forEach(m => set.add(m))
+  entries.forEach(e => set.add(e.date.slice(0, 7)))
+  const sorted = Array.from(set).sort()
+  return sorted
+}
+
+function fmt(n: number): string {
+  return n.toLocaleString("en-US")
+}
+
+function fmtRowType(value: number, rowType: RowType): string {
+  if (rowType === "days")     return `${(value / 1440).toFixed(2)} Days`
+  if (rowType === "currency") return `$${fmt(value)}`
+  return fmt(value)
+}
+
+// ─── Add Entry Dialog ─────────────────────────────────────────────────────────
 
 function AddEntryDialog({
-  open, initial, onSave, onClose,
+  open, onClose, initialEntry,
 }: {
   open: boolean
-  initial?: TrackerEntry
-  onSave: (entry: TrackerEntry) => void
-  onClose: () => void
+  onClose: (entry?: TrackerEntry) => void
+  initialEntry?: TrackerEntry
 }) {
-  const [date, setDate] = useState(initial?.date ?? todayStr())
-  const [status, setStatus] = useState<EntryStatus>(initial?.status ?? "planned")
-  const [currency, setCurrency] = useState(initial?.currency ?? "USD")
-  const [notes, setNotes] = useState(initial?.notes ?? "")
-  const [dbBundles, setDbBundles] = useState<DbBundle[]>([])
-  const [selectedIds, setSelectedIds] = useState<string[]>(initial?.bundles.map(b => b.bundleId) ?? [])
-  const [bundleQty, setBundleQty] = useState<Record<string, Record<string, number>>>(() => {
-    const init: Record<string, Record<string, number>> = {}
-    initial?.bundles.forEach(b => { init[b.bundleId] = { ...b.spendQty } })
-    return init
+  const [bundles, setBundles] = useState<DbBundle[]>([])
+  const [entries, setEntries] = useState<TrackerEntry[]>([])
+
+  // Load bundles + existing entries whenever dialog opens
+  const prevOpen = React.useRef(false)
+  if (open && !prevOpen.current) {
+    setBundles(loadBundles())
+    setEntries(loadEntries())
+  }
+  prevOpen.current = open
+
+  const [date, setDate]         = useState(() => initialEntry?.date ?? todayUTC())
+  const [status, setStatus]     = useState<EntryStatus>(initialEntry?.status ?? "planned")
+  const [currency, setCurrency] = useState(initialEntry?.currency ?? "USD")
+  const [notes, setNotes]       = useState(initialEntry?.notes ?? "")
+  const [selectedBundleIds, setSelectedBundleIds] = useState<string[]>(() => initialEntry?.bundles.map(b => b.bundleId) ?? [])
+  const [customItems, setCustomItems] = useState<Array<{ id: string; label: string; cost: number }>>(() => [])
+  const [bundleSearch, setBundleSearch] = useState("")
+
+  // Per-bundle, per-column spend quantity
+  const [spendQty, setSpendQty] = useState<Record<string, Record<string, number>>>(() => {
+    if (!initialEntry) return {}
+    const map: Record<string, Record<string, number>> = {}
+    initialEntry.bundles.forEach(b => { if (b.spendQty) map[b.bundleId] = b.spendQty })
+    return map
   })
-  const [customItems, setCustomItems] = useState<{ id: string; name: string; cost: number }[]>([])
-  const [customName, setCustomName] = useState("")
-  const [customCost, setCustomCost] = useState("")
 
-  useEffect(() => {
-    if (open) setDbBundles(loadDbBundles())
-  }, [open])
+  function getQty(bundleId: string, colId: string, maxPurchase: number) {
+    return spendQty[bundleId]?.[colId] ?? maxPurchase
+  }
+  function setQty(bundleId: string, colId: string, qty: number, maxPurchase: number) {
+    setSpendQty(prev => ({ ...prev, [bundleId]: { ...(prev[bundleId] ?? {}), [colId]: Math.max(0, Math.min(maxPurchase, qty)) } }))
+  }
 
-  // Init qty when a bundle is newly selected
-  useEffect(() => {
-    setBundleQty(prev => {
-      const next = { ...prev }
-      selectedIds.forEach(id => {
-        if (!next[id]) {
-          const b = dbBundles.find(b => b.id === id)
-          if (b) next[id] = Object.fromEntries(b.columns.map(c => [c.id, c.maxPurchase]))
-        }
-      })
-      return next
+  function toggleBundle(id: string) {
+    setSelectedBundleIds(prev => {
+      if (prev.includes(id)) return prev.filter(x => x !== id)
+      return [...prev, id]
     })
-  }, [selectedIds, dbBundles])
-
-  function getQty(bundleId: string, colId: string, max: number): number {
-    return bundleQty[bundleId]?.[colId] ?? max
-  }
-  function setQty(bundleId: string, colId: string, qty: number, max: number) {
-    setBundleQty(prev => ({ ...prev, [bundleId]: { ...(prev[bundleId] ?? {}), [colId]: Math.max(0, Math.min(max, qty)) } }))
   }
 
-  function bundleCost(b: DbBundle): number {
-    return b.columns.reduce((s, c) => s + c.price * getQty(b.id, c.id, c.maxPurchase), 0)
-  }
+  const sym = CURRENCY_SYMBOLS[currency] ?? "$"
 
-  const selectedDbBundles = dbBundles.filter(b => selectedIds.includes(b.id))
-  const totalFromDb = selectedDbBundles.reduce((t, b) => t + bundleCost(b), 0)
-  const totalFromCustom = customItems.reduce((s, i) => s + i.cost, 0)
-  const totalCost = totalFromDb + totalFromCustom
-  const sym = CURRENCIES[currency] ?? "$"
+  const selectedBundles = bundles.filter(b => selectedBundleIds.includes(b.id))
 
-  function addCustomItem() {
-    const name = customName.trim()
-    const cost = parseFloat(customCost)
-    if (!name || isNaN(cost) || cost < 0) return
-    setCustomItems(prev => [...prev, { id: `ci_${Date.now()}`, name, cost }])
-    setCustomName(""); setCustomCost("")
-  }
+  const totalCost =
+    selectedBundles.reduce((acc, b) => acc + b.columns.reduce((s, c) => s + c.price * getQty(b.id, c.id, c.maxPurchase), 0), 0) +
+    customItems.reduce((s, i) => s + i.cost, 0)
 
   function handleSave() {
-    const trackerBundles: TrackerBundle[] = selectedDbBundles.map(b => ({
-      bundleId: b.id,
-      bundleName: b.name,
-      category: b.category,
-      spendQty: bundleQty[b.id] ?? {},
-      cost: bundleCost(b),
-      items: b.rows.map(row => ({
-        label: row.label,
-        icon: row.icon,
-        rowType: row.rowType,
-        total: b.columns.reduce((acc, col) => acc + (row.values[col.id] ?? 0) * getQty(b.id, col.id, col.maxPurchase), 0),
-      })).filter(i => i.total > 0),
-    }))
-    customItems.forEach(ci => {
-      trackerBundles.push({ bundleId: `custom_${ci.id}`, bundleName: ci.name, category: "", spendQty: {}, cost: ci.cost, items: [] })
-    })
-    onSave({
-      id: initial?.id ?? `entry_${Date.now()}`,
-      date, bundles: trackerBundles, currency, totalCost, status, notes,
-    })
+    const entry: TrackerEntry = {
+      id: initialEntry?.id ?? `entry_${Date.now()}`,
+      date, status, currency, notes,
+      bundles: selectedBundles.map(b => ({
+        bundleId: b.id,
+        bundleName: b.name,
+        category: b.category,
+        refreshType: b.refreshType,
+        rollingDays: b.rollingDays,
+        spendQty: spendQty[b.id],
+        cost: b.columns.reduce((s, c) => s + c.price * getQty(b.id, c.id, c.maxPurchase), 0),
+        items: b.rows.map(row => ({
+          label: row.label, icon: row.icon, rowType: row.rowType,
+          total: b.columns.reduce((acc, col) => {
+            const qty = getQty(b.id, col.id, col.maxPurchase)
+            return acc + (row.values[col.id] ?? 0) * qty
+          }, 0),
+        })).filter(i => i.total > 0),
+      })),
+      totalCost,
+    }
+    onClose(entry)
   }
+
+  const filteredBundles = bundles.filter(b => !bundleSearch.trim() || b.name.toLowerCase().includes(bundleSearch.toLowerCase()))
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{initial ? "Edit Entry" : "Add Spending Entry"}</DialogTitle>
+          <DialogTitle>{initialEntry ? "Edit Entry" : "Add Spending Entry"}</DialogTitle>
         </DialogHeader>
-        <div className="overflow-y-auto flex-1 space-y-4 pr-1">
-          {/* Date + Status */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Date</label>
-              <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="h-9" />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Status</label>
-              <Select value={status} onValueChange={v => setStatus(v as EntryStatus)}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="planned">🕒 Planned</SelectItem>
-                  <SelectItem value="purchased">✅ Purchased</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
 
-          {/* Bundle Selector */}
-          <div className="space-y-2">
-            <label className="text-xs font-medium text-muted-foreground">Select Bundles</label>
-            {dbBundles.length === 0 ? (
-              <p className="text-xs text-muted-foreground rounded-lg border border-dashed border-border p-4 text-center">
-                No bundles in database. Add bundles in the Bundles → Tables view first.
-              </p>
-            ) : (
-              <div className="space-y-2 max-h-56 overflow-y-auto rounded-lg border border-border p-2">
-                {dbBundles.map(b => {
-                  const isSelected = selectedIds.includes(b.id)
-                  const cost = bundleCost(b)
-                  return (
-                    <div key={b.id} className="rounded-lg border border-border overflow-hidden">
-                      <div
-                        className={cn("flex items-center gap-3 px-3 py-2 cursor-pointer transition", isSelected ? "bg-primary/10" : "bg-muted/20 hover:bg-muted/40")}
-                        onClick={() => setSelectedIds(prev => prev.includes(b.id) ? prev.filter(id => id !== b.id) : [...prev, b.id])}
-                      >
-                        <div className={cn("h-4 w-4 rounded border flex items-center justify-center flex-shrink-0 transition", isSelected ? "bg-primary border-primary" : "border-border")}>
-                          {isSelected && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
-                        </div>
-                        <span className="text-sm font-medium flex-1 min-w-0 truncate">{b.name}</span>
-                        {b.category && <Badge variant="outline" className="text-[10px] h-5 px-2 flex-shrink-0">{b.category}</Badge>}
-                        <span className="text-sm font-bold text-primary tabular-nums flex-shrink-0">{sym}{cost}</span>
-                      </div>
-                      {isSelected && (
-                        <div className="divide-y divide-border">
-                          {b.columns.map((col, idx) => {
-                            const qty = getQty(b.id, col.id, col.maxPurchase)
-                            return (
-                              <div key={col.id} className={cn("flex items-center gap-3 px-3 py-1.5", idx % 2 === 0 ? "bg-background/30" : "bg-muted/10")}>
-                                <Image src={col.icon} alt={col.name} width={24} height={24} className="h-6 w-6 object-contain flex-shrink-0" />
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-medium truncate">{col.name}</p>
-                                  <p className="text-[10px] text-muted-foreground">{sym}{col.price} · max {col.maxPurchase}</p>
-                                </div>
-                                <div className="flex items-center gap-1.5 flex-shrink-0">
-                                  <button onClick={(e) => { e.stopPropagation(); setQty(b.id, col.id, qty - 1, col.maxPurchase) }} disabled={qty === 0}
-                                    className="h-6 w-6 rounded bg-secondary hover:bg-secondary/80 disabled:opacity-30 text-sm font-bold flex items-center justify-center">−</button>
-                                  <span className="text-sm font-bold w-5 text-center tabular-nums">{qty}</span>
-                                  <button onClick={(e) => { e.stopPropagation(); setQty(b.id, col.id, qty + 1, col.maxPurchase) }} disabled={qty >= col.maxPurchase}
-                                    className="h-6 w-6 rounded bg-secondary hover:bg-secondary/80 disabled:opacity-30 text-sm font-bold flex items-center justify-center">+</button>
-                                </div>
-                                <span className="text-xs font-semibold text-primary w-14 text-right tabular-nums">{sym}{(col.price * qty).toFixed(2)}</span>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+        {/* Date / Status / Currency */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground font-medium">Date (UTC)</label>
+            <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="h-9" />
           </div>
-
-          {/* Custom Items */}
-          <div className="space-y-2">
-            <label className="text-xs font-medium text-muted-foreground">Custom / Unlisted Bundles</label>
-            {customItems.length > 0 && (
-              <div className="space-y-1">
-                {customItems.map(ci => (
-                  <div key={ci.id} className="flex items-center gap-2 rounded-lg border border-border px-3 py-1.5">
-                    <span className="text-sm flex-1 truncate">{ci.name}</span>
-                    <span className="text-sm font-bold text-primary tabular-nums">{sym}{ci.cost.toFixed(2)}</span>
-                    <button onClick={() => setCustomItems(prev => prev.filter(i => i.id !== ci.id))} className="text-muted-foreground hover:text-destructive transition">
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="flex gap-2">
-              <Input placeholder="Bundle name…" value={customName} onChange={e => setCustomName(e.target.value)} className="h-8 flex-1 text-sm" />
-              <Input placeholder="Cost" type="number" min="0" step="0.01" value={customCost} onChange={e => setCustomCost(e.target.value)} className="h-8 w-24 text-sm" onKeyDown={e => e.key === "Enter" && addCustomItem()} />
-              <Button size="sm" variant="outline" className="h-8 px-3" onClick={addCustomItem} disabled={!customName.trim() || !customCost}>
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground font-medium">Status</label>
+            <Select value={status} onValueChange={v => setStatus(v as EntryStatus)}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="planned">🕒 Planned</SelectItem>
+                <SelectItem value="purchased">✅ Purchased</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-
-          {/* Currency + Notes */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Currency</label>
-              <Select value={currency} onValueChange={setCurrency}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(CURRENCIES).map(([c, s]) => <SelectItem key={c} value={c}>{c} ({s})</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Notes</label>
-              <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional notes…" className="h-9" />
-            </div>
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground font-medium">Currency</label>
+            <Select value={currency} onValueChange={setCurrency}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {Object.entries(CURRENCY_SYMBOLS).map(([c, s]) => <SelectItem key={c} value={c}>{c} ({s})</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
-        <Separator className="mt-2" />
-        <div className="flex items-center justify-between pt-2">
-          <div>
-            <span className="text-sm text-muted-foreground">Total: </span>
-            <span className="text-base font-bold">{sym}{totalCost.toFixed(2)}</span>
+        {/* Bundle selector */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <label className="text-xs text-muted-foreground font-medium">Bundles</label>
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground pointer-events-none" />
+              <Input placeholder="Search…" value={bundleSearch} onChange={e => setBundleSearch(e.target.value)} className="pl-6 h-7 text-xs w-44" />
+            </div>
           </div>
+          {bundles.length === 0 && (
+            <p className="text-xs text-muted-foreground py-3 text-center">No bundles found. Add bundles in the Bundles page first.</p>
+          )}
+          <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto p-2 rounded-lg border border-border bg-muted/20">
+            {filteredBundles.map(b => {
+              const warning = isBundleAvailable(b, entries) ? null : refreshWarningLabel(b, entries)
+              const isSelected = selectedBundleIds.includes(b.id)
+              return (
+                <button
+                  key={b.id}
+                  onClick={() => toggleBundle(b.id)}
+                  title={warning ?? undefined}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition",
+                    isSelected ? "border-primary bg-primary/20 text-primary" : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground",
+                    warning && !isSelected && "border-orange-500/40 text-orange-300 bg-orange-500/5"
+                  )}
+                >
+                  {warning && <AlertTriangle className="h-3 w-3 text-orange-400 flex-shrink-0" />}
+                  {b.refreshType && b.refreshType !== "none" && !warning && <RefreshCw className="h-3 w-3 opacity-40 flex-shrink-0" />}
+                  {b.name}
+                  {b.category && <span className="text-[10px] text-muted-foreground/70 ml-0.5">({b.category})</span>}
+                </button>
+              )
+            })}
+            {filteredBundles.length === 0 && bundles.length > 0 && (
+              <p className="text-xs text-muted-foreground w-full text-center py-2">No bundles match.</p>
+            )}
+          </div>
+        </div>
+
+        {/* Per-bundle quantity controls */}
+        {selectedBundles.length > 0 && (
+          <div className="space-y-3">
+            {selectedBundles.map(b => {
+              const warning = isBundleAvailable(b, entries) ? null : refreshWarningLabel(b, entries)
+              const bTotal = b.columns.reduce((s, c) => s + c.price * getQty(b.id, c.id, c.maxPurchase), 0)
+              return (
+                <div key={b.id} className="rounded-xl border border-border overflow-hidden">
+                  <div className="flex items-center justify-between gap-2 px-3 py-2 bg-muted/30">
+                    <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                      <span className="font-semibold text-sm truncate">{b.name}</span>
+                      {b.category && <Badge variant="outline" className="text-[10px] h-5 py-0 px-2">{b.category}</Badge>}
+                      {warning && (
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border bg-orange-500/15 border-orange-500/30 text-orange-300 font-medium">
+                          <AlertTriangle className="h-2.5 w-2.5" /> {warning}
+                        </span>
+                      )}
+                    </div>
+                    <span className="font-bold text-sm flex-shrink-0 tabular-nums">{sym}{bTotal}</span>
+                  </div>
+                  <div className="divide-y divide-border">
+                    {b.columns.map((col, idx) => {
+                      const qty = getQty(b.id, col.id, col.maxPurchase)
+                      const colSpend = col.price * qty
+                      return (
+                        <div key={col.id} className={cn("flex items-center gap-3 px-3 py-2", idx % 2 === 0 ? "bg-muted/10" : "bg-muted/5")}>
+                          <Image src={col.icon} alt={col.name} width={28} height={28} className="h-7 w-7 object-contain flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium leading-tight truncate">{col.name}</p>
+                            <p className="text-[10px] text-muted-foreground leading-tight">{sym}{col.price} each · max {col.maxPurchase}</p>
+                          </div>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <button onClick={() => setQty(b.id, col.id, qty - 1, col.maxPurchase)} disabled={qty === 0} className="h-7 w-7 rounded-md bg-muted/60 hover:bg-muted active:bg-muted/40 disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center font-bold text-base leading-none select-none transition-colors">−</button>
+                            <span className="text-sm font-bold w-5 text-center tabular-nums select-none">{qty}</span>
+                            <button onClick={() => setQty(b.id, col.id, qty + 1, col.maxPurchase)} disabled={qty >= col.maxPurchase} className="h-7 w-7 rounded-md bg-muted/60 hover:bg-muted active:bg-muted/40 disabled:opacity-25 disabled:cursor-not-allowed flex items-center justify-center font-bold text-base leading-none select-none transition-colors">+</button>
+                          </div>
+                          <span className="text-sm font-semibold text-primary/90 w-14 text-right tabular-nums flex-shrink-0">{sym}{colSpend}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Custom cost items */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <label className="text-xs text-muted-foreground font-medium">Custom Items (optional)</label>
+            <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => setCustomItems(prev => [...prev, { id: `ci_${Date.now()}`, label: "", cost: 0 }])}>
+              <Plus className="h-3.5 w-3.5" /> Add Item
+            </Button>
+          </div>
+          {customItems.map(item => (
+            <div key={item.id} className="flex gap-2 items-center">
+              <Input placeholder="Label..." value={item.label} onChange={e => setCustomItems(prev => prev.map(i => i.id === item.id ? { ...i, label: e.target.value } : i))} className="h-8 flex-1 text-sm" />
+              <Input type="number" placeholder="Cost..." value={item.cost || ""} onChange={e => setCustomItems(prev => prev.map(i => i.id === item.id ? { ...i, cost: Number(e.target.value) || 0 } : i))} className="h-8 w-24 text-sm" />
+              <button onClick={() => setCustomItems(prev => prev.filter(i => i.id !== item.id))} className="text-red-400/60 hover:text-red-400 transition"><X className="h-4 w-4" /></button>
+            </div>
+          ))}
+        </div>
+
+        {/* Notes */}
+        <div className="space-y-1.5">
+          <label className="text-xs text-muted-foreground font-medium">Notes (optional)</label>
+          <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Any notes about this spending..." className="h-9" />
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between gap-3 pt-1 border-t border-border">
+          <div className="text-sm font-bold tabular-nums">Total: {sym}{fmt(totalCost)}</div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-            <Button size="sm" onClick={handleSave} disabled={selectedIds.length === 0 && customItems.length === 0}>
-              {initial ? "Save Changes" : "Add Entry"}
+            <Button variant="outline" size="sm" onClick={() => onClose()}>Cancel</Button>
+            <Button size="sm" onClick={handleSave} disabled={selectedBundleIds.length === 0 && customItems.length === 0} className="gap-1.5">
+              <CalendarPlus className="h-3.5 w-3.5" /> {initialEntry ? "Save Changes" : "Add Entry"}
             </Button>
           </div>
         </div>
@@ -371,400 +417,654 @@ function AddEntryDialog({
   )
 }
 
-// ─── Entry Card (used in Timeline) ───────────────────────────────────────────
+// ─── Entry Card ───────────────────────────────────────────────────────────────
 
 function EntryCard({
-  entry, onEdit, onDelete,
+  entry, onDelete, onEdit,
 }: {
   entry: TrackerEntry
-  onEdit: () => void
   onDelete: () => void
+  onEdit: () => void
 }) {
-  const sym = CURRENCIES[entry.currency] ?? "$"
+  const [expanded, setExpanded] = useState(false)
+  const sym = CURRENCY_SYMBOLS[entry.currency] ?? "$"
   const isPurchased = entry.status === "purchased"
-  const isUpcoming = !isPurchased && entry.date >= todayStr()
+
+  // Aggregate items across all bundles
+  const aggregated = useMemo(() => {
+    const map = new Map<string, TrackerItem>()
+    entry.bundles.forEach(b => {
+      b.items.forEach(item => {
+        const ex = map.get(item.label)
+        if (ex) map.set(item.label, { ...ex, total: ex.total + item.total })
+        else map.set(item.label, { ...item })
+      })
+    })
+    return Array.from(map.values())
+  }, [entry])
 
   return (
-    <div className={cn("rounded-xl border overflow-hidden transition-all", isPurchased ? "border-emerald-500/30 bg-emerald-950/10" : isUpcoming ? "border-blue-500/30 bg-blue-950/10" : "border-border bg-muted/10")}>
-      <div className="flex items-start gap-3 px-4 py-3">
-        <div className={cn("flex-shrink-0 mt-0.5 h-7 w-7 rounded-full flex items-center justify-center text-sm", isPurchased ? "bg-emerald-500/20 text-emerald-400" : "bg-blue-500/20 text-blue-400")}>
-          {isPurchased ? "✓" : "🕒"}
-        </div>
+    <div className={cn(
+      "rounded-xl border overflow-hidden transition-colors",
+      isPurchased ? "border-green-500/25 bg-green-950/10" : "border-orange-500/20 bg-orange-950/5"
+    )}>
+      <div className="flex items-center gap-3 px-4 py-3">
+        <button onClick={() => setExpanded(e => !e)} className="text-muted-foreground hover:text-foreground transition flex-shrink-0">
+          <ChevronDown className={cn("h-4 w-4 transition-transform duration-200", expanded && "rotate-180")} />
+        </button>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-sm font-semibold">{formatDate(entry.date)}</span>
-              <Badge variant={isPurchased ? "default" : "secondary"} className={cn("text-[10px] h-5", isPurchased ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" : "bg-blue-500/20 text-blue-400 border-blue-500/30")}>
-                {isPurchased ? "Purchased" : "Planned"}
-              </Badge>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-base font-bold tabular-nums">{sym}{entry.totalCost.toFixed(2)}</span>
-              <button onClick={onEdit} className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition"><Pencil className="h-3.5 w-3.5" /></button>
-              <button onClick={onDelete} className="p-1 rounded text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition"><Trash2 className="h-3.5 w-3.5" /></button>
-            </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-semibold text-sm text-foreground">
+              {entry.bundles.length === 0 ? "Custom entry" : entry.bundles.map(b => b.bundleName).join(", ")}
+            </span>
+            <Badge variant="outline" className={cn("text-[10px] h-5 py-0 px-2", isPurchased ? "text-green-400 border-green-400/30" : "text-orange-400 border-orange-400/30")}>
+              {isPurchased ? "✓ Purchased" : "🕒 Planned"}
+            </Badge>
+            <span className="text-xs text-muted-foreground">{entry.date}</span>
+            {entry.notes && <span className="text-xs text-muted-foreground/70 italic truncate max-w-[200px]">{entry.notes}</span>}
           </div>
-          <div className="flex flex-wrap gap-1.5 mt-1.5">
-            {entry.bundles.map(b => (
-              <span key={b.bundleId} className="text-xs px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary/80">{b.bundleName}</span>
-            ))}
-          </div>
-          {entry.notes && <p className="text-xs text-muted-foreground mt-1.5 italic">"{entry.notes}"</p>}
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="font-bold text-sm tabular-nums">{sym}{fmt(entry.totalCost)}</span>
+          <button onClick={onEdit} className="text-muted-foreground hover:text-foreground transition text-xs border border-border rounded px-1.5 py-0.5 hover:border-primary/40">Edit</button>
+          <button onClick={onDelete} className="text-red-400/60 hover:text-red-400 transition"><Trash2 className="h-3.5 w-3.5" /></button>
         </div>
       </div>
+
+      {expanded && (
+        <div className="px-4 pb-3 pt-0 border-t border-border/50 space-y-2">
+          {entry.bundles.map(b => (
+            <div key={b.bundleId} className="space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-xs font-semibold text-muted-foreground">{b.bundleName}</p>
+                {b.category && <Badge variant="outline" className="text-[10px] h-4 py-0 px-1.5">{b.category}</Badge>}
+                {b.refreshType && b.refreshType !== "none" && (
+                  <Badge variant="outline" className="text-[10px] h-4 py-0 px-1.5 text-blue-400/70 border-blue-400/20 gap-1">
+                    <RefreshCw className="h-2.5 w-2.5" />
+                    {b.refreshType === "rolling" ? `Every ${b.rollingDays ?? 30}d` : b.refreshType}
+                  </Badge>
+                )}
+                <span className="text-xs text-muted-foreground/60 ml-auto">{sym}{fmt(b.cost)}</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {b.items.map(item => (
+                  <div key={item.label} className="flex items-center gap-1.5 bg-muted/30 border border-border rounded-lg px-2 py-1">
+                    <Image src={item.icon} alt={item.label} width={20} height={20} className="h-5 w-5 object-contain flex-shrink-0" />
+                    <span className="text-xs text-muted-foreground">{item.label}</span>
+                    <span className="text-xs font-semibold tabular-nums">{fmtRowType(item.total, item.rowType)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          {aggregated.length > 0 && entry.bundles.length > 1 && (
+            <>
+              <Separator />
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-muted-foreground">Combined Items</p>
+                <div className="flex flex-wrap gap-2">
+                  {aggregated.map(item => (
+                    <div key={item.label} className="flex items-center gap-1.5 bg-primary/10 border border-primary/20 rounded-lg px-2 py-1">
+                      <Image src={item.icon} alt={item.label} width={20} height={20} className="h-5 w-5 object-contain flex-shrink-0" />
+                      <span className="text-xs text-muted-foreground">{item.label}</span>
+                      <span className="text-xs font-semibold tabular-nums">{fmtRowType(item.total, item.rowType)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }
 
-// ─── Timeline View ────────────────────────────────────────────────────────────
+// ─── Timeline View ─────────────────────────────────────────────────────────────
 
 function TimelineView({
-  entries, onEdit, onDelete,
+  entries, onDelete, onEdit, search,
 }: {
   entries: TrackerEntry[]
-  onEdit: (entry: TrackerEntry) => void
   onDelete: (id: string) => void
+  onEdit: (entry: TrackerEntry) => void
+  search: string
 }) {
-  if (entries.length === 0) {
+  const filtered = useMemo(() => {
+    if (!search.trim()) return entries
+    const q = search.toLowerCase()
+    return entries.filter(e =>
+      e.bundles.some(b => b.bundleName.toLowerCase().includes(q)) ||
+      e.date.includes(q) ||
+      (e.notes ?? "").toLowerCase().includes(q)
+    )
+  }, [entries, search])
+
+  const sorted = useMemo(() => [...filtered].sort((a, b) => b.date.localeCompare(a.date)), [filtered])
+
+  if (sorted.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 gap-4 text-muted-foreground">
-        <Receipt className="h-12 w-12 opacity-20" />
-        <p className="text-sm">No entries yet. Click "+ Add Entry" to get started.</p>
+      <div className="flex flex-col items-center justify-center py-20 text-center gap-2">
+        <p className="text-muted-foreground text-sm">{search ? `No entries matching "${search}".` : "No entries yet."}</p>
       </div>
     )
   }
 
-  // Group by YYYY-MM
-  const groups = new Map<string, TrackerEntry[]>()
-  const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date))
-  sorted.forEach(e => {
-    const ym = getYearMonth(e.date)
-    if (!groups.has(ym)) groups.set(ym, [])
-    groups.get(ym)!.push(e)
-  })
-
   return (
-    <div className="space-y-8">
-      {Array.from(groups.entries()).map(([ym, monthEntries]) => {
-        const purchased = monthEntries.filter(e => e.status === "purchased")
-        const planned   = monthEntries.filter(e => e.status === "planned")
-        const sym = monthEntries[0] ? (CURRENCIES[monthEntries[0].currency] ?? "$") : "$"
-        const monthSpend = purchased.reduce((s, e) => s + e.totalCost, 0)
-        const monthPlan  = planned.reduce((s, e)   => s + e.totalCost, 0)
-        return (
-          <div key={ym}>
-            <div className="flex items-center gap-3 mb-3">
-              <h3 className="text-base font-bold">{getMonthLabel(ym)}</h3>
-              {purchased.length > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">Spent {sym}{monthSpend.toFixed(2)}</span>}
-              {planned.length   > 0 && <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/15    text-blue-400    border border-blue-500/25">  Planned {sym}{monthPlan.toFixed(2)}</span>}
-              <div className="flex-1 h-px bg-border" />
-            </div>
-            <div className="space-y-2">
-              {monthEntries.map(entry => (
-                <EntryCard key={entry.id} entry={entry} onEdit={() => onEdit(entry)} onDelete={() => onDelete(entry.id)} />
-              ))}
-            </div>
-          </div>
-        )
-      })}
+    <div className="space-y-3">
+      {sorted.map(entry => (
+        <EntryCard key={entry.id} entry={entry} onDelete={() => onDelete(entry.id)} onEdit={() => onEdit(entry)} />
+      ))}
     </div>
   )
 }
 
-// ─── Calendar View ────────────────────────────────────────────────────────────
+// ─── Calendar View ─────────────────────────────────────────────────────────────
 
-function CalendarView({
-  entries, onAdd, onEdit, onDelete,
-}: {
+function CalendarView({ entries, onDelete, onEdit }: {
   entries: TrackerEntry[]
-  onAdd: (date: string) => void
-  onEdit: (entry: TrackerEntry) => void
   onDelete: (id: string) => void
+  onEdit: (entry: TrackerEntry) => void
 }) {
   const now = new Date()
-  const [year, setYear] = useState(now.getFullYear())
-  const [month, setMonth] = useState(now.getMonth()) // 0-indexed
+  const [year, setYear]   = useState(now.getUTCFullYear())
+  const [month, setMonth] = useState(now.getUTCMonth()) // 0-based
+
+  const monthStr = `${year}-${String(month + 1).padStart(2, "0")}`
+  const firstDOW = new Date(Date.UTC(year, month, 1)).getUTCDay()
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+
+  const entryByDay = useMemo(() => {
+    const map = new Map<string, TrackerEntry[]>()
+    entries.forEach(e => {
+      if (!e.date.startsWith(monthStr)) return
+      const d = e.date.slice(8) // day part DD
+      const arr = map.get(d) ?? []; arr.push(e); map.set(d, arr)
+    })
+    return map
+  }, [entries, monthStr])
+
+  const today = todayUTC()
+  const monthNames = ["January","February","March","April","May","June","July","August","September","October","November","December"]
+
+  function prevMonth() { if (month === 0) { setMonth(11); setYear(y => y - 1) } else setMonth(m => m - 1) }
+  function nextMonth() { if (month === 11) { setMonth(0); setYear(y => y + 1) } else setMonth(m => m + 1) }
+
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
-
-  function prevMonth() {
-    if (month === 0) { setYear(y => y - 1); setMonth(11) }
-    else setMonth(m => m - 1)
-  }
-  function nextMonth() {
-    if (month === 11) { setYear(y => y + 1); setMonth(0) }
-    else setMonth(m => m + 1)
-  }
-
-  const firstDow = new Date(year, month, 1).getDay() // 0=Sun
-  const daysInMonth = new Date(year, month + 1, 0).getDate()
-
-  const ymPrefix = `${year}-${String(month + 1).padStart(2, "0")}`
-  const monthEntries = entries.filter(e => e.date.startsWith(ymPrefix))
-
-  // Map day → entries
-  const dayMap = new Map<string, TrackerEntry[]>()
-  monthEntries.forEach(e => {
-    const day = e.date.slice(8, 10)
-    if (!dayMap.has(day)) dayMap.set(day, [])
-    dayMap.get(day)!.push(e)
-  })
-
-  const todayDateStr = todayStr()
-  const selectedEntries = selectedDay ? (dayMap.get(String(selectedDay).padStart(2, "0")) ?? []) : []
-  const selectedDateStr = selectedDay ? `${ymPrefix}-${String(selectedDay).padStart(2, "0")}` : null
+  const selectedEntries = selectedDay ? (entryByDay.get(selectedDay.padStart(2, "0")) ?? []) : []
 
   return (
     <div className="space-y-4">
-      {/* Month navigation */}
       <div className="flex items-center justify-between">
-        <button onClick={prevMonth} className="p-2 rounded-lg border border-border hover:bg-accent transition"><ChevronLeft className="h-4 w-4" /></button>
-        <h3 className="text-lg font-bold">{MONTH_NAMES[month]} {year}</h3>
-        <button onClick={nextMonth} className="p-2 rounded-lg border border-border hover:bg-accent transition"><ChevronRight className="h-4 w-4" /></button>
+        <button onClick={prevMonth} className="text-muted-foreground hover:text-foreground transition px-2 py-1 rounded border border-border hover:border-primary/40">← Prev</button>
+        <span className="font-semibold text-foreground">{monthNames[month]} {year}</span>
+        <button onClick={nextMonth} className="text-muted-foreground hover:text-foreground transition px-2 py-1 rounded border border-border hover:border-primary/40">Next →</button>
       </div>
 
-      {/* Day-of-week headers */}
-      <div className="grid grid-cols-7 text-center text-xs font-semibold text-muted-foreground">
-        {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d => <div key={d} className="py-2">{d}</div>)}
-      </div>
-
-      {/* Calendar grid */}
       <div className="grid grid-cols-7 gap-1">
-        {Array.from({ length: firstDow }, (_, i) => <div key={`blank-${i}`} />)}
+        {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d => (
+          <div key={d} className="text-center text-[11px] text-muted-foreground py-1 font-medium">{d}</div>
+        ))}
+        {Array.from({ length: firstDOW }, (_, i) => <div key={`empty-${i}`} />)}
         {Array.from({ length: daysInMonth }, (_, i) => {
-          const dayNum = i + 1
-          const dayStr = String(dayNum).padStart(2, "0")
-          const fullDate = `${ymPrefix}-${dayStr}`
-          const dayEntries = dayMap.get(dayStr) ?? []
+          const day = String(i + 1).padStart(2, "0")
+          const fullDate = `${monthStr}-${day}`
+          const dayEntries = entryByDay.get(day) ?? []
+          const isToday = fullDate === today
           const hasPurchased = dayEntries.some(e => e.status === "purchased")
           const hasPlanned   = dayEntries.some(e => e.status === "planned")
-          const isToday = fullDate === todayDateStr
-          const isSelected = selectedDay === dayNum
-
+          const isSelected   = selectedDay === day
           return (
             <button
-              key={dayNum}
-              onClick={() => setSelectedDay(isSelected ? null : dayNum)}
+              key={day}
+              onClick={() => setSelectedDay(prev => prev === day ? null : day)}
               className={cn(
-                "relative rounded-lg p-1.5 min-h-[52px] flex flex-col items-center gap-0.5 transition border text-sm",
-                isSelected ? "border-primary bg-primary/10" : isToday ? "border-primary/50 bg-primary/5" : dayEntries.length > 0 ? "border-border/60 bg-accent/50 hover:bg-accent" : "border-transparent hover:border-border hover:bg-accent/30",
+                "rounded-lg border p-1.5 text-xs transition-colors min-h-[52px] flex flex-col items-center gap-1",
+                isToday && "border-primary/60 bg-primary/10",
+                isSelected && "ring-2 ring-primary/50",
+                !isToday && !isSelected && "border-border hover:border-primary/30 bg-muted/10 hover:bg-muted/20",
+                dayEntries.length > 0 && "border-primary/30"
               )}
             >
-              <span className={cn("font-medium text-xs", isToday ? "text-primary font-bold" : dayEntries.length > 0 ? "text-foreground" : "text-muted-foreground")}>{dayNum}</span>
-              {dayEntries.length > 0 && (
-                <div className="flex gap-0.5">
-                  {hasPurchased && <div className="h-1.5 w-1.5 rounded-full bg-emerald-400" />}
-                  {hasPlanned   && <div className="h-1.5 w-1.5 rounded-full bg-blue-400" />}
-                </div>
-              )}
-              {dayEntries.length > 0 && (
-                <span className="text-[9px] text-muted-foreground tabular-nums">
-                  {CURRENCIES[dayEntries[0].currency] ?? "$"}{dayEntries.reduce((s, e) => s + e.totalCost, 0).toFixed(0)}
-                </span>
-              )}
+              <span className={cn("font-semibold", isToday ? "text-primary" : "text-foreground/80")}>{i + 1}</span>
+              <div className="flex gap-1 flex-wrap justify-center">
+                {hasPurchased && <div className="h-1.5 w-1.5 rounded-full bg-green-400" title="Purchased" />}
+                {hasPlanned   && <div className="h-1.5 w-1.5 rounded-full bg-orange-400" title="Planned" />}
+              </div>
+              {dayEntries.length > 0 && <span className="text-[9px] text-muted-foreground">{dayEntries.length} entr{dayEntries.length !== 1 ? "ies" : "y"}</span>}
             </button>
           )
         })}
       </div>
 
-      {/* Legend */}
-      <div className="flex gap-4 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-400 inline-block" /> Purchased</span>
-        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-400 inline-block" /> Planned</span>
-      </div>
-
-      {/* Selected day panel */}
-      {selectedDay !== null && (
-        <div className="rounded-xl border border-border p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h4 className="font-semibold">{MONTH_NAMES[month]} {selectedDay}, {year}</h4>
-            <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => selectedDateStr && onAdd(selectedDateStr)}>
-              <Plus className="h-3 w-3" /> Add Entry
-            </Button>
-          </div>
-          {selectedEntries.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No entries for this day.</p>
-          ) : (
-            <div className="space-y-2">
-              {selectedEntries.map(e => <EntryCard key={e.id} entry={e} onEdit={() => onEdit(e)} onDelete={() => onDelete(e.id)} />)}
-            </div>
-          )}
+      {selectedDay && selectedEntries.length > 0 && (
+        <div className="space-y-3 border-t border-border pt-4">
+          <p className="text-sm font-semibold text-foreground">{monthNames[month]} {parseInt(selectedDay, 10)}, {year}</p>
+          {selectedEntries.map(entry => (
+            <EntryCard key={entry.id} entry={entry} onDelete={() => onDelete(entry.id)} onEdit={() => onEdit(entry)} />
+          ))}
         </div>
       )}
     </div>
   )
 }
 
-// ─── Stats View ───────────────────────────────────────────────────────────────
+// ─── Stats View ─────────────────────────────────────────────────────────────
+
+type ChartType      = "bar" | "line" | "cumulative"
+type TimeGranularity = "day" | "week" | "month"
+
+/** "2026-03-09" → "Mar 9" */
+function fmtDayLabel(dateStr: string): string {
+  const [y, mo, d] = dateStr.split("-").map(Number)
+  return new Date(Date.UTC(y, mo - 1, d)).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })
+}
+
+/** Returns "YYYY-MM-DD" of the Monday of the week that contains dateStr */
+function weekStartOf(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00Z")
+  const dow = d.getUTCDay()           // 0 = Sun, 1 = Mon … 6 = Sat
+  d.setUTCDate(d.getUTCDate() - (dow === 0 ? 6 : dow - 1))
+  return d.toISOString().slice(0, 10)
+}
 
 function StatsView({ entries }: { entries: TrackerEntry[] }) {
+  const { currentColor } = useTheme()
+  const hue = currentColor.hue
+  const s   = currentColor.saturation
+  const l   = currentColor.lightness
+  const colorPurchased = `hsl(${hue},${s}%,${l}%)`
+  const colorPlanned   = `hsl(${hue},${s}%,${l + 18}%)`
+
+  const [chartType, setChartType]       = useState<ChartType>("bar")
+  const [showPlanned, setShowPlanned]   = useState(true)
+  const [granularity, setGranularity]   = useState<TimeGranularity>("month")
+
   const purchased = entries.filter(e => e.status === "purchased")
   const planned   = entries.filter(e => e.status === "planned")
-  const now = new Date()
-  const thisMonthPfx = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
-  const thisMonthSpend = purchased.filter(e => e.date.startsWith(thisMonthPfx)).reduce((s, e) => s + e.totalCost, 0)
   const totalSpent    = purchased.reduce((s, e) => s + e.totalCost, 0)
-  const totalPlanned  = planned.reduce((s, e) => s + e.totalCost, 0)
-  const avgPurchase   = purchased.length > 0 ? totalSpent / purchased.length : 0
+  const avgPerEntry   = purchased.length > 0 ? totalSpent / purchased.length : 0
+  const plannedTotal  = planned.reduce((s, e) => s + e.totalCost, 0)
 
-  const sym = entries.length > 0 ? (CURRENCIES[entries[0].currency] ?? "$") : "$"
+  const todayStr   = new Date().toISOString().slice(0, 10)   // "2026-03-09"
+  const todayMonth = todayStr.slice(0, 7)                    // "2026-03"
+  const todayWeek  = weekStartOf(todayStr)                   // Monday of current week
 
-  // Monthly chart data (last 12 months)
-  const monthlyData = getLast12Months().map(ym => {
-    const me = entries.filter(e => e.date.startsWith(ym))
-    const [y, m] = ym.split("-").map(Number)
-    return {
-      month: `${SHORT_MONTHS[m - 1]} '${String(y).slice(2)}`,
-      Spent:   me.filter(e => e.status === "purchased").reduce((s, e) => s + e.totalCost, 0),
-      Planned: me.filter(e => e.status === "planned").reduce((s, e)   => s + e.totalCost, 0),
+  // Unified chart data: one bucket per day / week / month
+  const chartData = useMemo(() => {
+    const allDates = [...purchased, ...planned].map(e => e.date).sort()
+    const now      = new Date(todayStr + "T00:00:00Z")
+
+    if (granularity === "month") {
+      const months = getAllRelevantMonths(entries)
+      return months.map(m => ({
+        label:     m.slice(5) + "/" + m.slice(2, 4),
+        key:       m,
+        purchased: purchased.filter(e => e.date.startsWith(m)).reduce((s, e) => s + e.totalCost, 0),
+        planned:   planned.filter(e => e.date.startsWith(m)).reduce((s, e) => s + e.totalCost, 0),
+        isToday:   m === todayMonth,
+      }))
     }
-  })
 
-  // Category breakdown (purchased only)
-  const catMap = new Map<string, number>()
-  purchased.forEach(e => e.bundles.forEach(b => {
-    const cat = b.category || "Uncategorized"
-    catMap.set(cat, (catMap.get(cat) ?? 0) + b.cost)
-  }))
-  const catData = Array.from(catMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
+    // Helper: build a clamped date range
+    const rangeStart = (backMs: number) =>
+      allDates.length > 0
+        ? new Date(Math.min(now.getTime() - backMs, new Date(allDates[0] + "T00:00:00Z").getTime()))
+        : new Date(now.getTime() - backMs)
+    const rangeEnd = (aheadMs: number) =>
+      allDates.length > 0
+        ? new Date(Math.max(now.getTime() + aheadMs, new Date(allDates[allDates.length - 1] + "T00:00:00Z").getTime()))
+        : new Date(now.getTime() + aheadMs)
 
-  // Resources gained from purchased entries
-  const resourceMap = new Map<string, { icon: string; label: string; rowType: RowType; total: number }>()
-  purchased.forEach(e => e.bundles.forEach(b => b.items.forEach(item => {
-    const ex = resourceMap.get(item.label)
-    if (ex) resourceMap.set(item.label, { ...ex, total: ex.total + item.total })
-    else resourceMap.set(item.label, { icon: item.icon, label: item.label, rowType: item.rowType, total: item.total })
-  })))
-  const resources = Array.from(resourceMap.values()).filter(r => r.total > 0).sort((a, b) => b.total - a.total)
+    if (granularity === "week") {
+      const start = weekStartOf(rangeStart(12 * 7 * 86400000).toISOString().slice(0, 10))
+      const end   = weekStartOf(rangeEnd(16 * 7 * 86400000).toISOString().slice(0, 10))
+      const weeks: string[] = []
+      const cur = new Date(start + "T00:00:00Z")
+      const last = new Date(end + "T00:00:00Z")
+      while (cur <= last) {
+        weeks.push(cur.toISOString().slice(0, 10))
+        cur.setUTCDate(cur.getUTCDate() + 7)
+      }
+      return weeks.map(w => {
+        const wEnd = new Date(new Date(w + "T00:00:00Z").getTime() + 6 * 86400000).toISOString().slice(0, 10)
+        return {
+          label:     fmtDayLabel(w),
+          key:       w,
+          purchased: purchased.filter(e => e.date >= w && e.date <= wEnd).reduce((s, e) => s + e.totalCost, 0),
+          planned:   planned.filter(e => e.date >= w && e.date <= wEnd).reduce((s, e) => s + e.totalCost, 0),
+          isToday:   w === todayWeek,
+        }
+      })
+    }
 
-  // Upcoming purchases (planned + future date)
-  const upcoming = planned.filter(e => e.date >= todayStr()).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 8)
+    // day — 30 days back to 90 days ahead (extended to cover all real entries)
+    const startDay = rangeStart(30 * 86400000)
+    const endDay   = rangeEnd(90 * 86400000)
+    const days: string[] = []
+    const cur = new Date(startDay)
+    cur.setUTCHours(0, 0, 0, 0)
+    while (cur <= endDay) {
+      days.push(cur.toISOString().slice(0, 10))
+      cur.setUTCDate(cur.getUTCDate() + 1)
+    }
+    return days.map(d => ({
+      label:     fmtDayLabel(d),
+      key:       d,
+      purchased: purchased.filter(e => e.date === d).reduce((s, e) => s + e.totalCost, 0),
+      planned:   planned.filter(e => e.date === d).reduce((s, e) => s + e.totalCost, 0),
+      isToday:   d === todayStr,
+    }))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, purchased, planned, granularity, todayStr])
 
-  const cardCls = "rounded-xl border border-border bg-card p-4 space-y-1"
+  // Per-bundle spending breakdown (pie chart)
+  const bundleSpend = useMemo(() => {
+    const map = new Map<string, number>()
+    purchased.forEach(e => {
+      e.bundles.forEach(b => {
+        map.set(b.bundleName, (map.get(b.bundleName) ?? 0) + b.cost)
+      })
+    })
+    return Array.from(map.entries())
+      .map(([name, total]) => ({ name, total }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 8)
+  }, [purchased])
+
+  // Resource totals aggregated
+  const resourceTotals = useMemo(() => {
+    const map = new Map<string, TrackerItem>()
+    purchased.forEach(e => {
+      e.bundles.forEach(b => {
+        b.items.forEach(item => {
+          const ex = map.get(item.label)
+          if (ex) map.set(item.label, { ...ex, total: ex.total + item.total })
+          else map.set(item.label, { ...item })
+        })
+      })
+    })
+    return Array.from(map.values()).sort((a, b) => b.total - a.total)
+  }, [purchased])
+
+  // Upcoming planned bundles
+  const upcoming = useMemo(() =>
+    [...planned].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 10)
+  , [planned])
+
+  // Cumulative running total — derived from the same chartData buckets
+  const cumulativeData = useMemo(() => {
+    let runP = 0, runPl = 0
+    return chartData.map(d => {
+      runP  += d.purchased
+      runPl += d.planned
+      return { ...d, cumPurchased: runP, cumPlanned: runPl }
+    })
+  }, [chartData])
+
+  // Axis spacing adapts to bucket count
+  const count     = chartData.length
+  const xInterval = count <= 14 ? 0 : count <= 30 ? 1 : count <= 60 ? 2 : Math.ceil(count / 25)
+  const xAngle    = count > 8 ? -40 : 0
+  const xAnchor   = count > 8 ? ("end" as const) : ("middle" as const)
+  const xHeight   = count > 8 ? 56 : 24
+  const CHART_HEIGHT = 300
+  const MARGIN       = { top: 8, right: 20, left: 4, bottom: 8 }
+
+  const todayLabel = chartData.find(d => d.isToday)?.label
+
+  // Helper: shared axis + grid props (inlined into each chart — NOT in a Fragment,
+  // because recharts' child traversal doesn't descend into React Fragments)
+  const tsFmt = (v: number, name: string) =>
+    [`$${fmt(v)}`, name === "purchased" ? "Purchased" : name === "planned" ? "Planned" :
+     name === "cumPurchased" ? "Running Total (Purchased)" : "Running Total (Planned)"] as [string, string]
+  const tooltipProps = {
+    contentStyle: { background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 },
+    labelStyle:   { color: "hsl(var(--foreground))", fontWeight: 600 },
+    formatter: tsFmt,
+  }
+
+  function renderChart() {
+    if (chartType === "line") {
+      return (
+        <RLineChart data={chartData} margin={MARGIN}>
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+          <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} interval={xInterval} angle={xAngle} textAnchor={xAnchor} height={xHeight} />
+          <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v: number) => `$${v}`} width={56} />
+          {todayLabel && <ReferenceLine x={todayLabel} stroke="hsl(var(--primary))" strokeDasharray="4 2" label={{ value: "Today", position: "insideTopRight", fontSize: 10, fill: "hsl(var(--primary))" }} />}
+          <Tooltip {...tooltipProps} />
+          <Line type="monotone" dataKey="purchased" stroke={colorPurchased} strokeWidth={2} dot={count <= 60 ? { r: 3, fill: colorPurchased } : false} activeDot={{ r: 5 }} name="purchased" />
+          {showPlanned && <Line type="monotone" dataKey="planned" stroke={colorPlanned} strokeWidth={2} strokeDasharray="5 3" dot={count <= 60 ? { r: 3, fill: colorPlanned } : false} activeDot={{ r: 5 }} name="planned" />}
+        </RLineChart>
+      )
+    }
+    if (chartType === "cumulative") {
+      return (
+        <RAreaChart data={cumulativeData} margin={MARGIN}>
+          <defs>
+            <linearGradient id="gradCumP" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%"  stopColor={colorPurchased} stopOpacity={0.4} />
+              <stop offset="95%" stopColor={colorPurchased} stopOpacity={0.0} />
+            </linearGradient>
+            <linearGradient id="gradCumPl" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%"  stopColor={colorPlanned} stopOpacity={0.3} />
+              <stop offset="95%" stopColor={colorPlanned} stopOpacity={0.0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+          <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} interval={xInterval} angle={xAngle} textAnchor={xAnchor} height={xHeight} />
+          <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v: number) => `$${v}`} width={56} />
+          {todayLabel && <ReferenceLine x={todayLabel} stroke="hsl(var(--primary))" strokeDasharray="4 2" label={{ value: "Today", position: "insideTopRight", fontSize: 10, fill: "hsl(var(--primary))" }} />}
+          <Tooltip {...tooltipProps} />
+          <Area type="monotone" dataKey="cumPurchased" stroke={colorPurchased} fill="url(#gradCumP)"  strokeWidth={2.5} dot={false} activeDot={{ r: 5 }} name="cumPurchased" />
+          {showPlanned && <Area type="monotone" dataKey="cumPlanned" stroke={colorPlanned} fill="url(#gradCumPl)" strokeWidth={2} strokeDasharray="5 3" dot={false} activeDot={{ r: 5 }} name="cumPlanned" />}
+        </RAreaChart>
+      )
+    }
+    // bar (default)
+    return (
+      <RBarChart data={chartData} barCategoryGap="28%" margin={MARGIN}>
+        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+        <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} interval={xInterval} angle={xAngle} textAnchor={xAnchor} height={xHeight} />
+        <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} tickFormatter={(v: number) => `$${v}`} width={56} />
+        {todayLabel && <ReferenceLine x={todayLabel} stroke="hsl(var(--primary))" strokeDasharray="4 2" label={{ value: "Today", position: "insideTopRight", fontSize: 10, fill: "hsl(var(--primary))" }} />}
+        <Tooltip {...tooltipProps} />
+        <Bar dataKey="purchased" fill={colorPurchased} radius={[4, 4, 0, 0]} name="purchased" />
+        {showPlanned && <Bar dataKey="planned" fill={colorPlanned} radius={[4, 4, 0, 0]} name="planned" opacity={0.7} />}
+      </RBarChart>
+    )
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Summary cards */}
+    <div className="space-y-8">
+      {/* Summary KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className={cardCls}>
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-widest">Total Spent</p>
-          <p className="text-2xl font-bold tabular-nums">{sym}{totalSpent.toFixed(2)}</p>
-          <p className="text-xs text-muted-foreground">{purchased.length} purchase{purchased.length !== 1 ? "s" : ""}</p>
+        {[
+          { label: "Total Spent",      value: `$${fmt(totalSpent)}`,               sub: `${purchased.length} purchased entr${purchased.length !== 1 ? "ies" : "y"}` },
+          { label: "Avg / Entry",      value: `$${fmt(Math.round(avgPerEntry))}`,   sub: "purchased entries" },
+          { label: "Planned Spend",    value: `$${fmt(plannedTotal)}`,              sub: `${planned.length} planned entr${planned.length !== 1 ? "ies" : "y"}` },
+          { label: "All-time Entries", value: entries.length.toString(),            sub: "total log entries" },
+        ].map(kpi => (
+          <div key={kpi.label} className="rounded-xl border border-border bg-muted/20 p-4 space-y-1">
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-widest">{kpi.label}</p>
+            <p className="text-2xl font-bold text-foreground tabular-nums">{kpi.value}</p>
+            <p className="text-xs text-muted-foreground">{kpi.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Spending chart with controls */}
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">
+              Spending —{" "}
+              {granularity === "month" ? "by Month" : granularity === "week" ? "by Week" : "by Day"}
+            </h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {granularity === "day" ? "Past 30 days + next 90 days" :
+               granularity === "week" ? "Past 12 weeks + next 16 weeks" :
+               "All recorded months"}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+
+            {/* Granularity switcher */}
+            <div className="flex gap-1 border border-border rounded-lg p-0.5 bg-background/40">
+              {(["day", "week", "month"] as const).map(g => (
+                <button
+                  key={g}
+                  onClick={() => setGranularity(g)}
+                  className={cn(
+                    "px-2.5 py-1.5 rounded-md text-xs font-medium transition capitalize",
+                    granularity === g
+                      ? "bg-primary/20 text-primary border border-primary/30"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {g}
+                </button>
+              ))}
+            </div>
+
+            {/* Chart type switcher */}
+            <div className="flex gap-1 border border-border rounded-lg p-0.5 bg-background/40">
+              {([
+                { type: "bar",        Icon: BarChart,      title: "Bar" },
+                { type: "line",       Icon: LineChartIcon, title: "Line" },
+                { type: "cumulative", Icon: AreaChart,     title: "Total" },
+              ] as const).map(({ type, Icon, title }) => (
+                <button
+                  key={type}
+                  title={title}
+                  onClick={() => setChartType(type)}
+                  className={cn(
+                    "flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium transition",
+                    chartType === type
+                      ? "bg-primary/20 text-primary border border-primary/30"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">{title}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Planned toggle */}
+            <button
+              onClick={() => setShowPlanned(v => !v)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition",
+                showPlanned
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:border-primary/30 hover:text-foreground"
+              )}
+            >
+              <div className="h-2.5 w-2.5 rounded-full" style={{ background: colorPlanned }} />
+              {showPlanned ? "Planned shown" : "Show planned"}
+            </button>
+
+          </div>
         </div>
-        <div className={cardCls}>
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-widest">Total Planned</p>
-          <p className="text-2xl font-bold tabular-nums text-blue-400">{sym}{totalPlanned.toFixed(2)}</p>
-          <p className="text-xs text-muted-foreground">{planned.length} planned</p>
+
+        {/* Legend */}
+        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-2.5 w-5 rounded" style={{ background: colorPurchased }} />
+            {chartType === "cumulative" ? "Running total (purchased)" : "Purchased"}
+          </span>
+          {showPlanned && (
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2.5 w-5 rounded opacity-70" style={{ background: colorPlanned }} />
+              {chartType === "cumulative" ? "Running total (planned)" : "Planned"}
+            </span>
+          )}
+          <span className="flex items-center gap-1.5">
+            <span className="inline-block h-2.5 w-4 border-t-2 border-primary border-dashed" />
+            Current month
+          </span>
         </div>
-        <div className={cardCls}>
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-widest">This Month</p>
-          <p className="text-2xl font-bold tabular-nums text-emerald-400">{sym}{thisMonthSpend.toFixed(2)}</p>
-          <p className="text-xs text-muted-foreground">{now.toLocaleString("default", { month: "long" })}</p>
-        </div>
-        <div className={cardCls}>
-          <p className="text-xs text-muted-foreground font-medium uppercase tracking-widest">Avg Purchase</p>
-          <p className="text-2xl font-bold tabular-nums">{sym}{avgPurchase.toFixed(2)}</p>
-          <p className="text-xs text-muted-foreground">per transaction</p>
+
+        {/* Chart container — always fills the card width */}
+        <div className="rounded-xl border border-border bg-muted/20 p-4">
+          <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
+            {renderChart()}
+          </ResponsiveContainer>
         </div>
       </div>
 
-      {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Monthly spending bar chart */}
-        <div className="lg:col-span-2 rounded-xl border border-border bg-card p-4">
-          <h4 className="text-sm font-semibold mb-4 flex items-center gap-2"><BarChart3 className="h-4 w-4 text-muted-foreground" /> Spending — Last 12 Months</h4>
-          {entries.length === 0 ? <p className="text-xs text-muted-foreground text-center py-12">No data yet.</p> : (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={monthlyData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} />
-                <Tooltip
-                  contentStyle={{ background: "#1e1b4b", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", fontSize: "12px" }}
-                  formatter={(val: number) => [`${sym}${val.toFixed(2)}`, undefined]}
-                />
-                <Legend wrapperStyle={{ fontSize: "11px" }} />
-                <Bar dataKey="Spent"   stackId="a" fill="#10b981" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="Planned" stackId="a" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-              </BarChart>
+      {/* Bundle pie chart */}
+      {bundleSpend.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-foreground">Spending by Bundle</h3>
+          <div className="rounded-xl border border-border bg-muted/20 p-4">
+            <ResponsiveContainer width="100%" height={280}>
+              <PieChart>
+                <Pie data={bundleSpend} dataKey="total" nameKey="name" cx="50%" cy="50%" outerRadius={100} label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`} labelLine={false}>
+                  {bundleSpend.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                </Pie>
+                <Legend formatter={(v) => <span style={{ fontSize: 11, color: "hsl(var(--muted-foreground))" }}>{v}</span>} />
+                <Tooltip formatter={(v: number) => [`$${fmt(v)}`, "Spent"]} contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
+              </PieChart>
             </ResponsiveContainer>
-          )}
+          </div>
         </div>
+      )}
 
-        {/* Category pie */}
-        <div className="rounded-xl border border-border bg-card p-4">
-          <h4 className="text-sm font-semibold mb-4 flex items-center gap-2"><TrendingUp className="h-4 w-4 text-muted-foreground" /> By Category</h4>
-          {catData.length === 0 ? <p className="text-xs text-muted-foreground text-center py-12">No purchase data.</p> : (
-            <>
-              <ResponsiveContainer width="100%" height={140}>
-                <PieChart>
-                  <Pie data={catData} dataKey="value" cx="50%" cy="50%" outerRadius={60} paddingAngle={2}>
-                    {catData.map((_, index) => <Cell key={index} fill={PIE_COLORS[index % PIE_COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip contentStyle={{ background: "#1e1b4b", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", fontSize: "12px" }} formatter={(val: number) => [`${sym}${val.toFixed(2)}`, undefined]} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="space-y-1 mt-2">
-                {catData.slice(0, 5).map((c, i) => (
-                  <div key={c.name} className="flex items-center gap-2 text-xs">
-                    <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-                    <span className="flex-1 truncate text-muted-foreground">{c.name}</span>
-                    <span className="font-semibold tabular-nums">{sym}{c.value.toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Resources Gained */}
-      {resources.length > 0 && (
-        <div className="rounded-xl border border-border bg-card p-4">
-          <h4 className="text-sm font-semibold mb-4">Resources Gained <span className="font-normal text-muted-foreground">— from purchased entries</span></h4>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
-            {resources.map(r => (
-              <div key={r.label} className="rounded-xl border border-border flex flex-col items-center gap-1.5 px-2 py-3 text-center bg-muted/20">
-                <Image src={r.icon} alt={r.label} width={40} height={40} className="h-10 w-10 object-contain" />
-                <span className="text-[10px] text-muted-foreground leading-tight">{r.label}</span>
-                <span className="text-xs font-bold tabular-nums">{fmtRaw(r.total, r.rowType)}</span>
+      {/* Resource totals */}
+      {resourceTotals.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-foreground">Total Resources Acquired</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+            {resourceTotals.map(item => (
+              <div key={item.label} className="rounded-xl border border-border bg-muted/20 flex flex-col items-center gap-1.5 px-3 py-3 text-center">
+                <Image src={item.icon} alt={item.label} width={48} height={48} className="h-12 w-12 object-contain" />
+                <span className="text-[11px] text-muted-foreground leading-tight">{item.label}</span>
+                <span className="text-sm font-bold tabular-nums">{fmtRowType(item.total, item.rowType)}</span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Upcoming purchases */}
+      {/* Upcoming planned */}
       {upcoming.length > 0 && (
-        <div className="rounded-xl border border-blue-500/30 bg-blue-950/10 p-4">
-          <h4 className="text-sm font-semibold mb-3 flex items-center gap-2 text-blue-300"><Bell className="h-4 w-4" /> Upcoming Planned Purchases</h4>
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-foreground">Upcoming Planned ({upcoming.length})</h3>
           <div className="space-y-2">
-            {upcoming.map(e => {
-              const sym2 = CURRENCIES[e.currency] ?? "$"
-              const daysUntil = Math.ceil((new Date(e.date + "T12:00:00").getTime() - Date.now()) / 86400000)
+            {upcoming.map(entry => {
+              const sym = CURRENCY_SYMBOLS[entry.currency] ?? "$"
+              const daysAway = Math.ceil((new Date(entry.date + "T00:00:00Z").getTime() - Date.now()) / 86_400_000)
               return (
-                <div key={e.id} className="flex items-center gap-3 rounded-lg border border-blue-500/20 px-3 py-2 bg-blue-950/20">
-                  <div className="flex-shrink-0 text-sm text-blue-300 font-medium w-20 text-center">
-                    {daysUntil === 0 ? "Today" : daysUntil === 1 ? "Tomorrow" : `in ${daysUntil}d`}
+                <div key={entry.id} className="rounded-lg border border-orange-500/20 bg-orange-950/10 flex items-center justify-between gap-3 px-4 py-2.5">
+                  <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                    <span className="text-sm font-medium truncate">{entry.bundles.map(b => b.bundleName).join(", ") || "Custom"}</span>
+                    <span className="text-xs text-muted-foreground">{entry.date}</span>
+                    {daysAway === 0  && <Badge variant="outline" className="text-[9px] h-4 py-0 px-1.5 text-emerald-400 border-emerald-500/30">Today</Badge>}
+                    {daysAway === 1  && <Badge variant="outline" className="text-[9px] h-4 py-0 px-1.5 text-amber-400 border-amber-500/30">Tomorrow</Badge>}
+                    {daysAway > 1   && <Badge variant="outline" className="text-[9px] h-4 py-0 px-1.5 text-orange-400 border-orange-500/30">In {daysAway}d</Badge>}
+                    {daysAway < 0   && <Badge variant="outline" className="text-[9px] h-4 py-0 px-1.5 text-muted-foreground border-border">Overdue</Badge>}
+                    {entry.notes && <span className="text-xs italic text-muted-foreground/70 truncate">{entry.notes}</span>}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">{formatDate(e.date)}</p>
-                    <p className="text-xs text-muted-foreground truncate">{e.bundles.map(b => b.bundleName).join(", ")}</p>
-                  </div>
-                  <span className="text-sm font-bold tabular-nums text-blue-300 flex-shrink-0">{sym2}{e.totalCost.toFixed(2)}</span>
+                  <span className="font-bold text-sm flex-shrink-0 tabular-nums">{sym}{fmt(entry.totalCost)}</span>
                 </div>
               )
             })}
           </div>
         </div>
       )}
+
+      {entries.length === 0 && (
+        <p className="text-center text-muted-foreground text-sm py-10">No data yet. Add spending entries to see stats.</p>
+      )}
     </div>
   )
 }
 
-// ─── View Button ──────────────────────────────────────────────────────────────
+// ─── View Toggle ─────────────────────────────────────────────────────────────
 
-function ViewBtn({ active, onClick, icon: Icon, label }: {
-  active: boolean; onClick: () => void; icon: React.ElementType; label: string
-}) {
+function ViewBtn({ active, onClick, icon: Icon, label }: { active: boolean; onClick: () => void; icon: React.ElementType; label: string }) {
   return (
     <button onClick={onClick} title={label} className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition", active ? "border-primary bg-primary/20 text-primary" : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground")}>
       <Icon className="h-4 w-4" />
@@ -773,95 +1073,79 @@ function ViewBtn({ active, onClick, icon: Icon, label }: {
   )
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ─── Main Page ─────────────────────────────────────────────────────────────
 
 export function SpendingTrackerContent() {
-  const [entries, setEntries] = useState<TrackerEntry[]>([])
-  const [viewMode, setViewMode] = useState<ViewMode>("timeline")
+  const [entries, setEntries] = useState<TrackerEntry[]>(() => loadEntries())
+  const [viewMode, setViewMode] = useState<"timeline" | "calendar" | "stats">("timeline")
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [editEntry, setEditEntry] = useState<TrackerEntry | undefined>()
-  const [prefillDate, setPrefillDate] = useState<string | undefined>()
+  const [editingEntry, setEditingEntry] = useState<TrackerEntry | undefined>()
+  const [search, setSearch] = useState("")
 
-  useEffect(() => { setEntries(loadEntries()) }, [])
-
-  function handleSave(entry: TrackerEntry) {
-    setEntries(prev => {
-      const next = prev.some(e => e.id === entry.id)
-        ? prev.map(e => e.id === entry.id ? entry : e)
-        : [entry, ...prev]
-      saveEntries(next)
-      return next
-    })
+  function handleDialogClose(entry?: TrackerEntry) {
+    if (entry) {
+      setEntries(prev => {
+        const idx = prev.findIndex(e => e.id === entry.id)
+        const next = idx !== -1 ? prev.map(e => e.id === entry.id ? entry : e) : [entry, ...prev]
+        saveEntries(next)
+        return next
+      })
+    }
     setDialogOpen(false)
-    setEditEntry(undefined)
-    setPrefillDate(undefined)
+    setEditingEntry(undefined)
   }
 
   function handleDelete(id: string) {
-    if (!confirm("Delete this entry?")) return
     setEntries(prev => { const next = prev.filter(e => e.id !== id); saveEntries(next); return next })
   }
 
-  function openEdit(entry: TrackerEntry) {
-    setEditEntry(entry)
+  function handleEdit(entry: TrackerEntry) {
+    setEditingEntry(entry)
     setDialogOpen(true)
   }
-
-  function openAddWithDate(date: string) {
-    setPrefillDate(date)
-    setEditEntry(undefined)
-    setDialogOpen(true)
-  }
-
-  function openAdd() {
-    setEditEntry(undefined)
-    setPrefillDate(undefined)
-    setDialogOpen(true)
-  }
-
-  const sym = entries.length > 0 ? (CURRENCIES[entries[0].currency] ?? "$") : "$"
-  const totalSpent  = entries.filter(e => e.status === "purchased").reduce((s, e) => s + e.totalCost, 0)
-  const totalPlanned = entries.filter(e => e.status === "planned").reduce((s, e) => s + e.totalCost, 0)
-
-  const initialEntryForDialog: TrackerEntry | undefined = editEntry
-    ?? (prefillDate ? { id: "", date: prefillDate, bundles: [], currency: "USD", totalCost: 0, status: "planned", notes: "" } : undefined)
 
   return (
     <div className="space-y-5">
-      <AddEntryDialog
-        open={dialogOpen}
-        initial={initialEntryForDialog}
-        onSave={handleSave}
-        onClose={() => { setDialogOpen(false); setEditEntry(undefined); setPrefillDate(undefined) }}
-      />
+      <AddEntryDialog open={dialogOpen} onClose={handleDialogClose} initialEntry={editingEntry} />
 
-      {/* Header */}
       <div className="flex flex-wrap items-start gap-3 justify-between">
         <div>
-          <h2 className="text-xl font-bold">Spending Tracker</h2>
-          <p className="text-sm text-muted-foreground flex items-center gap-3 mt-0.5">
-            <span className="text-emerald-400 font-semibold">{sym}{totalSpent.toFixed(2)} spent</span>
-            <span className="text-muted-foreground/50">·</span>
-            <span className="text-blue-400 font-semibold">{sym}{totalPlanned.toFixed(2)} planned</span>
-          </p>
+          <h2 className="text-xl font-bold text-foreground">Spending Tracker</h2>
+          <p className="text-sm text-muted-foreground">Log and analyze your bundle spending history.</p>
         </div>
-        <div className="flex gap-2 items-center flex-wrap">
+        <div className="flex flex-wrap gap-2 items-center">
           <div className="flex gap-1 border border-border rounded-lg p-1">
-            <ViewBtn active={viewMode === "timeline"} onClick={() => setViewMode("timeline")} icon={LayoutList}    label="Timeline" />
-            <ViewBtn active={viewMode === "calendar"} onClick={() => setViewMode("calendar")} icon={CalendarDays}  label="Calendar" />
-            <ViewBtn active={viewMode === "stats"}    onClick={() => setViewMode("stats")}    icon={BarChart3}     label="Stats"    />
+            <ViewBtn active={viewMode === "timeline"} onClick={() => setViewMode("timeline")} icon={List}     label="Timeline" />
+            <ViewBtn active={viewMode === "calendar"} onClick={() => setViewMode("calendar")} icon={Calendar} label="Calendar" />
+            <ViewBtn active={viewMode === "stats"}    onClick={() => setViewMode("stats")}    icon={BarChart2} label="Stats"    />
           </div>
-          <Button onClick={openAdd} size="sm" className="gap-1.5">
+          <Button size="sm" onClick={() => { setEditingEntry(undefined); setDialogOpen(true) }} className="gap-1.5">
             <Plus className="h-4 w-4" /> Add Entry
           </Button>
         </div>
       </div>
 
-      <Separator />
+      {/* Search bar (not shown in Stats since stats uses all entries) */}
+      {viewMode !== "stats" && (
+        <div className="relative max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="Search entries…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="pl-8 h-8 text-sm"
+          />
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      )}
 
-      {viewMode === "timeline" && <TimelineView entries={entries} onEdit={openEdit} onDelete={handleDelete} />}
-      {viewMode === "calendar" && <CalendarView entries={entries} onAdd={openAddWithDate} onEdit={openEdit} onDelete={handleDelete} />}
-      {viewMode === "stats"    && <StatsView entries={entries} />}
+      {viewMode === "timeline" && <TimelineView entries={entries} onDelete={handleDelete} onEdit={handleEdit} search={search} />}
+      {viewMode === "calendar" && <CalendarView entries={entries} onDelete={handleDelete} onEdit={handleEdit} />}
+      {viewMode === "stats"    && <StatsView    entries={entries} />}
     </div>
   )
 }
