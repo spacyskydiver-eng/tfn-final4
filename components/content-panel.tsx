@@ -15,6 +15,7 @@ import {
   Crown,
   Map,
   Boxes,
+  Receipt,
 } from "lucide-react";
 
 import { AccountsContent } from "@/components/accounts-content";
@@ -29,6 +30,7 @@ import { KvkContent } from "@/components/kvk-content";
 import { CommanderContent } from "@/components/commander-content";
 import { TerritoryPlannerContent } from "@/components/territory-planner-content";
 import { BundlesContent } from "@/components/bundles-content";
+import { SpendingTrackerContent } from "@/components/spending-tracker-content";
 
 const tabMeta: Record<string, { label: string; description: string; icon: React.ElementType }> = {
   home: {
@@ -80,6 +82,11 @@ const tabMeta: Record<string, { label: string; description: string; icon: React.
     label: "Bundles",
     description: "Plan and track bundle value with custom icons",
     icon: Boxes,
+  },
+  spending: {
+    label: "Spending Tracker",
+    description: "Log purchases, view monthly stats, charts, and resource totals",
+    icon: Receipt,
   },
   "territory-planner": {
     label: "Territory Planner",
@@ -139,6 +146,8 @@ export function ContentPanel({ activeTab, onTabChange }: ContentPanelProps) {
           <TerritoryPlannerContent />
         ) : activeTab === "bundles" ? (
           <BundlesContent />
+        ) : activeTab === "spending" ? (
+          <SpendingTrackerContent />
         ) : activeTab === "settings" ? (
           <SettingsContent />
         ) : (
