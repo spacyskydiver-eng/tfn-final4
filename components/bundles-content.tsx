@@ -49,6 +49,9 @@ type BundleRow = {
   values: Record<string, number>
   rowType: RowType
   iconMode?: RowIconMode
+  // Per-cell icon overrides: when set on a cell, that cell shows [icon] × [count]
+  // instead of just the raw number. Key is column id.
+  cellIcons?: Record<string, string>
 }
 
 export type Bundle = {
@@ -275,7 +278,7 @@ function migrateBundle(b: Partial<Bundle>): Bundle {
     rollingDays:  b.rollingDays  ?? 30,
     monthlyDay:   b.monthlyDay   ?? 1,
     columns:      (b.columns     ?? []).map(c => ({ showIcon: true, ...c, name: c.name ?? iconForSrc(c.icon ?? "")?.label ?? "Column" })),
-    rows:         (b.rows        ?? []).map(r => ({ iconMode: "icon" as RowIconMode, ...r, label: r.label ?? iconForSrc(r.icon ?? "")?.label ?? "Item" })),
+    rows:         (b.rows        ?? []).map(r => ({ iconMode: "icon" as RowIconMode, cellIcons: {} as Record<string, string>, ...r, label: r.label ?? iconForSrc(r.icon ?? "")?.label ?? "Item" })),
   }
 }
 
@@ -528,7 +531,11 @@ function BundleTable({
   }
   function deleteCol(id: string) {
     const columns = bundle.columns.filter(c => c.id !== id)
-    const rows = bundle.rows.map(r => { const v = { ...r.values }; delete v[id]; return { ...r, values: v } })
+    const rows = bundle.rows.map(r => {
+      const v = { ...r.values }; delete v[id]
+      const ci = { ...(r.cellIcons ?? {}) }; delete ci[id]
+      return { ...r, values: v, cellIcons: ci }
+    })
     onUpdate({ ...bundle, columns, rows })
   }
   function addColumn() {
@@ -549,6 +556,15 @@ function BundleTable({
   function setCell(rowId: string, colId: string, value: number) {
     onUpdate({ ...bundle, rows: bundle.rows.map(r => r.id === rowId ? { ...r, values: { ...r.values, [colId]: value } } : r) })
   }
+  function setCellIcon(rowId: string, colId: string, icon: string) {
+    onUpdate({ ...bundle, rows: bundle.rows.map(r => {
+      if (r.id !== rowId) return r
+      const ci = { ...(r.cellIcons ?? {}) }
+      if (icon) ci[colId] = icon
+      else delete ci[colId]
+      return { ...r, cellIcons: ci }
+    })})
+  }
   function deleteRow(id: string) {
     onUpdate({ ...bundle, rows: bundle.rows.filter(r => r.id !== id) })
   }
@@ -556,7 +572,7 @@ function BundleTable({
     const id = `row_${Date.now()}`
     const values: Record<string, number> = {}
     bundle.columns.forEach(c => (values[c.id] = 0))
-    onUpdate({ ...bundle, rows: [...bundle.rows, { id, icon: "/images/bundle/gem.png", label: "Gem", values, rowType: "number", iconMode: "icon" }] })
+    onUpdate({ ...bundle, rows: [...bundle.rows, { id, icon: "/images/bundle/gem.png", label: "Gem", values, rowType: "number", iconMode: "icon", cellIcons: {} }] })
   }
 
   return (
@@ -754,11 +770,57 @@ function BundleTable({
                       ) : null}
                     </div>
                   </td>
-                  {bundle.columns.map(col => (
-                    <td key={`${row.id}-${col.id}`} className="px-3 py-2.5 text-center text-white/80">
-                      {editMode ? <Input type="number" value={row.values[col.id] ?? 0} onChange={e => setCell(row.id, col.id, Number(e.target.value) || 0)} className="h-8 w-24 mx-auto text-center bg-white/10 border-white/20 text-white" /> : <span>{fmt(row.values[col.id] ?? 0)}</span>}
+                  {bundle.columns.map(col => {
+                    const cellIcon = row.cellIcons?.[col.id] ?? ""
+                    return (
+                    <td key={`${row.id}-${col.id}`} className="px-2 py-2 text-center text-white/80">
+                      {editMode ? (
+                        <div className="flex flex-col items-center gap-1.5 min-w-[72px]">
+                          {/* Per-cell icon picker */}
+                          <div className="relative">
+                            <button
+                              onClick={() => setPicker({ current: cellIcon, cb: (src) => setCellIcon(row.id, col.id, src) })}
+                              title="Set icon for this cell"
+                              className={cn(
+                                "rounded-md transition",
+                                cellIcon
+                                  ? "p-0.5 hover:ring-2 hover:ring-primary/60 cursor-pointer"
+                                  : "h-8 w-8 border border-dashed border-white/20 flex items-center justify-center text-[9px] text-white/25 hover:border-primary/40 hover:text-primary/40"
+                              )}
+                            >
+                              {cellIcon
+                                ? <Image src={cellIcon} alt="" width={32} height={32} className="h-8 w-8 object-contain" />
+                                : "+icon"
+                              }
+                            </button>
+                            {cellIcon && (
+                              <button
+                                onClick={() => setCellIcon(row.id, col.id, "")}
+                                title="Remove cell icon"
+                                className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-red-500/80 hover:bg-red-500 text-white flex items-center justify-center"
+                              >
+                                <X className="h-2.5 w-2.5" />
+                              </button>
+                            )}
+                          </div>
+                          <Input
+                            type="number"
+                            value={row.values[col.id] ?? 0}
+                            onChange={e => setCell(row.id, col.id, Number(e.target.value) || 0)}
+                            className="h-7 w-20 text-center bg-white/10 border-white/20 text-white text-xs"
+                          />
+                        </div>
+                      ) : cellIcon ? (
+                        <div className="flex flex-col items-center gap-0.5">
+                          <Image src={cellIcon} alt="" width={36} height={36} className="h-9 w-9 object-contain" />
+                          <span className="text-xs font-bold tabular-nums">×{fmt(row.values[col.id] ?? 0)}</span>
+                        </div>
+                      ) : (
+                        <span>{fmt(row.values[col.id] ?? 0)}</span>
+                      )}
                     </td>
-                  ))}
+                    )
+                  })}
                   <td className="px-4 py-2.5 text-right font-bold italic text-white whitespace-nowrap">{rowTotalFmt(row, bundle.columns)}</td>
                   {editMode && (
                     <td className="pr-2 text-center">
@@ -1428,7 +1490,7 @@ function BundleShopCard({
 
   const items = col
     ? bundle.rows
-        .map(row => ({ label: row.label, icon: row.icon, rowType: row.rowType, iconMode: row.iconMode ?? "icon", total: row.values[col.id] ?? 0 }))
+        .map(row => ({ label: row.label, icon: row.cellIcons?.[col.id] || row.icon, rowType: row.rowType, iconMode: row.iconMode ?? "icon", total: row.values[col.id] ?? 0 }))
         .filter(i => i.total > 0)
     : []
 
@@ -1875,7 +1937,7 @@ function GameView({
     const col = bundle.columns[colIdx]
     if (!col) return
     const items = bundle.rows
-      .map(row => ({ label: row.label, icon: row.icon, rowType: row.rowType, total: row.values[col.id] ?? 0 }))
+      .map(row => ({ label: row.label, icon: row.cellIcons?.[col.id] || row.icon, rowType: row.rowType, total: row.values[col.id] ?? 0 }))
       .filter(i => i.total > 0)
     setBasket(prev => [...prev, {
       id: `${bundle.id}-c${colIdx}-${Date.now()}`,

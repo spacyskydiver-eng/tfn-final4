@@ -65,7 +65,7 @@ function buildEntry(bundle: Bundle, col: TierColumn, qty: number): BundlePlanEnt
   const items = bundle.rows
     .map(row => ({
       label:       row.label,
-      icon:        row.icon,
+      icon:        (row as { cellIcons?: Record<string, string> }).cellIcons?.[col.id] || row.icon,
       iconMode:    (row as { iconMode?: RowIconMode }).iconMode ?? "icon",
       rowType:     row.rowType as RowType,
       perPurchase: row.values[col.id] ?? 0,
