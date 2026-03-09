@@ -24,6 +24,7 @@ import {
   ATTRIBUTE_COLORS, BUNDLE_ICON_OPTIONS,
   loadForgeState, saveForgeState,
 } from '@/lib/game/equipment-forge-data'
+import { EQUIPMENT_FORGE_SEED_ITEMS } from '@/lib/game/equipment-forge-seed'
 
 /* ================================================================== */
 /*  HELPERS                                                            */
@@ -659,7 +660,13 @@ function SetManagerModal({
 /* ================================================================== */
 
 export function EquipmentForge() {
-  const [state, setState] = useState<ForgeState>(() => loadForgeState())
+  const [state, setState] = useState<ForgeState>(() => {
+    const saved = loadForgeState()
+    if (saved.items.length === 0) {
+      return { items: EQUIPMENT_FORGE_SEED_ITEMS, sets: saved.sets }
+    }
+    return saved
+  })
   const [activeFilter, setActiveFilter] = useState<ForgeFilter>('all')
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [editingItem, setEditingItem] = useState<ForgeItem | null>(null)

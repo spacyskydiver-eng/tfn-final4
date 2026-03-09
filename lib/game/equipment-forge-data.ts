@@ -47,6 +47,11 @@ export const FORGE_MATERIAL_DEFS: ForgeMaterialDef[] = [
   { id: 'conversion_stone',  name: 'Conv. Stone',        iconPath: '/images/bundle/conversion_stone.png',       rarityColor: '#f97316' },
   { id: 'transmutation_stone', name: 'Trans. Stone',     iconPath: '/images/bundle/transmutation_stone.png',    rarityColor: '#e879f9' },
   { id: 'gem',               name: 'Gem',                iconPath: '/images/bundle/gem.png',                    rarityColor: '#818cf8' },
+  // Forge craft materials
+  { id: 'leather',           name: 'Leather',            iconPath: '/images/equipment/mat_icons/leather_legendary.webp',      rarityColor: '#a16207' },
+  { id: 'iron',              name: 'Iron',               iconPath: '/images/equipment/mat_icons/ore_legendary.webp',          rarityColor: '#71717a' },
+  { id: 'ebony',             name: 'Ebony',              iconPath: '/images/equipment/mat_icons/ebony_legendary.webp',        rarityColor: '#1d4ed8' },
+  { id: 'bone',              name: 'Bone',               iconPath: '/images/equipment/mat_icons/bone_legendary.webp',         rarityColor: '#84cc16' },
 ]
 
 export interface ForgeMaterial {
@@ -202,6 +207,12 @@ export const BUNDLE_ICON_OPTIONS = [
   { path: '/images/bundle/brand_new_star.png',      label: 'Brand New Star'},
   { path: '/images/bundle/training_speed.png',      label: 'Training Speed'},
   { path: '/images/bundle/universal_speed.png',     label: 'Univ. Speed'   },
+  // Mat icons
+  { path: '/images/equipment/mat_icons/leather_legendary.webp', label: 'Leather'  },
+  { path: '/images/equipment/mat_icons/ore_legendary.webp',     label: 'Iron'     },
+  { path: '/images/equipment/mat_icons/ebony_legendary.webp',   label: 'Ebony'    },
+  { path: '/images/equipment/mat_icons/bone_legendary.webp',    label: 'Bone'     },
+  { path: '/images/equipment/mat_icons/chest_legendary.webp',   label: 'Mat Chest'},
 ]
 
 /* ------------------------------------------------------------------ */
