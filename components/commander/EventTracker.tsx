@@ -110,8 +110,17 @@ export function EventTracker({
 
   /* ---------- Wheel Spins State ---------- */
   const WOF_SPINS_KEY = `wof_spins_${profile.id}`
-  const [wofSpinsByOcc, setWofSpinsByOcc] = useState<Record<string, number>>({})
+  // Lazy-initialise from localStorage so the save effect never sees an empty
+  // initial state and accidentally overwrites persisted data on mount.
+  const [wofSpinsByOcc, setWofSpinsByOcc] = useState<Record<string, number>>(() => {
+    if (typeof window === 'undefined') return {}
+    try {
+      const raw = localStorage.getItem(`wof_spins_${profile.id}`)
+      return raw ? JSON.parse(raw) : {}
+    } catch { return {} }
+  })
 
+  // Re-load when the active profile changes (different WOF_SPINS_KEY)
   useEffect(() => {
     try {
       const raw = localStorage.getItem(WOF_SPINS_KEY)

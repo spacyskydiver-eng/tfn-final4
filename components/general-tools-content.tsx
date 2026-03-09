@@ -58,7 +58,6 @@ type ToolId = (typeof TOOLS)[number]['id']
 /*  ACTION POINT DATA                                                  */
 /* ------------------------------------------------------------------ */
 const AP_POTIONS = [
-  { label: '10 AP', value: 10 },
   { label: '50 AP', value: 50 },
   { label: '100 AP', value: 100 },
   { label: '500 AP', value: 500 },

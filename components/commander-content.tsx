@@ -190,9 +190,9 @@ export function CommanderContent() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {Array.from({ length: 18 }, (_, i) => i).map((n) => (
+                        {Array.from({ length: 21 }, (_, i) => i).map((n) => (
                           <SelectItem key={n} value={String(n)}>
-                            VIP {n} ({VIP_HEADS_PER_DAY[n] ?? 0}/day)
+                            {n === 20 ? 'SVIP' : `VIP ${n}`} ({VIP_HEADS_PER_DAY[n] ?? 0}/day)
                           </SelectItem>
                         ))}
                       </SelectContent>

@@ -42,58 +42,58 @@ export interface UpgradeStats {
 const TROOP_STATS: Record<Tier, TroopStats> = {
   1: {
     tier: 1,
-    power: 2,
-    baseTime: 10,
+    power: 1,
+    baseTime: 15,
     food: 50,
     wood: 50,
     stone: 0,
     gold: 0,
-    mgePoints: 1,
+    mgePoints: 5,
     kvkPoints: 1,
   },
   2: {
     tier: 2,
-    power: 8,
-    baseTime: 25,
-    food: 150,
-    wood: 150,
-    stone: 50,
+    power: 2,
+    baseTime: 30,
+    food: 100,
+    wood: 100,
+    stone: 0,
     gold: 0,
-    mgePoints: 4,
+    mgePoints: 10,
     kvkPoints: 4,
   },
   3: {
     tier: 3,
-    power: 24,
+    power: 3,
     baseTime: 60,
-    food: 450,
-    wood: 450,
-    stone: 200,
-    gold: 50,
-    mgePoints: 12,
-    kvkPoints: 12,
+    food: 150,
+    wood: 150,
+    stone: 0,
+    gold: 10,
+    mgePoints: 20,
+    kvkPoints: 4,
   },
   4: {
     tier: 4,
-    power: 60,
-    baseTime: 120,
-    food: 1000,
-    wood: 1000,
-    stone: 600,
-    gold: 200,
-    mgePoints: 30,
-    kvkPoints: 30,
+    power: 4,
+    baseTime: 80,
+    food: 300,
+    wood: 300,
+    stone: 0,
+    gold: 20,
+    mgePoints: 40,
+    kvkPoints: 8,
   },
   5: {
     tier: 5,
-    power: 100,
-    baseTime: 180,
-    food: 1500,
-    wood: 1500,
-    stone: 1000,
-    gold: 500,
-    mgePoints: 50,
-    kvkPoints: 50,
+    power: 10,
+    baseTime: 120,
+    food: 800,
+    wood: 800,
+    stone: 0,
+    gold: 400,
+    mgePoints: 100,
+    kvkPoints: 20,
   },
 }
 
@@ -102,35 +102,131 @@ const TROOP_STATS: Record<Tier, TroopStats> = {
 /*  e.g. T4->T5 means upgrading a T4 troop to T5                     */
 /* ------------------------------------------------------------------ */
 
-function makeUpgrade(from: Tier, to: Tier): UpgradeStats {
-  const fromStats = TROOP_STATS[from]
-  const toStats = TROOP_STATS[to]
-  return {
-    fromTier: from,
-    toTier: to,
-    powerGain: toStats.power - fromStats.power,
-    baseTime: Math.round(toStats.baseTime * 0.75),
-    food: Math.round((toStats.food - fromStats.food) * 0.8),
-    wood: Math.round((toStats.wood - fromStats.wood) * 0.8),
-    stone: Math.round((toStats.stone - fromStats.stone) * 0.8),
-    gold: Math.round((toStats.gold - fromStats.gold) * 0.8),
-    mgePoints: Math.round(toStats.mgePoints * 0.7),
-    kvkPoints: Math.round(toStats.kvkPoints * 0.7),
-  }
+/* ------------------------------------------------------------------ */
+/*  TYPE-SPECIFIC RESOURCE COSTS (per troop)                           */
+/* ------------------------------------------------------------------ */
+
+export interface ResourceCost {
+  food: number
+  wood: number
+  stone: number
+  gold: number
 }
+
+const TRAINING_COSTS: Record<Tier, Record<TroopType, ResourceCost>> = {
+  5: {
+    infantry: { food: 800, wood: 800, stone: 0,   gold: 400 },
+    archer:   { food: 0,   wood: 800, stone: 600, gold: 400 },
+    cavalry:  { food: 800, wood: 0,   stone: 600, gold: 400 },
+    siege:    { food: 500, wood: 500, stone: 400, gold: 400 },
+  },
+  4: {
+    infantry: { food: 300, wood: 300, stone: 0,   gold: 20 },
+    archer:   { food: 0,   wood: 300, stone: 225, gold: 20 },
+    cavalry:  { food: 300, wood: 0,   stone: 225, gold: 20 },
+    siege:    { food: 200, wood: 200, stone: 150, gold: 20 },
+  },
+  3: {
+    infantry: { food: 150, wood: 150, stone: 0,   gold: 10 },
+    archer:   { food: 0,   wood: 150, stone: 112, gold: 10 },
+    cavalry:  { food: 150, wood: 0,   stone: 112, gold: 10 },
+    siege:    { food: 100, wood: 100, stone: 75,  gold: 10 },
+  },
+  2: {
+    infantry: { food: 100, wood: 100, stone: 0,  gold: 0 },
+    archer:   { food: 0,   wood: 100, stone: 75, gold: 0 },
+    cavalry:  { food: 100, wood: 0,   stone: 75, gold: 0 },
+    siege:    { food: 65,  wood: 65,  stone: 50, gold: 0 },
+  },
+  1: {
+    infantry: { food: 50, wood: 50, stone: 0, gold: 0 },
+    archer:   { food: 40, wood: 60, stone: 0, gold: 0 },
+    cavalry:  { food: 60, wood: 40, stone: 0, gold: 0 },
+    siege:    { food: 60, wood: 60, stone: 0, gold: 0 },
+  },
+}
+
+const UPGRADE_COSTS: Record<string, Record<TroopType, ResourceCost>> = {
+  '4->5': {
+    infantry: { food: 500, wood: 500, stone: 0,   gold: 380 },
+    archer:   { food: 0,   wood: 500, stone: 375, gold: 380 },
+    cavalry:  { food: 500, wood: 0,   stone: 375, gold: 380 },
+    siege:    { food: 300, wood: 300, stone: 250, gold: 380 },
+  },
+  '3->5': {
+    infantry: { food: 650, wood: 650, stone: 0,   gold: 390 },
+    archer:   { food: 0,   wood: 650, stone: 488, gold: 390 },
+    cavalry:  { food: 650, wood: 0,   stone: 488, gold: 390 },
+    siege:    { food: 400, wood: 400, stone: 325, gold: 390 },
+  },
+  '2->5': {
+    infantry: { food: 700, wood: 700, stone: 0,   gold: 400 },
+    archer:   { food: 0,   wood: 700, stone: 525, gold: 400 },
+    cavalry:  { food: 700, wood: 0,   stone: 525, gold: 400 },
+    siege:    { food: 435, wood: 435, stone: 350, gold: 400 },
+  },
+  '1->5': {
+    infantry: { food: 750, wood: 750, stone: 0,   gold: 400 },
+    archer:   { food: 0,   wood: 740, stone: 600, gold: 400 },
+    cavalry:  { food: 740, wood: 0,   stone: 600, gold: 400 },
+    siege:    { food: 440, wood: 440, stone: 400, gold: 400 },
+  },
+  '3->4': {
+    infantry: { food: 150, wood: 150, stone: 0,   gold: 10 },
+    archer:   { food: 0,   wood: 150, stone: 113, gold: 10 },
+    cavalry:  { food: 150, wood: 0,   stone: 113, gold: 10 },
+    siege:    { food: 100, wood: 100, stone: 75,  gold: 10 },
+  },
+  '2->4': {
+    infantry: { food: 200, wood: 200, stone: 0,   gold: 20 },
+    archer:   { food: 0,   wood: 200, stone: 150, gold: 20 },
+    cavalry:  { food: 200, wood: 0,   stone: 150, gold: 20 },
+    siege:    { food: 135, wood: 135, stone: 100, gold: 20 },
+  },
+  '1->4': {
+    infantry: { food: 250, wood: 250, stone: 0,   gold: 20 },
+    archer:   { food: 0,   wood: 240, stone: 225, gold: 20 },
+    cavalry:  { food: 240, wood: 0,   stone: 225, gold: 20 },
+    siege:    { food: 140, wood: 140, stone: 150, gold: 20 },
+  },
+  '2->3': {
+    infantry: { food: 50, wood: 50, stone: 0,  gold: 10 },
+    archer:   { food: 0,  wood: 50, stone: 37, gold: 10 },
+    cavalry:  { food: 50, wood: 0,  stone: 37, gold: 10 },
+    siege:    { food: 35, wood: 35, stone: 25, gold: 10 },
+  },
+  '1->3': {
+    infantry: { food: 100, wood: 100, stone: 0,   gold: 10 },
+    archer:   { food: 0,   wood: 90,  stone: 112, gold: 10 },
+    cavalry:  { food: 90,  wood: 0,   stone: 112, gold: 10 },
+    siege:    { food: 40,  wood: 40,  stone: 75,  gold: 10 },
+  },
+  '1->2': {
+    infantry: { food: 50, wood: 50, stone: 0,  gold: 0 },
+    archer:   { food: 0,  wood: 40, stone: 75, gold: 0 },
+    cavalry:  { food: 40, wood: 0,  stone: 75, gold: 0 },
+    siege:    { food: 5,  wood: 5,  stone: 50, gold: 0 },
+  },
+}
+
+/* ------------------------------------------------------------------ */
+/*  UPGRADE PATHS (per-troop mge/kvk/power/time, infantry resource     */
+/*  defaults kept for backward compat — use UPGRADE_COSTS for type-    */
+/*  specific resource calculations)                                    */
+/* ------------------------------------------------------------------ */
 
 /* Pre-compute all upgrade paths */
 const UPGRADE_PATHS: Record<string, UpgradeStats> = {
-  '4->5': makeUpgrade(4, 5),
-  '3->5': { ...makeUpgrade(3, 5), baseTime: 200, mgePoints: 40, kvkPoints: 40 },
-  '2->5': { ...makeUpgrade(2, 5), baseTime: 220, mgePoints: 45, kvkPoints: 45 },
-  '1->5': { ...makeUpgrade(1, 5), baseTime: 240, mgePoints: 48, kvkPoints: 48 },
-  '3->4': makeUpgrade(3, 4),
-  '2->4': { ...makeUpgrade(2, 4), baseTime: 140, mgePoints: 25, kvkPoints: 25 },
-  '1->4': { ...makeUpgrade(1, 4), baseTime: 160, mgePoints: 28, kvkPoints: 28 },
-  '2->3': makeUpgrade(2, 3),
-  '1->3': { ...makeUpgrade(1, 3), baseTime: 80, mgePoints: 10, kvkPoints: 10 },
-  '1->2': makeUpgrade(1, 2),
+  '4->5': { fromTier: 4, toTier: 5, powerGain: 6, baseTime: 40,  food: 500, wood: 500, stone: 0, gold: 380, mgePoints: 60, kvkPoints: 12 },
+  '3->5': { fromTier: 3, toTier: 5, powerGain: 7, baseTime: 60,  food: 650, wood: 650, stone: 0, gold: 390, mgePoints: 80, kvkPoints: 16 },
+  '2->5': { fromTier: 2, toTier: 5, powerGain: 8, baseTime: 80,  food: 700, wood: 700, stone: 0, gold: 400, mgePoints: 90, kvkPoints: 18 },
+  '1->5': { fromTier: 1, toTier: 5, powerGain: 9, baseTime: 115, food: 750, wood: 750, stone: 0, gold: 400, mgePoints: 95, kvkPoints: 19 },
+  '3->4': { fromTier: 3, toTier: 4, powerGain: 1, baseTime: 20,  food: 150, wood: 150, stone: 0, gold: 10,  mgePoints: 20, kvkPoints: 4  },
+  '2->4': { fromTier: 2, toTier: 4, powerGain: 2, baseTime: 50,  food: 200, wood: 200, stone: 0, gold: 20,  mgePoints: 30, kvkPoints: 6  },
+  '1->4': { fromTier: 1, toTier: 4, powerGain: 3, baseTime: 65,  food: 250, wood: 250, stone: 0, gold: 20,  mgePoints: 35, kvkPoints: 7  },
+  '2->3': { fromTier: 2, toTier: 3, powerGain: 1, baseTime: 30,  food: 50,  wood: 50,  stone: 0, gold: 10,  mgePoints: 10, kvkPoints: 2  },
+  '1->3': { fromTier: 1, toTier: 3, powerGain: 2, baseTime: 45,  food: 100, wood: 100, stone: 0, gold: 10,  mgePoints: 5,  kvkPoints: 3  },
+  '1->2': { fromTier: 1, toTier: 2, powerGain: 1, baseTime: 15,  food: 50,  wood: 50,  stone: 0, gold: 0,   mgePoints: 5,  kvkPoints: 3  },
 }
 
 export function getTroopStats(tier: Tier): TroopStats {
@@ -177,17 +273,19 @@ export interface TrainingResult {
 export function calcTraining(
   tier: Tier,
   count: number,
-  speedBonus: number
+  speedBonus: number,
+  troopType: TroopType = 'infantry'
 ): TrainingResult {
   const stats = TROOP_STATS[tier]
+  const costs = TRAINING_COSTS[tier][troopType]
   const speedMult = 1 + speedBonus / 100
   return {
     troops: count,
     time: Math.round((stats.baseTime * count) / speedMult),
-    food: stats.food * count,
-    wood: stats.wood * count,
-    stone: stats.stone * count,
-    gold: stats.gold * count,
+    food: costs.food * count,
+    wood: costs.wood * count,
+    stone: costs.stone * count,
+    gold: costs.gold * count,
     power: stats.power * count,
     mgePoints: stats.mgePoints * count,
     kvkPoints: stats.kvkPoints * count,
@@ -199,18 +297,21 @@ export function calcUpgrade(
   fromTier: Tier,
   toTier: Tier,
   count: number,
-  speedBonus: number
+  speedBonus: number,
+  troopType: TroopType = 'infantry'
 ): TrainingResult | null {
   const up = getUpgradeStats(fromTier, toTier)
   if (!up) return null
+  const costs = UPGRADE_COSTS[`${fromTier}->${toTier}`]?.[troopType]
+    ?? { food: up.food, wood: up.wood, stone: up.stone, gold: up.gold }
   const speedMult = 1 + speedBonus / 100
   return {
     troops: count,
     time: Math.round((up.baseTime * count) / speedMult),
-    food: up.food * count,
-    wood: up.wood * count,
-    stone: up.stone * count,
-    gold: up.gold * count,
+    food: costs.food * count,
+    wood: costs.wood * count,
+    stone: costs.stone * count,
+    gold: costs.gold * count,
     power: up.powerGain * count,
     mgePoints: up.mgePoints * count,
     kvkPoints: up.kvkPoints * count,
@@ -223,32 +324,38 @@ export function calcFromSpeedups(
   fromTier: Tier | null,
   speedBonus: number,
   speedupSeconds: number,
-  resources: { food: number; wood: number; stone: number; gold: number }
+  resources: { food: number; wood: number; stone: number; gold: number },
+  troopType: TroopType = 'infantry'
 ): TrainingResult {
-  const stats = fromTier
+  const baseStats = fromTier
     ? getUpgradeStats(fromTier, tier)
     : TROOP_STATS[tier]
-  if (!stats) return { troops: 0, time: 0, food: 0, wood: 0, stone: 0, gold: 0, power: 0, mgePoints: 0, kvkPoints: 0 }
+  if (!baseStats) return { troops: 0, time: 0, food: 0, wood: 0, stone: 0, gold: 0, power: 0, mgePoints: 0, kvkPoints: 0 }
+
+  const typeCosts = fromTier
+    ? (UPGRADE_COSTS[`${fromTier}->${tier}`]?.[troopType]
+        ?? { food: baseStats.food, wood: baseStats.wood, stone: baseStats.stone, gold: baseStats.gold })
+    : TRAINING_COSTS[tier][troopType]
 
   const speedMult = 1 + speedBonus / 100
-  const timePerTroop = (stats.baseTime) / speedMult
+  const timePerTroop = baseStats.baseTime / speedMult
 
   // Max from time
   const maxFromTime = timePerTroop > 0 ? Math.floor(speedupSeconds / timePerTroop) : Infinity
 
   // Max from each resource
   const limits: number[] = [maxFromTime]
-  if (stats.food > 0) limits.push(Math.floor(resources.food / stats.food))
-  if (stats.wood > 0) limits.push(Math.floor(resources.wood / stats.wood))
-  if (stats.stone > 0) limits.push(Math.floor(resources.stone / stats.stone))
-  if (stats.gold > 0) limits.push(Math.floor(resources.gold / stats.gold))
+  if (typeCosts.food > 0) limits.push(Math.floor(resources.food / typeCosts.food))
+  if (typeCosts.wood > 0) limits.push(Math.floor(resources.wood / typeCosts.wood))
+  if (typeCosts.stone > 0) limits.push(Math.floor(resources.stone / typeCosts.stone))
+  if (typeCosts.gold > 0) limits.push(Math.floor(resources.gold / typeCosts.gold))
 
   const count = Math.max(0, Math.min(...limits))
 
   if (fromTier) {
-    return calcUpgrade(fromTier, tier, count, speedBonus) ?? { troops: 0, time: 0, food: 0, wood: 0, stone: 0, gold: 0, power: 0, mgePoints: 0, kvkPoints: 0 }
+    return calcUpgrade(fromTier, tier, count, speedBonus, troopType) ?? { troops: 0, time: 0, food: 0, wood: 0, stone: 0, gold: 0, power: 0, mgePoints: 0, kvkPoints: 0 }
   }
-  return calcTraining(tier, count, speedBonus)
+  return calcTraining(tier, count, speedBonus, troopType)
 }
 
 /** Calculate how many troops needed for target MGE points */
@@ -256,7 +363,8 @@ export function calcFromMgePoints(
   tier: Tier,
   fromTier: Tier | null,
   speedBonus: number,
-  targetPoints: number
+  targetPoints: number,
+  troopType: TroopType = 'infantry'
 ): TrainingResult {
   const stats = fromTier
     ? getUpgradeStats(fromTier, tier)
@@ -266,9 +374,9 @@ export function calcFromMgePoints(
   const count = Math.ceil(targetPoints / stats.mgePoints)
 
   if (fromTier) {
-    return calcUpgrade(fromTier, tier, count, speedBonus) ?? { troops: 0, time: 0, food: 0, wood: 0, stone: 0, gold: 0, power: 0, mgePoints: 0, kvkPoints: 0 }
+    return calcUpgrade(fromTier, tier, count, speedBonus, troopType) ?? { troops: 0, time: 0, food: 0, wood: 0, stone: 0, gold: 0, power: 0, mgePoints: 0, kvkPoints: 0 }
   }
-  return calcTraining(tier, count, speedBonus)
+  return calcTraining(tier, count, speedBonus, troopType)
 }
 
 /* ------------------------------------------------------------------ */

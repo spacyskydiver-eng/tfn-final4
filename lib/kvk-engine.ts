@@ -727,7 +727,8 @@ export function calcHeadsNeeded(
 
 export const VIP_HEADS_PER_DAY: Record<number, number> = {
   0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0,
-  10: 1, 11: 1, 12: 2, 13: 2, 14: 3, 15: 4, 16: 4, 17: 5,
+  10: 1, 11: 1, 12: 2, 13: 2, 14: 3,
+  15: 3, 16: 3, 17: 3, 18: 3, 19: 3, 20: 3, // 20 = SVIP
 }
 
 /* --- Wheel of Fortune --- */

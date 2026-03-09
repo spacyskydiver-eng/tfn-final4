@@ -24,6 +24,7 @@ export interface StagePoints {
   gathering: number
   power: number
   elimination: number
+  finalSprint: number
 }
 
 export interface EventStats {
@@ -41,6 +42,7 @@ const STAGE_CONFIG = [
   { id: 'gathering', label: 'Resource Gathering', icon: Pickaxe, color: 'hsl(145, 70%, 50%)' },
   { id: 'power', label: 'Power Gain', icon: TrendingUp, color: 'hsl(35, 90%, 55%)' },
   { id: 'elimination', label: 'Enemy Elimination', icon: Crosshair, color: 'hsl(280, 65%, 60%)' },
+  { id: 'finalSprint', label: 'Final Sprint', icon: Zap, color: 'hsl(55, 90%, 55%)' },
 ] as const
 
 const chartConfig = {
@@ -49,6 +51,7 @@ const chartConfig = {
   gathering: { label: 'Resource Gathering', color: 'hsl(145, 70%, 50%)' },
   power: { label: 'Power Gain', color: 'hsl(35, 90%, 55%)' },
   elimination: { label: 'Enemy Elimination', color: 'hsl(280, 65%, 60%)' },
+  finalSprint: { label: 'Final Sprint', color: 'hsl(55, 90%, 55%)' },
 }
 
 interface EventStatsPanelProps {
