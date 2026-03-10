@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 import { prisma } from '@/lib/prisma'
 
-async function getSessionUser(req: NextRequest) {
-  const base = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-  const res = await fetch(`${base}/api/auth/session`, {
-    headers: { cookie: req.headers.get('cookie') ?? '' },
-  })
-  if (!res.ok) return null
-  const data = await res.json()
-  return data?.user ?? null
+async function getSessionUser(_req: NextRequest) {
+  const cookieStore = await cookies()
+  const session = cookieStore.get('rok_session')
+  if (!session) return null
+  try {
+    return JSON.parse(session.value)
+  } catch {
+    return null
+  }
 }
 
 // ─── DELETE /api/tokens/[id] ──────────────────────────────────────────────────
