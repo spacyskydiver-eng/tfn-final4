@@ -1,11 +1,11 @@
 'use client'
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react'
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import {
   Plus, Pencil, Trash2, X, ChevronDown, ChevronUp,
   Save, Check, Sword, Layers, Package, AlertCircle,
-  Search, ArrowUp, ArrowDown, Minus, RotateCcw,
+  Search, ArrowUp, ArrowDown, Minus, RotateCcw, Camera, Download,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -101,6 +101,23 @@ const RARITY_BG: Record<string, string> = {
   Normal: 'bg-zinc-800/60', Advanced: 'bg-green-900/30',
   Elite: 'bg-blue-900/30', Epic: 'bg-purple-900/30', Legendary: 'bg-amber-900/30',
 }
+
+// Approximate refine costs per rarity — verify exact values in-game
+const REFINE_COSTS: Record<string, { stones: number; gold: number }> = {
+  common:    { stones: 1, gold: 500_000 },
+  uncommon:  { stones: 2, gold: 1_000_000 },
+  rare:      { stones: 3, gold: 2_000_000 },
+  epic:      { stones: 4, gold: 4_000_000 },
+  legendary: { stones: 5, gold: 5_000_000 },
+}
+// Approximate awaken costs per tier (legendary items) — verify exact values in-game
+const AWAKEN_TIER_COSTS = [
+  { legendary_mats: 30,  gold: 5_000_000 },   // Tier I
+  { legendary_mats: 70,  gold: 10_000_000 },  // Tier II
+  { legendary_mats: 120, gold: 20_000_000 },  // Tier III
+  { legendary_mats: 200, gold: 30_000_000 },  // Tier IV
+  { legendary_mats: 300, gold: 50_000_000 },  // Tier V
+]
 
 const TROOP_COLORS: Record<string, string> = {
   infantry: 'text-red-400', cavalry: 'text-orange-400',
@@ -1271,6 +1288,91 @@ function AwakenModal({
 }
 
 /* ================================================================== */
+/*  CALCULATOR: INVENTORY PANEL                                        */
+/* ================================================================== */
+
+function InventoryPanel({
+  loadout, inventory, setInventory,
+}: {
+  loadout: Loadout
+  inventory: Record<string, number>
+  setInventory: React.Dispatch<React.SetStateAction<Record<string, number>>>
+}) {
+  const needed = useMemo(() => calcLoadoutMaterials(loadout), [loadout])
+  const have = (k: string) => inventory[k] ?? 0
+  const matList = MATS.filter(m => needed[m] > 0)
+  const allOk = matList.every(m => have(m) >= needed[m]) && (needed.gold === 0 || have('gold') >= needed.gold)
+
+  if (matList.length === 0 && needed.gold === 0) {
+    return <p className="text-xs text-muted-foreground text-center py-6">Equip items to see required materials</p>
+  }
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">My Inventory vs Needed</p>
+        <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded', allOk ? 'bg-green-900/50 text-green-300' : 'bg-red-900/40 text-red-300')}>
+          {allOk ? '✓ Can Craft' : '✗ Missing'}
+        </span>
+      </div>
+      <div className="space-y-2">
+        {matList.map(mat => {
+          const h = have(mat)
+          const n = needed[mat]
+          const ok = h >= n
+          const pct = n > 0 ? Math.min(100, (h / n) * 100) : 100
+          return (
+            <div key={mat} className="rounded-lg bg-secondary/20 p-2.5">
+              <div className="flex items-center gap-2 mb-1">
+                <Image src={MAT_ICONS[mat]} alt={mat} width={20} height={20} className="object-contain flex-shrink-0" />
+                <span className="text-xs text-muted-foreground capitalize flex-1">{mat}</span>
+                <span className={cn('text-xs font-bold', ok ? 'text-green-400' : 'text-red-400')}>
+                  {h.toLocaleString()} / {n.toLocaleString()}
+                </span>
+              </div>
+              <div className="h-1.5 rounded-full bg-secondary/60 overflow-hidden mb-1.5">
+                <div className={cn('h-full rounded-full transition-all', ok ? 'bg-green-500' : 'bg-red-500')}
+                  style={{ width: `${pct}%` }} />
+              </div>
+              <input type="number" min={0} value={h === 0 ? '' : h} placeholder="Enter amount owned"
+                onChange={e => setInventory(prev => ({ ...prev, [mat]: Math.max(0, Number(e.target.value) || 0) }))}
+                className="w-full h-7 text-xs bg-background border border-border rounded px-2 text-center" />
+              {!ok && <p className="text-[10px] text-red-400 mt-0.5 text-center">Need {(n - h).toLocaleString()} more</p>}
+            </div>
+          )
+        })}
+        {needed.gold > 0 && (() => {
+          const h = have('gold')
+          const n = needed.gold
+          const ok = h >= n
+          const pct = n > 0 ? Math.min(100, (h / n) * 100) : 100
+          return (
+            <div className="rounded-lg bg-secondary/20 p-2.5">
+              <div className="flex items-center gap-2 mb-1">
+                <Image src="/images/equipment/mat_icons/gold_icon.webp" alt="Gold" width={20} height={20} className="object-contain flex-shrink-0" />
+                <span className="text-xs text-muted-foreground flex-1">Gold</span>
+                <span className={cn('text-xs font-bold', ok ? 'text-green-400' : 'text-red-400')}>
+                  {h >= 1_000_000 ? `${(h / 1_000_000).toFixed(1)}M` : h.toLocaleString()}
+                  {' / '}
+                  {n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n.toLocaleString()}
+                </span>
+              </div>
+              <div className="h-1.5 rounded-full bg-secondary/60 overflow-hidden mb-1.5">
+                <div className={cn('h-full rounded-full transition-all', ok ? 'bg-green-500' : 'bg-red-500')}
+                  style={{ width: `${pct}%` }} />
+              </div>
+              <input type="number" min={0} value={h === 0 ? '' : h} placeholder="Enter gold owned"
+                onChange={e => setInventory(prev => ({ ...prev, gold: Math.max(0, Number(e.target.value) || 0) }))}
+                className="w-full h-7 text-xs bg-background border border-border rounded px-2 text-center" />
+              {!ok && <p className="text-[10px] text-red-400 mt-0.5 text-center">Need {((n - h) / 1_000_000).toFixed(1)}M more gold</p>}
+            </div>
+          )
+        })()}
+      </div>
+    </div>
+  )
+}
+
+/* ================================================================== */
 /*  CALCULATOR: CALCULATOR TAB                                         */
 /* ================================================================== */
 
@@ -1287,7 +1389,8 @@ function CalculatorTab({
   onSlotDrop: (slot: SlotKey, id: string) => void
 }) {
   const result = useMemo(() => calcLoadoutStats(loadout, kvkSeason), [loadout, kvkSeason])
-  const [panel, setPanel] = useState<'stats' | 'materials'>('stats')
+  const [panel, setPanel] = useState<'stats' | 'materials' | 'inventory'>('stats')
+  const [inventory, setInventory] = useState<Record<string, number>>({})
   const [contextMenu, setContextMenu] = useState<{ slot: SlotKey; x: number; y: number } | null>(null)
 
   const handleSlotContext = useCallback((e: React.MouseEvent, slot: SlotKey) => {
@@ -1342,7 +1445,7 @@ function CalculatorTab({
       <div className="flex-1 min-w-0">
         <div className="rounded-xl border border-border bg-secondary/10">
           <div className="flex border-b border-border">
-            {(['stats', 'materials'] as const).map(p => (
+            {(['stats', 'materials', 'inventory'] as const).map(p => (
               <button key={p} onClick={() => setPanel(p)}
                 className={cn(
                   'flex-1 py-2.5 text-xs font-semibold uppercase tracking-wide transition-colors capitalize',
@@ -1355,7 +1458,11 @@ function CalculatorTab({
             ))}
           </div>
           <div className="p-4 max-h-[480px] overflow-y-auto">
-            {panel === 'stats' ? <StatsSummary result={result} /> : <MaterialsSummary loadout={loadout} />}
+            {panel === 'stats'
+              ? <StatsSummary result={result} />
+              : panel === 'materials'
+              ? <MaterialsSummary loadout={loadout} />
+              : <InventoryPanel loadout={loadout} inventory={inventory} setInventory={setInventory} />}
           </div>
         </div>
       </div>
@@ -1482,6 +1589,8 @@ function ForgeTabContent({
   const [showSetManager, setShowSetManager] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
   const [activeSubTab, setActiveSubTab] = useState<'forge' | 'refine' | 'awaken' | 'dismantle'>('forge')
+  const [showInventory, setShowInventory] = useState(false)
+  const [forgeInventory, setForgeInventory] = useState<Record<string, number>>({})
 
   const filteredItems = useMemo(() => {
     const { items } = state
@@ -1646,6 +1755,30 @@ function ForgeTabContent({
                 style={{
                   background: 'linear-gradient(90deg, transparent, rgba(255,160,30,0.4), transparent)',
                 }} />
+              {/* Animated forge fire */}
+              <div className="absolute bottom-0 left-0 right-0 overflow-hidden pointer-events-none" style={{ height: '96px', zIndex: 2 }}>
+                <div className="forge-fire-base absolute bottom-0 left-0 right-0 h-6"
+                  style={{ background: 'linear-gradient(90deg, transparent, rgba(234,88,12,0.5) 20%, rgba(251,146,60,0.65) 50%, rgba(234,88,12,0.5) 80%, transparent)', filter: 'blur(6px)' }} />
+                {[0,1,2,3,4,5,6,7,8,9].map(i => {
+                  const x = (i - 4.5) * 16
+                  const h = 22 + (i % 4) * 14
+                  const w = 10 + (i % 3) * 7
+                  const dur = (1.1 + (i % 4) * 0.14).toFixed(2)
+                  const del = (i * 0.11).toFixed(2)
+                  const grad = i % 3 === 0
+                    ? 'linear-gradient(to top,#dc2626,#f97316,#fde68a)'
+                    : i % 3 === 1
+                    ? 'linear-gradient(to top,#ea580c,#fb923c,#fbbf24)'
+                    : 'linear-gradient(to top,#f97316,#fbbf24,#fef9c3)'
+                  return (
+                    <div key={i} className="forge-flame-lick" style={{
+                      left: `calc(50% + ${x}px - ${w/2}px)`,
+                      width: `${w}px`, height: `${h}px`, background: grad,
+                      '--dur': `${dur}s`, '--del': `${del}s`,
+                    } as React.CSSProperties} />
+                  )
+                })}
+              </div>
               <div className={cn('z-10 relative', selectedItem && 'forge-float')}>
                 {selectedItem?.iconUrl ? (
                   <Image src={selectedItem.iconUrl} alt={selectedItem.name} width={160} height={160}
@@ -1707,6 +1840,52 @@ function ForgeTabContent({
                           ? `${(selectedItem.goldCost / 1000000).toFixed(1)}M`
                           : selectedItem.goldCost.toLocaleString()}
                       </span>
+                    </div>
+                  )}
+                </div>
+                {/* ── Inventory check ── */}
+                <div className="pt-1.5">
+                  <button onClick={() => setShowInventory(v => !v)}
+                    className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-amber-300 transition-colors w-full justify-center py-1 rounded hover:bg-secondary/20">
+                    <Package className="h-3 w-3" />
+                    {showInventory ? 'Hide Inventory' : 'Check My Inventory'}
+                    <ChevronDown className={cn('h-3 w-3 transition-transform duration-200', showInventory && 'rotate-180')} />
+                  </button>
+                  {showInventory && (
+                    <div className="space-y-1.5 mt-1.5 rounded-lg p-2 bg-black/30 border border-amber-900/20">
+                      {selectedItem!.materials.map((mat, midx) => {
+                        const def = FORGE_MATERIAL_DEFS.find(d => d.id === mat.materialId)
+                        const have = forgeInventory[mat.materialId] ?? 0
+                        const ok = have >= mat.amount
+                        return (
+                          <div key={midx} className="flex items-center gap-1.5">
+                            {def && <Image src={def.iconPath} alt={def.name} width={16} height={16} className="object-contain flex-shrink-0" />}
+                            <span className="text-[10px] text-muted-foreground flex-1 capitalize truncate">{def?.name ?? mat.materialId}</span>
+                            <input type="number" min={0} value={have === 0 ? '' : have} placeholder="0"
+                              onChange={e => setForgeInventory(prev => ({ ...prev, [mat.materialId]: Math.max(0, Number(e.target.value) || 0) }))}
+                              className="w-14 h-6 text-[11px] bg-background border border-border rounded px-1 text-center tabular-nums" />
+                            <span className={cn('text-[10px] font-bold w-12 text-right', ok ? 'text-green-400' : 'text-red-400')}>
+                              {ok ? `✓` : `✗ -${mat.amount - have}`}
+                            </span>
+                          </div>
+                        )
+                      })}
+                      {(selectedItem!.goldCost > 0) && (() => {
+                        const have = forgeInventory['gold'] ?? 0
+                        const ok = have >= selectedItem!.goldCost
+                        return (
+                          <div className="flex items-center gap-1.5 pt-1 border-t border-border/30">
+                            <Image src="/images/equipment/mat_icons/gold_icon.webp" alt="Gold" width={16} height={16} className="object-contain flex-shrink-0" />
+                            <span className="text-[10px] text-muted-foreground flex-1">Gold</span>
+                            <input type="number" min={0} value={have === 0 ? '' : have} placeholder="0"
+                              onChange={e => setForgeInventory(prev => ({ ...prev, gold: Math.max(0, Number(e.target.value) || 0) }))}
+                              className="w-14 h-6 text-[11px] bg-background border border-border rounded px-1 text-center tabular-nums" />
+                            <span className={cn('text-[10px] font-bold w-12 text-right', ok ? 'text-green-400' : 'text-red-400')}>
+                              {ok ? `✓` : `✗`}
+                            </span>
+                          </div>
+                        )
+                      })()}
                     </div>
                   )}
                 </div>
@@ -1780,6 +1959,33 @@ function ForgeTabContent({
             {selectedItem ? (
               <div className="space-y-3">
                 <h3 className={cn('text-base font-bold leading-tight', rc?.nameCls)}>{selectedItem.name}</h3>
+                {(() => {
+                  const cost = REFINE_COSTS[selectedItem.rarity] ?? REFINE_COSTS.legendary
+                  return (
+                    <div className="rounded-lg bg-sky-900/20 border border-sky-800/40 px-3 py-2.5">
+                      <p className="text-[10px] font-semibold text-sky-300 uppercase tracking-wide mb-2">Refine Cost (Approx.)</p>
+                      <div className="flex items-center gap-4 flex-wrap">
+                        <div className="flex items-center gap-1.5">
+                          <Image src="/images/bundle/conversion_stone.png" alt="Conv. Stone" width={24} height={24} className="object-contain" />
+                          <div>
+                            <p className="text-[10px] text-muted-foreground">Conv. Stone</p>
+                            <p className="text-xs font-bold">×{cost.stones}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <Image src="/images/equipment/mat_icons/gold_icon.webp" alt="Gold" width={22} height={22} className="object-contain" />
+                          <div>
+                            <p className="text-[10px] text-muted-foreground">Gold</p>
+                            <p className="text-xs font-bold text-yellow-400">
+                              {cost.gold >= 1_000_000 ? `${cost.gold / 1_000_000}M` : cost.gold.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-[9px] text-muted-foreground/50 mt-1.5">*Approximate — verify in-game</p>
+                    </div>
+                  )
+                })()}
                 <div className="space-y-2">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Attributes After Refine</p>
                   {selectedItem.attributes.length > 0 ? selectedItem.attributes.map((attr, i) => {
@@ -1887,12 +2093,25 @@ function ForgeTabContent({
                           }
                           desc = d || (t.name ?? '')
                         }
+                        const awakCost = AWAKEN_TIER_COSTS[tier - 1]
                         return (
                           <div key={tier} className="rounded-lg bg-purple-900/20 border border-purple-800/30 px-3 py-2">
                             <div className="flex items-start gap-2">
                               <span className="text-xs font-bold text-purple-300 w-5 flex-shrink-0 mt-0.5">{toRoman(tier)}</span>
                               <span className="text-xs text-foreground leading-relaxed">{desc}</span>
                             </div>
+                            {awakCost && (
+                              <div className="flex items-center gap-3 mt-1.5 pt-1.5 border-t border-purple-900/50 flex-wrap">
+                                <div className="flex items-center gap-1">
+                                  <Image src="/images/bundle/legendary_mat_chest.png" alt="Mat" width={16} height={16} className="object-contain" />
+                                  <span className="text-[10px] text-muted-foreground">×{awakCost.legendary_mats}</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Image src="/images/equipment/mat_icons/gold_icon.webp" alt="Gold" width={14} height={14} className="object-contain" />
+                                  <span className="text-[10px] text-yellow-400">{awakCost.gold / 1_000_000}M gold</span>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )
                       })}
@@ -1958,6 +2177,19 @@ interface SavedCalcState { loadout: Loadout; kvkSeason: KvkSeason }
 
 export function EquipmentForge() {
   const [kvkSeason, setKvkSeason] = useState<KvkSeason>('soc')
+  const [screenshotDataUrl, setScreenshotDataUrl] = useState<string | null>(null)
+  const screenshotRef = useRef<HTMLDivElement>(null)
+
+  const handleScreenshot = useCallback(async () => {
+    if (!screenshotRef.current) return
+    try {
+      const h2c = (await import('html2canvas')).default
+      const canvas = await h2c(screenshotRef.current, {
+        scale: 2, backgroundColor: '#0c0b14', useCORS: true, allowTaint: true, logging: false,
+      })
+      setScreenshotDataUrl(canvas.toDataURL('image/png'))
+    } catch (err) { console.error('Screenshot failed:', err) }
+  }, [])
 
   const [loadout, setLoadout] = useState<Loadout>(() => {
     try {
@@ -2030,7 +2262,13 @@ export function EquipmentForge() {
 
       <div className="border-t border-border/50 pt-6">
         <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
-          <p className="text-sm font-bold tracking-wide uppercase text-muted-foreground">Equipment Calculator</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-bold tracking-wide uppercase text-muted-foreground">Equipment Calculator</p>
+            <button onClick={handleScreenshot}
+              className="flex items-center gap-1 px-2 py-1 rounded text-[11px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 border border-border/50 transition-colors">
+              <Camera className="h-3 w-3" /> Screenshot
+            </button>
+          </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">KvK Season:</span>
             <div className="flex gap-1">
@@ -2046,16 +2284,45 @@ export function EquipmentForge() {
             </div>
           </div>
         </div>
-        <CalculatorTab
-          loadout={loadout}
-          kvkSeason={kvkSeason}
-          onSlotClick={slot => setPickerSlot(slot)}
-          onRemove={removeItem}
-          onToggleRefine={toggleRefine}
-          onSetAwaken={slot => setAwakenSlot(slot)}
-          onClear={() => setLoadout({})}
-          onSlotDrop={handleSlotDrop}
-        />
+        <div ref={screenshotRef}>
+          <CalculatorTab
+            loadout={loadout}
+            kvkSeason={kvkSeason}
+            onSlotClick={slot => setPickerSlot(slot)}
+            onRemove={removeItem}
+            onToggleRefine={toggleRefine}
+            onSetAwaken={slot => setAwakenSlot(slot)}
+            onClear={() => setLoadout({})}
+            onSlotDrop={handleSlotDrop}
+          />
+        </div>
+        {screenshotDataUrl && (
+          <Dialog open onOpenChange={() => setScreenshotDataUrl(null)}>
+            <DialogContent className="max-w-3xl">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Camera className="h-4 w-4" /> Loadout Screenshot
+                </DialogTitle>
+              </DialogHeader>
+              <div className="overflow-auto max-h-[60vh] rounded-lg border border-border bg-[#0c0b14] flex justify-center p-2">
+                <img src={screenshotDataUrl} alt="Loadout screenshot" className="max-w-full rounded" />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button className="flex-1 gap-2" onClick={() => {
+                  const a = document.createElement('a'); a.href = screenshotDataUrl; a.download = 'loadout.png'; a.click()
+                }}>
+                  <Download className="h-4 w-4" /> Download PNG
+                </Button>
+                <Button variant="outline" className="flex-1 gap-2" onClick={async () => {
+                  const blob = await (await fetch(screenshotDataUrl)).blob()
+                  await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+                }}>
+                  <Camera className="h-4 w-4" /> Copy to Clipboard
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       <div className="border-t border-border/50 pt-6">

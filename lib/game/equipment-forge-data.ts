@@ -48,10 +48,10 @@ export const FORGE_MATERIAL_DEFS: ForgeMaterialDef[] = [
   { id: 'transmutation_stone', name: 'Trans. Stone',     iconPath: '/images/bundle/transmutation_stone.png',    rarityColor: '#e879f9' },
   { id: 'gem',               name: 'Gem',                iconPath: '/images/bundle/gem.png',                    rarityColor: '#818cf8' },
   // Forge craft materials
-  { id: 'leather',           name: 'Leather',            iconPath: '/images/equipment/mat_icons/leather_legendary.webp',      rarityColor: '#a16207' },
-  { id: 'iron',              name: 'Iron',               iconPath: '/images/equipment/mat_icons/ore_legendary.webp',          rarityColor: '#71717a' },
-  { id: 'ebony',             name: 'Ebony',              iconPath: '/images/equipment/mat_icons/ebony_legendary.webp',        rarityColor: '#1d4ed8' },
-  { id: 'bone',              name: 'Bone',               iconPath: '/images/equipment/mat_icons/bone_legendary.webp',         rarityColor: '#84cc16' },
+  { id: 'leather',           name: 'Leather',            iconPath: '/images/equipment/mat_icons/leather_legendary.webp',      rarityColor: '#f59e0b' },
+  { id: 'iron',              name: 'Iron',               iconPath: '/images/equipment/mat_icons/ore_legendary.webp',          rarityColor: '#f59e0b' },
+  { id: 'ebony',             name: 'Ebony',              iconPath: '/images/equipment/mat_icons/ebony_legendary.webp',        rarityColor: '#f59e0b' },
+  { id: 'bone',              name: 'Bone',               iconPath: '/images/equipment/mat_icons/bone_legendary.webp',         rarityColor: '#f59e0b' },
 ]
 
 export interface ForgeMaterial {
