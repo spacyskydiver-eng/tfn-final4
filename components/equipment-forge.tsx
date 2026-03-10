@@ -951,9 +951,9 @@ function LoadoutGrid({
         className="mx-auto"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, 72px)',
+          gridTemplateColumns: 'repeat(3, 56px)',
           gridTemplateRows: 'repeat(6, auto)',
-          gap: '8px',
+          gap: '6px',
           width: 'fit-content',
         }}
       >
@@ -971,7 +971,7 @@ function LoadoutGrid({
             >
               <div
                 className={cn(
-                  'relative h-[72px] w-[72px] cursor-pointer',
+                  'relative h-[56px] w-[56px] cursor-pointer',
                   'transition-all hover:brightness-110 overflow-hidden flex items-center justify-center',
                   item?.refined && showRefined ? 'drop-shadow-[0_0_6px_rgba(251,191,36,0.7)]' : '',
                   isDragOver ? 'brightness-125 drop-shadow-[0_0_8px_rgba(251,191,36,0.9)]' : '',
@@ -990,7 +990,7 @@ function LoadoutGrid({
                 }}
               >
                 <Image src={data?.iconUrl ?? SLOT_PLACEHOLDERS[slot]} alt={data?.name ?? slot}
-                  width={56} height={56} className="object-contain" />
+                  width={44} height={44} className="object-contain" />
                 {item?.awakenLevel && item.awakenLevel > 0 && showAwakenBadge && (
                   <div className="absolute top-0.5 left-0.5 bg-purple-900/90 text-purple-200 text-[8px] font-bold rounded px-0.5 leading-4">
                     {toRoman(item.awakenLevel)}
