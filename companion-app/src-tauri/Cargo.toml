@@ -1,0 +1,43 @@
+[package]
+name            = "rok-companion"
+version         = "0.1.0"
+description     = "ROK Companion — macOS clipboard monitor for Rise of Kingdoms"
+authors         = ["you"]
+edition         = "2021"
+rust-version    = "1.77"
+default-run     = "rok-companion"
+
+# Required by Tauri: the lib crate is consumed by the build toolchain
+[lib]
+name       = "rok_companion_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "rok-companion"
+path = "src/main.rs"
+
+# ─── Build deps ───────────────────────────────────────────────────────────────
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+# ─── Runtime deps ─────────────────────────────────────────────────────────────
+[dependencies]
+tauri    = { version = "2", features = ["tray-icon", "image-ico", "image-png"] }
+serde    = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Official Tauri v2 plugins
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-store             = "2"
+tauri-plugin-notification      = "2"
+tauri-plugin-shell             = "2"
+
+# ─── Profile ──────────────────────────────────────────────────────────────────
+[profile.dev]
+incremental = true
+
+[profile.release]
+panic         = "abort"
+codegen-units = 1
+opt-level     = "s"   # optimise for size in release builds
+strip         = true

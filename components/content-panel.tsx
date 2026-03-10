@@ -16,6 +16,8 @@ import {
   Map,
   Boxes,
   Receipt,
+  Sword,
+  History,
 } from "lucide-react";
 
 import { AccountsContent } from "@/components/accounts-content";
@@ -31,6 +33,8 @@ import { CommanderContent } from "@/components/commander-content";
 import { TerritoryPlannerContent } from "@/components/territory-planner-content";
 import { BundlesContent } from "@/components/bundles-content";
 import { SpendingTrackerContent } from "@/components/spending-tracker-content";
+import { KillTrackerContent } from "@/components/kill-tracker-content";
+import { SyncHistoryContent } from "@/components/sync-history-content";
 
 const tabMeta: Record<string, { label: string; description: string; icon: React.ElementType }> = {
   home: {
@@ -93,6 +97,16 @@ const tabMeta: Record<string, { label: string; description: string; icon: React.
     description: "Plan and manage your territory strategy",
     icon: Map,
   },
+  "kill-tracker": {
+    label: "Kill Tracker",
+    description: "Track barbarian kills and fort kills synced from the companion app",
+    icon: Sword,
+  },
+  "sync-history": {
+    label: "Sync History",
+    description: "Browse all reports synced from the macOS companion app",
+    icon: History,
+  },
   settings: {
     label: "Settings",
     description: "Configure your toolkit preferences",
@@ -148,6 +162,10 @@ export function ContentPanel({ activeTab, onTabChange }: ContentPanelProps) {
           <BundlesContent />
         ) : activeTab === "spending" ? (
           <SpendingTrackerContent />
+        ) : activeTab === "kill-tracker" ? (
+          <KillTrackerContent />
+        ) : activeTab === "sync-history" ? (
+          <SyncHistoryContent />
         ) : activeTab === "settings" ? (
           <SettingsContent />
         ) : (

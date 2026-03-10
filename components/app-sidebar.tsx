@@ -22,6 +22,8 @@ import {
   Map,
   Boxes,
   Receipt,
+  Sword,
+  History,
 } from "lucide-react";
 function UserFooter({ collapsed }: { collapsed: boolean }) {
   const { user, loading, login, logout } = useAuth();
@@ -88,6 +90,8 @@ const navItems = [
   { id: "calendar", label: "Calendar", icon: CalendarDays },
   { id: "kvk", label: "KvK Tracker", icon: CrosshairIcon },
   { id: "commander", label: "Commander Prep", icon: Crown },
+  { id: "kill-tracker", label: "Kill Tracker", icon: Sword },
+  { id: "sync-history", label: "Sync History", icon: History },
   { id: "guides", label: "Guides", icon: BookOpen },
   { id: "general-tools", label: "General Tools", icon: Wrench },
   { id: "accounts", label: "Accounts", icon: Users },

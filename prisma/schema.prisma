@@ -1,0 +1,74 @@
+// Prisma schema for the ROK Kill Tracker system.
+// Run `pnpm prisma migrate dev --name init` after setting DATABASE_URL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── User ─────────────────────────────────────────────────────────────────────
+// Mirrors the Discord OAuth user stored in the session layer.
+// Upserted on every login so it stays in sync with Discord.
+model User {
+  id        String   @id @default(cuid())
+  discordId String   @unique
+  username  String
+  avatar    String?
+  isAdmin   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  apiTokens  ApiToken[]
+  killEvents KillEvent[]
+}
+
+// ─── ApiToken ─────────────────────────────────────────────────────────────────
+// Per-user tokens issued to the macOS companion app.
+// The raw token (rok_<64 hex chars>) is shown ONCE and never stored here —
+// only the SHA-256 hash is persisted so a database breach cannot expose tokens.
+model ApiToken {
+  id         String    @id @default(cuid())
+  userId     String
+  name       String    // Friendly label the user gives the device, e.g. "MacBook Pro"
+  tokenHash  String    @unique // SHA-256(rawToken) — used for constant-time lookup
+  lastUsedAt DateTime? // Updated every time the token successfully authenticates
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime? // null = active; non-null = revoked
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ─── KillEvent ────────────────────────────────────────────────────────────────
+// One parsed battle report submitted by the companion app via clipboard.
+// Duplicate prevention: a user cannot submit the same content hash twice.
+model KillEvent {
+  id          String   @id @default(cuid())
+  userId      String
+
+  // Parser output
+  reportType  String   // "BARBARIAN_KILL" | "FORT_KILL" | "UNKNOWN"
+  rawText     String   @db.Text // Full original copied report text
+  contentHash String   // SHA-256(normalise(rawText)) — dedup key
+
+  // Structured parsed fields stored as JSON for flexibility
+  parsedData  Json
+
+  // Denormalised counters for fast aggregate queries
+  killCount   Int      @default(0) // Total enemy unit deaths
+  fortKills   Int      @default(0) // Forts/structures destroyed
+
+  syncedVia   String   @default("clipboard") // "clipboard" | "manual"
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // One user cannot submit the exact same report twice
+  @@unique([userId, contentHash])
+  @@index([userId, reportType])
+  @@index([userId, createdAt(sort: Desc)])
+}
