@@ -926,7 +926,7 @@ const SLOT_GRID: Record<SlotKey, { row: number; col: number }> = {
 }
 
 function LoadoutGrid({
-  loadout, label, onSlotClick, onRemove, showRefined, showAwakenBadge, onContextMenu, onSlotDrop,
+  loadout, label, onSlotClick, onRemove, showRefined, showAwakenBadge, onContextMenu, onSlotDrop, size,
 }: {
   loadout: Loadout
   label?: string
@@ -936,7 +936,10 @@ function LoadoutGrid({
   showAwakenBadge: boolean
   onContextMenu?: (e: React.MouseEvent, slot: SlotKey) => void
   onSlotDrop?: (slot: SlotKey, itemId: string) => void
+  size?: number
 }) {
+  const sz = size ?? 56
+  const imgSz = Math.round(sz * 0.78)
   const rarityMap: Record<string, string> = {
     common: 'Normal', uncommon: 'Advanced', rare: 'Elite', epic: 'Epic', legendary: 'Legendary',
   }
@@ -951,7 +954,7 @@ function LoadoutGrid({
         className="mx-auto"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, 56px)',
+          gridTemplateColumns: `repeat(3, ${sz}px)`,
           gridTemplateRows: 'repeat(6, auto)',
           gap: '6px',
           width: 'fit-content',
@@ -971,11 +974,11 @@ function LoadoutGrid({
             >
               <div
                 className={cn(
-                  'relative h-[56px] w-[56px] cursor-pointer',
-                  'transition-all hover:brightness-110 overflow-hidden flex items-center justify-center',
+                  'cursor-pointer transition-all hover:brightness-110 overflow-hidden flex items-center justify-center relative',
                   item?.refined && showRefined ? 'drop-shadow-[0_0_6px_rgba(251,191,36,0.7)]' : '',
                   isDragOver ? 'brightness-125 drop-shadow-[0_0_8px_rgba(251,191,36,0.9)]' : '',
                 )}
+                style={{ width: sz, height: sz }}
                 onClick={() => onSlotClick(slot)}
                 onContextMenu={e => {
                   if (item && onContextMenu) { e.preventDefault(); onContextMenu(e, slot) }
@@ -990,7 +993,7 @@ function LoadoutGrid({
                 }}
               >
                 <Image src={data?.iconUrl ?? SLOT_PLACEHOLDERS[slot]} alt={data?.name ?? slot}
-                  width={44} height={44} className="object-contain" />
+                  width={imgSz} height={imgSz} className="object-contain" />
                 {item?.awakenLevel && item.awakenLevel > 0 && showAwakenBadge && (
                   <div className="absolute top-0.5 left-0.5 bg-purple-900/90 text-purple-200 text-[8px] font-bold rounded px-0.5 leading-4">
                     {toRoman(item.awakenLevel)}
@@ -1669,6 +1672,7 @@ function CompareTab({ kvkSeason }: { kvkSeason: KvkSeason }) {
                 onSlotClick={slot => setPickerFor({ loadout: lo, slot })}
                 onRemove={slot => removeItem(lo, slot)}
                 showRefined showAwakenBadge
+                size={72}
               />
               <div className="mt-3 pt-3 border-t border-border">
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase mb-2">Total Materials</p>
