@@ -916,13 +916,13 @@ function ItemPickerModal({
 //   Row 6:  ·   Boots    ·
 const SLOT_GRID: Record<SlotKey, { row: number; col: number }> = {
   helmet:     { row: 1, col: 2 },
-  chest:      { row: 2, col: 2 },
-  weapon:     { row: 3, col: 1 },
-  gloves:     { row: 3, col: 3 },
-  legs:       { row: 4, col: 2 },
-  accessory1: { row: 5, col: 1 },
-  accessory2: { row: 5, col: 3 },
-  boots:      { row: 6, col: 2 },
+  chest:      { row: 3, col: 2 },
+  weapon:     { row: 4, col: 1 },
+  gloves:     { row: 4, col: 3 },
+  legs:       { row: 5, col: 2 },
+  accessory1: { row: 6, col: 1 },
+  accessory2: { row: 6, col: 3 },
+  boots:      { row: 7, col: 2 },
 }
 
 function LoadoutGrid({
@@ -971,11 +971,10 @@ function LoadoutGrid({
             >
               <div
                 className={cn(
-                  'relative h-[72px] w-[72px] rounded-lg border-2 cursor-pointer',
+                  'relative h-[72px] w-[72px] cursor-pointer',
                   'transition-all hover:brightness-110 overflow-hidden flex items-center justify-center',
-                  item && qLabel ? `${RARITY_BG[qLabel]} ${RARITY_BORDER[qLabel]}` : 'border-border bg-secondary/30',
-                  item?.refined && showRefined ? 'ring-2 ring-amber-400/60' : '',
-                  isDragOver ? 'ring-2 ring-amber-400 border-amber-500 brightness-125' : '',
+                  item?.refined && showRefined ? 'drop-shadow-[0_0_6px_rgba(251,191,36,0.7)]' : '',
+                  isDragOver ? 'brightness-125 drop-shadow-[0_0_8px_rgba(251,191,36,0.9)]' : '',
                 )}
                 onClick={() => onSlotClick(slot)}
                 onContextMenu={e => {
