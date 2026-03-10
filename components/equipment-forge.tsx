@@ -140,6 +140,24 @@ const MAT_ICONS: Record<string, string> = {
 
 const MATS = ['leather', 'iron', 'ebony', 'bone'] as const
 
+// Inventory panel — per-rarity-tier constants
+const RARITY_TO_TIER: Record<string, string> = {
+  common: 'common', uncommon: 'advanced', rare: 'elite', epic: 'epic', legendary: 'legendary',
+}
+const INV_TIERS = [
+  { key: 'common',    label: 'Common',    border: '#a1a1aa' },
+  { key: 'advanced',  label: 'Advanced',  border: '#22c55e' },
+  { key: 'elite',     label: 'Elite',     border: '#3b82f6' },
+  { key: 'epic',      label: 'Epic',      border: '#a855f7' },
+  { key: 'legendary', label: 'Legendary', border: '#f59e0b' },
+]
+const INV_MAT_GROUPS = [
+  { id: 'iron',    name: 'Iron Ore',     iconBase: 'ore' },
+  { id: 'leather', name: 'Leather',      iconBase: 'leather' },
+  { id: 'ebony',   name: 'Ebony',        iconBase: 'ebony' },
+  { id: 'bone',    name: 'Animal Bone',  iconBase: 'bone' },
+] as const
+
 const KVK_SEASONS: { value: KvkSeason; label: string }[] = [
   { value: 'kvk1_2', label: 'KvK 1-2' },
   { value: 'kvk3',   label: 'KvK 3' },
@@ -271,6 +289,21 @@ function calcLoadoutMaterials(loadout: Loadout): Record<typeof MATS[number], num
       if (k in totals) totals[k] += m.amount
     })
     totals.gold += data.goldCost
+  })
+  return totals
+}
+
+function calcLoadoutMaterialsByTier(loadout: Loadout): Record<string, number> {
+  const totals: Record<string, number> = {}
+  Object.values(loadout).filter(Boolean).forEach(item => {
+    const li = item as LoadoutItem
+    const data = EQUIPMENT_FORGE_SEED_ITEMS.find(d => d.id === li.id)
+    if (!data) return
+    const tierKey = RARITY_TO_TIER[data.rarity] ?? 'legendary'
+    data.materials.forEach(m => {
+      const k = `${m.materialId}_${tierKey}`
+      totals[k] = (totals[k] ?? 0) + m.amount
+    })
   })
   return totals
 }
@@ -1298,75 +1331,101 @@ function InventoryPanel({
   inventory: Record<string, number>
   setInventory: React.Dispatch<React.SetStateAction<Record<string, number>>>
 }) {
-  const needed = useMemo(() => calcLoadoutMaterials(loadout), [loadout])
-  const have = (k: string) => inventory[k] ?? 0
-  const matList = MATS.filter(m => needed[m] > 0)
-  const allOk = matList.every(m => have(m) >= needed[m]) && (needed.gold === 0 || have('gold') >= needed.gold)
+  const needed = useMemo(() => calcLoadoutMaterialsByTier(loadout), [loadout])
+  const totalNeeded = Object.values(needed).reduce((a, b) => a + b, 0)
+  const allOk = totalNeeded === 0 || Object.entries(needed).every(([k, n]) => (inventory[k] ?? 0) >= n)
 
-  if (matList.length === 0 && needed.gold === 0) {
-    return <p className="text-xs text-muted-foreground text-center py-6">Equip items to see required materials</p>
-  }
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">My Inventory vs Needed</p>
-        <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded', allOk ? 'bg-green-900/50 text-green-300' : 'bg-red-900/40 text-red-300')}>
-          {allOk ? '✓ Can Craft' : '✗ Missing'}
-        </span>
+  const MatGroup = ({ id, name, iconBase }: { id: string; name: string; iconBase: string }) => (
+    <div className="rounded-xl bg-secondary/20 border border-border/40 p-3">
+      <div className="flex items-center gap-1.5 mb-2.5">
+        <Image src={`/images/equipment/mat_icons/${iconBase}_legendary.webp`} alt={name} width={22} height={22} className="object-contain flex-shrink-0" />
+        <span className="text-xs font-semibold">{name}</span>
       </div>
-      <div className="space-y-2">
-        {matList.map(mat => {
-          const h = have(mat)
-          const n = needed[mat]
-          const ok = h >= n
-          const pct = n > 0 ? Math.min(100, (h / n) * 100) : 100
+      <div className="space-y-1.5">
+        {INV_TIERS.map(tier => {
+          const key = `${id}_${tier.key}`
+          const have = inventory[key] ?? 0
+          const need = needed[key] ?? 0
+          const ok = have >= need
           return (
-            <div key={mat} className="rounded-lg bg-secondary/20 p-2.5">
-              <div className="flex items-center gap-2 mb-1">
-                <Image src={MAT_ICONS[mat]} alt={mat} width={20} height={20} className="object-contain flex-shrink-0" />
-                <span className="text-xs text-muted-foreground capitalize flex-1">{mat}</span>
-                <span className={cn('text-xs font-bold', ok ? 'text-green-400' : 'text-red-400')}>
-                  {h.toLocaleString()} / {n.toLocaleString()}
+            <div key={tier.key} className="flex items-center gap-1.5">
+              <div className="flex-shrink-0 w-7 h-7 rounded-md overflow-hidden"
+                style={{ border: `2px solid ${tier.border}`, boxShadow: `0 0 6px ${tier.border}55` }}>
+                <Image src={`/images/equipment/mat_icons/${iconBase}_${tier.key}.webp`} alt={tier.label}
+                  width={28} height={28} className="object-contain w-full h-full" />
+              </div>
+              <input
+                type="number" min={0}
+                value={have === 0 ? '' : have}
+                placeholder="0"
+                onChange={e => setInventory(prev => ({ ...prev, [key]: Math.max(0, Number(e.target.value) || 0) }))}
+                className={cn(
+                  'flex-1 h-7 text-xs bg-background border rounded px-2 text-left tabular-nums',
+                  need > 0 ? (ok ? 'border-green-700/70' : 'border-red-700/70') : 'border-border',
+                )}
+              />
+              {need > 0 && (
+                <span className={cn('text-[10px] font-bold flex-shrink-0 w-16 text-right', ok ? 'text-green-400' : 'text-red-400')}>
+                  {ok ? `✓ ${need.toLocaleString()}` : `✗ -${(need - have).toLocaleString()}`}
                 </span>
-              </div>
-              <div className="h-1.5 rounded-full bg-secondary/60 overflow-hidden mb-1.5">
-                <div className={cn('h-full rounded-full transition-all', ok ? 'bg-green-500' : 'bg-red-500')}
-                  style={{ width: `${pct}%` }} />
-              </div>
-              <input type="number" min={0} value={h === 0 ? '' : h} placeholder="Enter amount owned"
-                onChange={e => setInventory(prev => ({ ...prev, [mat]: Math.max(0, Number(e.target.value) || 0) }))}
-                className="w-full h-7 text-xs bg-background border border-border rounded px-2 text-center" />
-              {!ok && <p className="text-[10px] text-red-400 mt-0.5 text-center">Need {(n - h).toLocaleString()} more</p>}
+              )}
             </div>
           )
         })}
-        {needed.gold > 0 && (() => {
-          const h = have('gold')
-          const n = needed.gold
-          const ok = h >= n
-          const pct = n > 0 ? Math.min(100, (h / n) * 100) : 100
-          return (
-            <div className="rounded-lg bg-secondary/20 p-2.5">
-              <div className="flex items-center gap-2 mb-1">
-                <Image src="/images/equipment/mat_icons/gold_icon.webp" alt="Gold" width={20} height={20} className="object-contain flex-shrink-0" />
-                <span className="text-xs text-muted-foreground flex-1">Gold</span>
-                <span className={cn('text-xs font-bold', ok ? 'text-green-400' : 'text-red-400')}>
-                  {h >= 1_000_000 ? `${(h / 1_000_000).toFixed(1)}M` : h.toLocaleString()}
-                  {' / '}
-                  {n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n.toLocaleString()}
-                </span>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">My Inventory</p>
+        {totalNeeded > 0 && (
+          <span className={cn('text-[10px] font-bold px-1.5 py-0.5 rounded',
+            allOk ? 'bg-green-900/50 text-green-300' : 'bg-red-900/40 text-red-300')}>
+            {allOk ? '✓ Can Craft' : '✗ Missing mats'}
+          </span>
+        )}
+        {totalNeeded === 0 && (
+          <span className="text-[10px] text-muted-foreground/60 italic">Equip items to see needed amounts</span>
+        )}
+      </div>
+
+      {/* 2×2 grid for the 4 material types */}
+      <div className="grid grid-cols-2 gap-2">
+        {INV_MAT_GROUPS.map(grp => (
+          <MatGroup key={grp.id} id={grp.id} name={grp.name} iconBase={grp.iconBase} />
+        ))}
+      </div>
+
+      {/* Material Choice Chests — full width */}
+      <div className="rounded-xl bg-secondary/20 border border-border/40 p-3">
+        <div className="flex items-center gap-1.5 mb-2.5">
+          <Image src="/images/equipment/mat_icons/chest_legendary.webp" alt="Chests" width={22} height={22} className="object-contain flex-shrink-0" />
+          <span className="text-xs font-semibold">Material Choice Chests</span>
+        </div>
+        <div className="space-y-1.5">
+          {INV_TIERS.map(tier => {
+            const key = `chest_${tier.key}`
+            const have = inventory[key] ?? 0
+            return (
+              <div key={tier.key} className="flex items-center gap-1.5">
+                <div className="flex-shrink-0 w-7 h-7 rounded-md overflow-hidden"
+                  style={{ border: `2px solid ${tier.border}`, boxShadow: `0 0 6px ${tier.border}55` }}>
+                  <Image src={`/images/equipment/mat_icons/chest_${tier.key}.webp`} alt={tier.label}
+                    width={28} height={28} className="object-contain w-full h-full" />
+                </div>
+                <input
+                  type="number" min={0}
+                  value={have === 0 ? '' : have}
+                  placeholder="0"
+                  onChange={e => setInventory(prev => ({ ...prev, [key]: Math.max(0, Number(e.target.value) || 0) }))}
+                  className="flex-1 h-7 text-xs bg-background border border-border rounded px-2 text-left tabular-nums"
+                />
               </div>
-              <div className="h-1.5 rounded-full bg-secondary/60 overflow-hidden mb-1.5">
-                <div className={cn('h-full rounded-full transition-all', ok ? 'bg-green-500' : 'bg-red-500')}
-                  style={{ width: `${pct}%` }} />
-              </div>
-              <input type="number" min={0} value={h === 0 ? '' : h} placeholder="Enter gold owned"
-                onChange={e => setInventory(prev => ({ ...prev, gold: Math.max(0, Number(e.target.value) || 0) }))}
-                className="w-full h-7 text-xs bg-background border border-border rounded px-2 text-center" />
-              {!ok && <p className="text-[10px] text-red-400 mt-0.5 text-center">Need {((n - h) / 1_000_000).toFixed(1)}M more gold</p>}
-            </div>
-          )
-        })()}
+            )
+          })}
+        </div>
       </div>
     </div>
   )
