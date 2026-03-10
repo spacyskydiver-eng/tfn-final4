@@ -854,20 +854,22 @@ function ItemPickerModal({
 /*  CALCULATOR: LOADOUT GRID                                           */
 /* ================================================================== */
 
-// RoK silhouette grid positions (3 cols × 4 rows):
-//   Row 1:  ·    Helmet   ·
-//   Row 2: Wpn   Chest   Gloves
-//   Row 3: Legs   ·      Boots
-//   Row 4: Acc1   ·      Acc2
+// RoK silhouette grid positions (3 cols × 6 rows):
+//   Row 1:  ·   Helmet   ·
+//   Row 2:  ·   Chest    ·
+//   Row 3: Wpn   ·      Gloves
+//   Row 4:  ·   Legs     ·
+//   Row 5: Acc1  ·      Acc2
+//   Row 6:  ·   Boots    ·
 const SLOT_GRID: Record<SlotKey, { row: number; col: number }> = {
   helmet:     { row: 1, col: 2 },
-  weapon:     { row: 2, col: 1 },
   chest:      { row: 2, col: 2 },
-  gloves:     { row: 2, col: 3 },
-  legs:       { row: 3, col: 1 },
-  boots:      { row: 3, col: 3 },
-  accessory1: { row: 4, col: 1 },
-  accessory2: { row: 4, col: 3 },
+  weapon:     { row: 3, col: 1 },
+  gloves:     { row: 3, col: 3 },
+  legs:       { row: 4, col: 2 },
+  accessory1: { row: 5, col: 1 },
+  accessory2: { row: 5, col: 3 },
+  boots:      { row: 6, col: 2 },
 }
 
 function LoadoutGrid({
@@ -897,7 +899,7 @@ function LoadoutGrid({
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(3, 72px)',
-          gridTemplateRows: 'repeat(4, auto)',
+          gridTemplateRows: 'repeat(6, auto)',
           gap: '8px',
           width: 'fit-content',
         }}
@@ -1484,7 +1486,7 @@ function ForgeTabContent({
   const filteredItems = useMemo(() => {
     const { items } = state
     if (activeFilter === 'all') return items
-    if (activeFilter === 'sets') return items.filter(i => !!i.setId)
+    if (activeFilter === 'sets') return items.filter(i => EQUIPMENT_SETS.some(s => s.pieces.includes(i.id)))
     return items.filter(i => i.slot === activeFilter)
   }, [state, activeFilter])
 
@@ -1493,12 +1495,16 @@ function ForgeTabContent({
     [state.items, selectedItemId, filteredItems],
   )
 
-  const selectedSet = useMemo(
-    () => selectedItem?.setId
-      ? state.sets.find(s => s.id === selectedItem.setId) ?? null
-      : null,
-    [selectedItem, state.sets],
-  )
+  const selectedSet = useMemo(() => {
+    if (!selectedItem) return null
+    const setDef = EQUIPMENT_SETS.find(s => s.pieces.includes(selectedItem.id))
+    if (!setDef) return null
+    return {
+      id: setDef.id,
+      name: setDef.name,
+      bonuses: setDef.bonuses.map(b => ({ pieces: b.count, description: b.description })),
+    }
+  }, [selectedItem])
 
   const handleSaveItem = (item: ForgeItem) => {
     const exists = state.items.some(i => i.id === item.id)
@@ -1541,9 +1547,9 @@ function ForgeTabContent({
         </Button>
       </div>
 
-      {activeSubTab !== 'forge' ? (
+      {activeSubTab === 'dismantle' ? (
         <div className="flex items-center justify-center min-h-40 rounded-xl border border-border bg-secondary/10">
-          <p className="text-muted-foreground text-sm capitalize">{activeSubTab} - coming soon</p>
+          <p className="text-muted-foreground text-sm">Dismantle — coming soon</p>
         </div>
       ) : (
         <div className="flex gap-3 min-h-[560px]">
@@ -1621,6 +1627,8 @@ function ForgeTabContent({
               )}
             </div>
           </div>
+
+          {activeSubTab === 'forge' ? (<>
 
           <div className="flex flex-col flex-1 min-w-0 gap-3">
             <div
@@ -1702,7 +1710,6 @@ function ForgeTabContent({
                     </div>
                   )}
                 </div>
-
               </div>
             ) : (
               <div className="flex justify-center pt-2">
@@ -1730,6 +1737,180 @@ function ForgeTabContent({
               </div>
             )}
           </div>
+
+          </>) : activeSubTab === 'refine' ? (<>
+
+          <div className="flex flex-col flex-1 min-w-0 gap-3">
+            <div
+              className="relative flex-1 flex items-center justify-center rounded-2xl overflow-hidden"
+              style={{
+                background: 'radial-gradient(ellipse at 50% 70%, rgba(14,165,233,0.2) 0%, rgba(7,89,133,0.3) 35%, rgba(3,6,8,0.97) 75%), linear-gradient(to bottom, #030e1a, #061825)',
+                border: '1px solid rgba(14,165,233,0.2)',
+                minHeight: '280px',
+              }}>
+              <div className={cn('z-10 relative', selectedItem && 'forge-float')}>
+                {selectedItem?.iconUrl ? (
+                  <div className="relative">
+                    <Image src={selectedItem.iconUrl} alt={selectedItem.name} width={160} height={160}
+                      className="object-contain"
+                      style={{ filter: rc ? `drop-shadow(0 0 32px ${rc.glowColor}) brightness(1.3)` : undefined }} />
+                    <div className="absolute -top-2 -right-2 bg-amber-500 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide">
+                      Refined
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-36 w-36 rounded-2xl flex items-center justify-center"
+                    style={{ background: 'radial-gradient(circle, rgba(14,165,233,0.3) 0%, rgba(0,0,0,0.85) 70%)' }}>
+                    <Sword className="h-16 w-16 text-sky-600/50" />
+                  </div>
+                )}
+              </div>
+            </div>
+            {selectedItem ? (
+              <div className="text-center space-y-1">
+                <p className="text-xs font-semibold text-sky-300 uppercase tracking-wide">Refinement Preview</p>
+                <p className="text-[11px] text-muted-foreground">Each % attribute receives a +30% bonus when refined</p>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground text-center pt-2">Select an item to preview refinement</p>
+            )}
+          </div>
+
+          <div className="flex-shrink-0 overflow-y-auto" style={{ width: '260px', maxHeight: '560px' }}>
+            {selectedItem ? (
+              <div className="space-y-3">
+                <h3 className={cn('text-base font-bold leading-tight', rc?.nameCls)}>{selectedItem.name}</h3>
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Attributes After Refine</p>
+                  {selectedItem.attributes.length > 0 ? selectedItem.attributes.map((attr, i) => {
+                    const base = parseFloat(attr.value.replace(/[^0-9.]/g, ''))
+                    const bonus = isNaN(base) ? 0 : getRefinedBonus(base)
+                    const ac = ATTRIBUTE_COLORS[attr.color]
+                    return (
+                      <div key={i} className="rounded-lg bg-secondary/20 px-3 py-2 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">{attr.label}</span>
+                          <span className={cn('text-xs font-bold', ac.text)}>{attr.value}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-sky-400">+ Refine Bonus</span>
+                          <span className="text-[10px] font-bold text-sky-400">
+                            {bonus > 0 ? `+${bonus.toFixed(1).replace('.0', '')}%` : '\u2014'}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  }) : (
+                    <p className="text-xs text-muted-foreground">No refineable attributes</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-center gap-2 py-10">
+                <Package className="h-12 w-12 text-muted-foreground/20" />
+                <p className="text-xs text-muted-foreground">Select equipment to preview refinement</p>
+              </div>
+            )}
+          </div>
+
+          </>) : (<>
+
+          <div className="flex flex-col flex-1 min-w-0 gap-3">
+            <div
+              className="relative flex-1 flex items-center justify-center rounded-2xl overflow-hidden"
+              style={{
+                background: 'radial-gradient(ellipse at 50% 70%, rgba(168,85,247,0.2) 0%, rgba(88,28,135,0.3) 35%, rgba(3,2,8,0.97) 75%), linear-gradient(to bottom, #0e0314, #180828)',
+                border: '1px solid rgba(168,85,247,0.2)',
+                minHeight: '280px',
+              }}>
+              <div className={cn('z-10 relative', selectedItem && 'forge-float')}>
+                {selectedItem?.iconUrl ? (
+                  <Image src={selectedItem.iconUrl} alt={selectedItem.name} width={160} height={160}
+                    className="object-contain"
+                    style={{ filter: 'drop-shadow(0 0 32px rgba(168,85,247,0.8))' }} />
+                ) : (
+                  <div className="h-36 w-36 rounded-2xl flex items-center justify-center"
+                    style={{ background: 'radial-gradient(circle, rgba(168,85,247,0.3) 0%, rgba(0,0,0,0.85) 70%)' }}>
+                    <Sword className="h-16 w-16 text-purple-600/50" />
+                  </div>
+                )}
+              </div>
+            </div>
+            {selectedItem && (
+              <div className="flex items-center justify-center gap-3 pb-1">
+                {[1, 2, 3, 4, 5].map(tier => {
+                  const iconicDef = ICONIC_DATA[selectedItem.name]
+                  const hasTier = !!(iconicDef?.tiers[String(tier)])
+                  return (
+                    <div key={tier}
+                      className={cn(
+                        'h-8 w-8 rounded-full border-2 flex items-center justify-center text-xs font-bold',
+                        hasTier
+                          ? 'border-purple-500 bg-purple-900/60 text-purple-200'
+                          : 'border-border bg-secondary/20 text-muted-foreground/40',
+                      )}>
+                      {toRoman(tier)}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="flex-shrink-0 overflow-y-auto" style={{ width: '260px', maxHeight: '560px' }}>
+            {selectedItem ? (() => {
+              const iconicDef = ICONIC_DATA[selectedItem.name]
+              return (
+                <div className="space-y-3">
+                  <h3 className={cn('text-base font-bold leading-tight', rc?.nameCls)}>{selectedItem.name}</h3>
+                  {iconicDef ? (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Awakening Tiers</p>
+                      {[1, 2, 3, 4, 5].map(tier => {
+                        const t = iconicDef.tiers[String(tier)]
+                        if (!t) return null
+                        let desc = ''
+                        if (t.type === 'base_stat' && t.stat) {
+                          const v = t.values?.soc ?? t.values?.kvk3 ?? t.values?.kvk1_2 ?? 0
+                          const crit = typeof t.crit_bonus === 'number' ? t.crit_bonus : 0
+                          desc = `${t.stat}: +${v}${crit ? ` (Crit: +${crit})` : ''}`
+                        } else if (t.type === 'percent_stat' && t.stat) {
+                          desc = `${t.stat}: +${t.value}%${t.crit_buff ? ` (Crit: +${t.crit_buff}%)` : ''}`
+                        } else if (t.type === 'flat_stat' && t.stat) {
+                          desc = `${t.stat}: +${(t.value ?? 0).toLocaleString()}${t.crit_buff ? ` (Crit: +${t.crit_buff})` : ''}`
+                        } else if (t.type === 'special') {
+                          let d = t.description ?? ''
+                          if (t.values) {
+                            Object.entries(t.values as Record<string, number>).forEach(([k, val]) => {
+                              d = d.replace(`{${k}}`, String(val))
+                            })
+                          }
+                          desc = d || (t.name ?? '')
+                        }
+                        return (
+                          <div key={tier} className="rounded-lg bg-purple-900/20 border border-purple-800/30 px-3 py-2">
+                            <div className="flex items-start gap-2">
+                              <span className="text-xs font-bold text-purple-300 w-5 flex-shrink-0 mt-0.5">{toRoman(tier)}</span>
+                              <span className="text-xs text-foreground leading-relaxed">{desc}</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground text-center py-6">No Iconic / Awakening data for this item</p>
+                  )}
+                </div>
+              )
+            })() : (
+              <div className="flex flex-col items-center justify-center h-full text-center gap-2 py-10">
+                <Package className="h-12 w-12 text-muted-foreground/20" />
+                <p className="text-xs text-muted-foreground">Select equipment to view awakening data</p>
+              </div>
+            )}
+          </div>
+
+          </>)}
         </div>
       )}
 
