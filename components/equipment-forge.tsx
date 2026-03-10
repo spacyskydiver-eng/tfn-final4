@@ -1,42 +1,85 @@
 'use client'
 
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import React, { useState, useMemo, useCallback, useEffect } from 'react'
 import Image from 'next/image'
-import { Search, X, ArrowUp, ArrowDown, Minus, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react'
-import { Input } from '@/components/ui/input'
+import {
+  Plus, Pencil, Trash2, X, ChevronDown, ChevronUp,
+  Save, Check, Sword, Layers, Package, AlertCircle,
+  Search, ArrowUp, ArrowDown, Minus, RotateCcw,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import {
+  type ForgeItem, type ForgeState, type EquipmentSet,
+  type ForgeRarity, type ForgeSlot, type ForgeFilter,
+  type EquipmentAttribute, type IconicAttribute, type ForgeMaterial,
+  type AttributeColor,
+  FORGE_MATERIAL_DEFS, RARITY_CONFIG, SLOT_CONFIG, FORGE_FILTERS,
+  ATTRIBUTE_COLORS, BUNDLE_ICON_OPTIONS,
+  loadForgeState, saveForgeState,
+} from '@/lib/game/equipment-forge-data'
 import { EQUIPMENT_FORGE_SEED_ITEMS } from '@/lib/game/equipment-forge-seed'
 import { EQUIPMENT_SETS } from '@/lib/game/equipment-sets-data'
 import { ICONIC_DATA } from '@/lib/game/equipment-iconics-data'
 import type { KvkSeason } from '@/lib/game/equipment-iconics-data'
 
 /* ================================================================== */
-/*  TYPES                                                              */
+/*  SHARED HELPERS                                                     */
+/* ================================================================== */
+
+function uid() { return `eq_${Date.now()}_${Math.random().toString(36).slice(2, 7)}` }
+
+function formatStatName(key: string): string {
+  return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
+function getTroopType(key: string): string {
+  if (key.startsWith('infantry')) return 'infantry'
+  if (key.startsWith('cavalry'))  return 'cavalry'
+  if (key.startsWith('archer'))   return 'archer'
+  if (key.startsWith('siege'))    return 'siege'
+  return 'general'
+}
+
+function getRefinedBonus(value: number): number {
+  return Math.round(value * 0.3 * 2) / 2
+}
+
+function toRoman(n: number): string {
+  return (['', 'I', 'II', 'III', 'IV', 'V'] as const)[n] ?? ''
+}
+
+/* ================================================================== */
+/*  CALCULATOR TYPES & CONSTANTS                                       */
 /* ================================================================== */
 
 type SlotKey = 'helmet' | 'weapon' | 'chest' | 'gloves' | 'legs' | 'boots' | 'accessory1' | 'accessory2'
-
 interface LoadoutItem { id: string; refined: boolean; awakenLevel: number }
 type Loadout = Partial<Record<SlotKey, LoadoutItem>>
-
-interface TotalStats { stats: Record<string, number>; special: Record<string, boolean>; iconicBonusesByTier: Record<number, Record<string, string | boolean>> }
-
-/* ================================================================== */
-/*  CONSTANTS                                                          */
-/* ================================================================== */
+interface TotalStats {
+  stats: Record<string, number>
+  special: Record<string, boolean>
+  iconicBonusesByTier: Record<number, Record<string, string | boolean>>
+}
 
 const SLOT_ORDER: SlotKey[] = ['helmet', 'weapon', 'chest', 'gloves', 'legs', 'boots', 'accessory1', 'accessory2']
 
 const SLOT_PLACEHOLDERS: Record<SlotKey, string> = {
-  helmet:    '/images/equipment/mat_icons/helmet_slot.webp',
-  weapon:    '/images/equipment/mat_icons/weapon_slot.webp',
-  chest:     '/images/equipment/mat_icons/chest_slot.webp',
-  gloves:    '/images/equipment/mat_icons/glove_slot.webp',
-  legs:      '/images/equipment/mat_icons/leggings_slot.webp',
-  boots:     '/images/equipment/mat_icons/boots_slot.webp',
-  accessory1:'/images/equipment/mat_icons/accessory1_slot.webp',
-  accessory2:'/images/equipment/mat_icons/accessory2_slot.webp',
+  helmet:     '/images/equipment/mat_icons/helmet_slot.webp',
+  weapon:     '/images/equipment/mat_icons/weapon_slot.webp',
+  chest:      '/images/equipment/mat_icons/chest_slot.webp',
+  gloves:     '/images/equipment/mat_icons/glove_slot.webp',
+  legs:       '/images/equipment/mat_icons/leggings_slot.webp',
+  boots:      '/images/equipment/mat_icons/boots_slot.webp',
+  accessory1: '/images/equipment/mat_icons/accessory1_slot.webp',
+  accessory2: '/images/equipment/mat_icons/accessory2_slot.webp',
 }
 
 const SLOT_LABELS: Record<SlotKey, string> = {
@@ -79,6 +122,7 @@ const MAT_ICONS: Record<string, string> = {
 }
 
 const MATS = ['leather', 'iron', 'ebony', 'bone'] as const
+
 const KVK_SEASONS: { value: KvkSeason; label: string }[] = [
   { value: 'kvk1_2', label: 'KvK 1-2' },
   { value: 'kvk3',   label: 'KvK 3' },
@@ -86,37 +130,18 @@ const KVK_SEASONS: { value: KvkSeason; label: string }[] = [
 ]
 
 /* ================================================================== */
-/*  HELPERS                                                            */
+/*  CALCULATOR ENGINE                                                  */
 /* ================================================================== */
-
-function formatStatName(key: string): string {
-  return key
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, c => c.toUpperCase())
-    .replace('March Speed', 'March Speed')
-}
-
-function getTroopType(key: string): string {
-  if (key.startsWith('infantry')) return 'infantry'
-  if (key.startsWith('cavalry'))  return 'cavalry'
-  if (key.startsWith('archer'))   return 'archer'
-  if (key.startsWith('siege'))    return 'siege'
-  return 'general'
-}
-
-function getRefinedBonus(value: number): number {
-  return Math.round(value * 0.3 * 2) / 2
-}
-
-function toRoman(n: number): string {
-  return ['', 'I', 'II', 'III', 'IV', 'V'][n] ?? ''
-}
 
 function calcLoadoutStats(loadout: Loadout, kvkSeason: KvkSeason = 'soc'): TotalStats {
   const totalStats: Record<string, number> = {}
   const specialStats: Record<string, boolean> = {}
-  const tempAgg: Record<number, Record<string, { value: number; isPercent: boolean }>> = { 1: {}, 2: {}, 3: {}, 4: {}, 5: {} }
-  const iconicBonusesByTier: Record<number, Record<string, string | boolean>> = { 1: {}, 2: {}, 3: {}, 4: {}, 5: {} }
+  const tempAgg: Record<number, Record<string, { value: number; isPercent: boolean }>> = {
+    1: {}, 2: {}, 3: {}, 4: {}, 5: {},
+  }
+  const iconicBonusesByTier: Record<number, Record<string, string | boolean>> = {
+    1: {}, 2: {}, 3: {}, 4: {}, 5: {},
+  }
 
   const equippedPieces = Object.values(loadout).filter(Boolean) as LoadoutItem[]
   const equippedIds = equippedPieces.map(i => i.id)
@@ -125,7 +150,6 @@ function calcLoadoutStats(loadout: Loadout, kvkSeason: KvkSeason = 'soc'): Total
     const data = EQUIPMENT_FORGE_SEED_ITEMS.find(d => d.id === item.id)
     if (!data) return
 
-    // base stats
     data.attributes.forEach(attr => {
       const numVal = parseFloat(attr.value.replace(/[^0-9.-]/g, ''))
       if (isNaN(numVal)) return
@@ -134,33 +158,40 @@ function calcLoadoutStats(loadout: Loadout, kvkSeason: KvkSeason = 'soc'): Total
       if (item.refined) totalStats[key] += getRefinedBonus(numVal)
     })
 
-    // special talent
     if (data.specialTalent) {
       data.specialTalent.split(', ').forEach(s => { specialStats[s] = true })
     }
 
-    // iconics
-    const iconicInfo = ICONIC_DATA[data.name] ?? (data.rarity === 'legendary' && data.slot === 'accessory' ? ICONIC_DATA['Accessory'] : null)
+    const iconicInfo = ICONIC_DATA[data.name] ?? null
     if (iconicInfo && item.awakenLevel > 0) {
       for (let i = 1; i <= item.awakenLevel; i++) {
         const tier = iconicInfo.tiers[String(i)]
         if (!tier) continue
         const statName = tier.stat ? formatStatName(tier.stat) : null
-
         switch (tier.type) {
           case 'base_stat': {
-            const v = (tier.values?.[kvkSeason] ?? 0) + (item.refined ? (typeof tier.crit_bonus === 'number' ? tier.crit_bonus : 0) : 0)
-            if (statName) { if (!tempAgg[i][statName]) tempAgg[i][statName] = { value: 0, isPercent: false }; tempAgg[i][statName].value += v }
+            const v = (tier.values?.[kvkSeason] ?? 0) + (item.refined && typeof tier.crit_bonus === 'number' ? tier.crit_bonus : 0)
+            if (statName) {
+              if (!tempAgg[i][statName]) tempAgg[i][statName] = { value: 0, isPercent: false }
+              tempAgg[i][statName].value += v
+            }
             break
           }
           case 'percent_stat': {
-            const v = (tier.value ?? 0) + (item.refined ? (typeof tier.crit_buff === 'number' ? tier.crit_buff : 0) : 0)
-            if (statName) { if (!tempAgg[i][statName]) tempAgg[i][statName] = { value: 0, isPercent: true }; tempAgg[i][statName].value += v; tempAgg[i][statName].isPercent = true }
+            const v = (tier.value ?? 0) + (item.refined && typeof tier.crit_buff === 'number' ? tier.crit_buff : 0)
+            if (statName) {
+              if (!tempAgg[i][statName]) tempAgg[i][statName] = { value: 0, isPercent: true }
+              tempAgg[i][statName].value += v
+              tempAgg[i][statName].isPercent = true
+            }
             break
           }
           case 'flat_stat': {
-            const v = (tier.value ?? 0) + (item.refined ? (typeof tier.crit_buff === 'number' ? Math.round(tier.crit_buff / 10) * 10 : 0) : 0)
-            if (statName) { if (!tempAgg[i][statName]) tempAgg[i][statName] = { value: 0, isPercent: false }; tempAgg[i][statName].value += v }
+            const v = (tier.value ?? 0) + (item.refined && typeof tier.crit_buff === 'number' ? Math.round(tier.crit_buff / 10) * 10 : 0)
+            if (statName) {
+              if (!tempAgg[i][statName]) tempAgg[i][statName] = { value: 0, isPercent: false }
+              tempAgg[i][statName].value += v
+            }
             break
           }
           case 'special': {
@@ -168,7 +199,9 @@ function calcLoadoutStats(loadout: Loadout, kvkSeason: KvkSeason = 'soc'): Total
             if (tier.values) {
               Object.entries(tier.values).forEach(([k, val]) => {
                 let v: number = val as number
-                if (item.refined && typeof tier.crit_bonus === 'object' && tier.crit_bonus !== null) v += (tier.crit_bonus as Record<string, number>)[k] ?? 0
+                if (item.refined && typeof tier.crit_bonus === 'object' && tier.crit_bonus !== null) {
+                  v += (tier.crit_bonus as Record<string, number>)[k] ?? 0
+                }
                 desc = desc.replace(`{${k}}`, String(v))
               })
             }
@@ -180,24 +213,27 @@ function calcLoadoutStats(loadout: Loadout, kvkSeason: KvkSeason = 'soc'): Total
     }
   })
 
-  // flatten iconic aggregates
   for (let i = 1; i <= 5; i++) {
-    Object.entries(tempAgg[i]).forEach(([name, data]) => {
-      if (data.value > 0) iconicBonusesByTier[i][name] = data.isPercent ? `+${parseFloat(data.value.toFixed(1))}%` : `+${data.value.toLocaleString()}`
+    Object.entries(tempAgg[i]).forEach(([name, d]) => {
+      if (d.value > 0) {
+        iconicBonusesByTier[i][name] = d.isPercent
+          ? `+${parseFloat(d.value.toFixed(1))}%`
+          : `+${d.value.toLocaleString()}`
+      }
     })
   }
 
-  // set bonuses
   EQUIPMENT_SETS.forEach(set => {
     const count = set.pieces.filter(p => equippedIds.includes(p)).length
     set.bonuses.forEach(bonus => {
-      if (count >= bonus.count) specialStats[`[${count}/${set.pieces.length}] ${set.name}: ${bonus.description}`] = true
+      if (count >= bonus.count) {
+        specialStats[`[${count}/${set.pieces.length}] ${set.name}: ${bonus.description}`] = true
+      }
     })
   })
 
-  // expand troop_* into individual troops
-  const troopTypes = ['infantry', 'cavalry', 'archer', 'siege'] as const;
-  (['attack', 'defense', 'health'] as const).forEach(st => {
+  const troopTypes = ['infantry', 'cavalry', 'archer', 'siege'] as const
+  ;(['attack', 'defense', 'health'] as const).forEach(st => {
     const u = `troop_${st}`
     if (totalStats[u]) {
       troopTypes.forEach(t => { totalStats[`${t}_${st}`] = (totalStats[`${t}_${st}`] ?? 0) + totalStats[u] })
@@ -223,7 +259,527 @@ function calcLoadoutMaterials(loadout: Loadout): Record<typeof MATS[number], num
 }
 
 /* ================================================================== */
-/*  ITEM PICKER MODAL                                                  */
+/*  FORGE: ICON PICKER MODAL                                           */
+/* ================================================================== */
+
+function IconPickerModal({
+  current, onSelect, onClose,
+}: { current?: string; onSelect: (path: string) => void; onClose: () => void }) {
+  const [custom, setCustom] = useState(current?.startsWith('/images') ? '' : current ?? '')
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader><DialogTitle>Choose Equipment Icon</DialogTitle></DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <p className="text-xs text-muted-foreground mb-2">Pick from bundle images</p>
+            <div className="grid grid-cols-6 gap-2 max-h-52 overflow-y-auto pr-1">
+              {BUNDLE_ICON_OPTIONS.map(opt => (
+                <button key={opt.path} onClick={() => onSelect(opt.path)}
+                  className={cn(
+                    'flex flex-col items-center gap-0.5 p-1.5 rounded-lg border transition-all hover:border-primary/60',
+                    current === opt.path ? 'border-primary bg-primary/10' : 'border-border bg-secondary/30',
+                  )}>
+                  <Image src={opt.path} alt={opt.label} width={36} height={36} className="object-contain" />
+                  <span className="text-[9px] text-muted-foreground text-center leading-tight">{opt.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Input placeholder="Or paste a custom image URL..." value={custom}
+              onChange={e => setCustom(e.target.value)} className="text-sm" />
+            <Button size="sm" onClick={() => { if (custom.trim()) onSelect(custom.trim()) }}
+              disabled={!custom.trim()}>Use URL</Button>
+          </div>
+          {current && (
+            <div className="flex items-center gap-3">
+              <Image src={current} alt="current" width={48} height={48} className="object-contain rounded" />
+              <span className="text-xs text-muted-foreground">Current icon</span>
+              <Button variant="ghost" size="sm" className="text-xs text-red-400 hover:text-red-300"
+                onClick={() => onSelect('')}>Remove</Button>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/* ================================================================== */
+/*  FORGE: ITEM DETAILS PANEL                                          */
+/* ================================================================== */
+
+function ItemDetailsPanel({
+  item, set, onEdit, onDelete,
+}: {
+  item: ForgeItem
+  set: EquipmentSet | null
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  const rc = RARITY_CONFIG[item.rarity]
+  const [setOpen, setSetOpen] = useState(false)
+
+  return (
+    <div className="flex flex-col h-full space-y-3 overflow-y-auto pr-1">
+      <h2 className={cn('text-xl font-bold leading-tight', rc.nameCls)}>{item.name}</h2>
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className={cn('px-2 py-0.5 rounded text-xs font-bold uppercase', rc.badgeBg, rc.badgeText)}>
+          {rc.label}
+        </span>
+        <span className="text-sm text-foreground font-semibold">Equipment Level {item.equipmentLevel}</span>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Equipment Slot: <span className="text-foreground">{SLOT_CONFIG[item.slot].label}</span>
+      </p>
+      {item.attributes.length > 0 && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Equipment Attributes</p>
+          {item.attributes.map((attr, i) => {
+            const ac = ATTRIBUTE_COLORS[attr.color]
+            return (
+              <div key={i} className="flex items-center gap-2">
+                <div className={cn('h-2 w-2 rounded-full flex-shrink-0', ac.dot)} />
+                <span className="text-sm text-foreground">{attr.label}</span>
+                <span className={cn('text-sm font-bold ml-auto', ac.text)}>{attr.value}</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      {item.specialTalent && (
+        <div className="space-y-1.5">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Special Talent</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">{item.specialTalent}</p>
+        </div>
+      )}
+      {item.iconicAttributes && item.iconicAttributes.length > 0 && (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Iconic Attributes</p>
+            <AlertCircle className="h-3 w-3 text-muted-foreground/50" />
+          </div>
+          {item.iconicAttributes.map((ia, i) => (
+            <div key={i} className="flex items-start gap-2">
+              <span className="text-xs font-bold text-muted-foreground w-5 flex-shrink-0 mt-0.5">{ia.tier}</span>
+              <span className={cn('text-sm', ia.isSkill ? 'underline text-blue-300 cursor-pointer' : 'text-foreground')}>
+                {ia.description}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {set && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Set Effects</p>
+          <button onClick={() => setSetOpen(o => !o)}
+            className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-sm font-semibold text-white"
+            style={{ background: 'linear-gradient(90deg, #7c3aed, #a855f7)' }}>
+            <span>{set.name}</span>
+            {setOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </button>
+          {setOpen && (
+            <div className="space-y-1 pl-2">
+              {set.bonuses.map((b, i) => (
+                <p key={i} className="text-xs text-foreground">
+                  <span className="text-muted-foreground">{b.pieces} pieces: </span>
+                  <span className="font-semibold">{b.description}</span>
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      <div className="flex gap-2 mt-auto pt-2">
+        <Button size="sm" variant="outline" className="flex-1 gap-1.5 text-xs" onClick={onEdit}>
+          <Pencil className="h-3.5 w-3.5" /> Edit
+        </Button>
+        <Button size="sm" variant="outline"
+          className="gap-1.5 text-xs border-red-500/40 text-red-400 hover:bg-red-500/10 hover:border-red-500"
+          onClick={onDelete}>
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+/* ================================================================== */
+/*  FORGE: ITEM EDITOR MODAL                                           */
+/* ================================================================== */
+
+const BLANK_ITEM = (): ForgeItem => ({
+  id: uid(), name: '', slot: 'weapon', rarity: 'epic', equipmentLevel: 30,
+  canForge: false, iconUrl: '', attributes: [], specialTalent: '',
+  iconicAttributes: [], materials: [], goldCost: 0,
+})
+
+function ItemEditorModal({
+  item, sets, onSave, onClose,
+}: { item: ForgeItem | null; sets: EquipmentSet[]; onSave: (item: ForgeItem) => void; onClose: () => void }) {
+  const [form, setForm] = useState<ForgeItem>(() => item ? { ...item } : BLANK_ITEM())
+  const [showIconPicker, setShowIconPicker] = useState(false)
+  const up = (patch: Partial<ForgeItem>) => setForm(f => ({ ...f, ...patch }))
+
+  const addAttr = () => up({ attributes: [...form.attributes, { label: '', value: '', color: 'green' }] })
+  const setAttr = (i: number, patch: Partial<EquipmentAttribute>) =>
+    up({ attributes: form.attributes.map((a, j) => j === i ? { ...a, ...patch } : a) })
+  const removeAttr = (i: number) => up({ attributes: form.attributes.filter((_, j) => j !== i) })
+
+  const addIconic = () => {
+    const tiers: IconicAttribute['tier'][] = ['I', 'II', 'III', 'IV', 'V']
+    const next = tiers[form.iconicAttributes?.length ?? 0] ?? 'I'
+    up({ iconicAttributes: [...(form.iconicAttributes ?? []), { tier: next, description: '', isSkill: false }] })
+  }
+  const setIconic = (i: number, patch: Partial<IconicAttribute>) =>
+    up({ iconicAttributes: (form.iconicAttributes ?? []).map((a, j) => j === i ? { ...a, ...patch } : a) })
+  const removeIconic = (i: number) =>
+    up({ iconicAttributes: (form.iconicAttributes ?? []).filter((_, j) => j !== i) })
+
+  const addMat = () => up({ materials: [...form.materials, { materialId: 'epic_mat', amount: 1 }] })
+  const setMat = (i: number, patch: Partial<ForgeMaterial>) =>
+    up({ materials: form.materials.map((m, j) => j === i ? { ...m, ...patch } : m) })
+  const removeMat = (i: number) => up({ materials: form.materials.filter((_, j) => j !== i) })
+
+  const canSave = form.name.trim().length > 0
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{item ? 'Edit Equipment' : 'Add Equipment'}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-5 pr-1">
+          <div className="flex gap-3 items-start">
+            <div className="flex-1 space-y-1.5">
+              <Label className="text-xs">Equipment Name</Label>
+              <Input value={form.name} onChange={e => up({ name: e.target.value })}
+                placeholder="e.g. Lance of the Hellish Wasteland" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Icon</Label>
+              <button onClick={() => setShowIconPicker(true)}
+                className="flex h-12 w-12 items-center justify-center rounded-lg border-2 border-dashed border-border hover:border-primary/60 transition-colors overflow-hidden bg-secondary/30">
+                {form.iconUrl
+                  ? <Image src={form.iconUrl} alt="icon" width={44} height={44} className="object-contain" />
+                  : <Plus className="h-5 w-5 text-muted-foreground" />}
+              </button>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Slot</Label>
+              <Select value={form.slot} onValueChange={v => up({ slot: v as ForgeSlot })}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(SLOT_CONFIG) as ForgeSlot[]).map(s => (
+                    <SelectItem key={s} value={s}>{SLOT_CONFIG[s].label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Rarity</Label>
+              <Select value={form.rarity} onValueChange={v => up({ rarity: v as ForgeRarity })}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {(['common', 'uncommon', 'rare', 'epic', 'legendary'] as ForgeRarity[]).map(r => (
+                    <SelectItem key={r} value={r}>{RARITY_CONFIG[r].label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Equipment Level</Label>
+              <Input type="number" min={1} max={100} value={form.equipmentLevel}
+                onChange={e => up({ equipmentLevel: Number(e.target.value) || 1 })} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Set (optional)</Label>
+              <Select value={form.setId ?? 'none'} onValueChange={v => up({ setId: v === 'none' ? undefined : v })}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No Set</SelectItem>
+                  {sets.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Can Forge?</Label>
+              <div className="flex items-center gap-3 h-9">
+                <button onClick={() => up({ canForge: !form.canForge })}
+                  className={cn('relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                    form.canForge ? 'bg-green-600' : 'bg-secondary')}>
+                  <span className={cn('inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
+                    form.canForge ? 'translate-x-6' : 'translate-x-1')} />
+                </button>
+                <span className="text-sm text-muted-foreground">
+                  {form.canForge ? 'Yes — shows "Can Forge" badge' : 'No'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold">Equipment Attributes</Label>
+              <Button size="sm" variant="outline" className="h-6 text-xs gap-1 px-2" onClick={addAttr}>
+                <Plus className="h-3 w-3" /> Add
+              </Button>
+            </div>
+            {form.attributes.map((attr, i) => (
+              <div key={i} className="flex gap-2 items-center">
+                <Input value={attr.label} onChange={e => setAttr(i, { label: e.target.value })}
+                  placeholder="Cavalry Attack" className="flex-1 h-8 text-sm" />
+                <Input value={attr.value} onChange={e => setAttr(i, { value: e.target.value })}
+                  placeholder="+20%" className="w-20 h-8 text-sm" />
+                <Select value={attr.color} onValueChange={v => setAttr(i, { color: v as AttributeColor })}>
+                  <SelectTrigger className="w-24 h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(ATTRIBUTE_COLORS) as AttributeColor[]).map(c => (
+                      <SelectItem key={c} value={c}>
+                        <div className="flex items-center gap-1.5">
+                          <div className={cn('h-2.5 w-2.5 rounded-full', ATTRIBUTE_COLORS[c].dot)} />
+                          <span className="capitalize">{c}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <button onClick={() => removeAttr(i)} className="text-muted-foreground hover:text-red-400">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold">Special Talent (optional)</Label>
+            <Textarea value={form.specialTalent ?? ''} onChange={e => up({ specialTalent: e.target.value })}
+              placeholder="When forging a piece of equipment, it may gain a special talent effect..."
+              rows={3} className="text-sm resize-none" />
+          </div>
+
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold">Iconic Attributes (optional)</Label>
+              <Button size="sm" variant="outline" className="h-6 text-xs gap-1 px-2" onClick={addIconic}
+                disabled={(form.iconicAttributes?.length ?? 0) >= 5}>
+                <Plus className="h-3 w-3" /> Add
+              </Button>
+            </div>
+            {(form.iconicAttributes ?? []).map((ia, i) => (
+              <div key={i} className="flex gap-2 items-center">
+                <span className="text-xs font-bold text-muted-foreground w-5 text-center flex-shrink-0">{ia.tier}</span>
+                <Input value={ia.description} onChange={e => setIconic(i, { description: e.target.value })}
+                  placeholder="Siege Unit Base Attack +1" className="flex-1 h-8 text-sm" />
+                <button onClick={() => setIconic(i, { isSkill: !ia.isSkill })} title="Toggle as skill"
+                  className={cn('text-xs px-2 h-8 rounded border transition-colors',
+                    ia.isSkill
+                      ? 'border-blue-500 text-blue-400 bg-blue-500/10'
+                      : 'border-border text-muted-foreground')}>
+                  Skill
+                </button>
+                <button onClick={() => removeIconic(i)} className="text-muted-foreground hover:text-red-400">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold">Materials Needed</Label>
+              <Button size="sm" variant="outline" className="h-6 text-xs gap-1 px-2" onClick={addMat}>
+                <Plus className="h-3 w-3" /> Add
+              </Button>
+            </div>
+            {form.materials.map((mat, i) => {
+              const def = FORGE_MATERIAL_DEFS.find(d => d.id === mat.materialId)
+              return (
+                <div key={i} className="flex gap-2 items-center">
+                  {def && (
+                    <Image src={def.iconPath} alt={def.name} width={28} height={28}
+                      className="object-contain flex-shrink-0 rounded" />
+                  )}
+                  <Select value={mat.materialId} onValueChange={v => setMat(i, { materialId: v })}>
+                    <SelectTrigger className="flex-1 h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {FORGE_MATERIAL_DEFS.map(d => (
+                        <SelectItem key={d.id} value={d.id}>
+                          <div className="flex items-center gap-2">
+                            <Image src={d.iconPath} alt={d.name} width={18} height={18} className="object-contain" />
+                            <span>{d.name}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input type="number" min={1} value={mat.amount}
+                    onChange={e => setMat(i, { amount: Number(e.target.value) || 1 })}
+                    className="w-20 h-8 text-sm" placeholder="20" />
+                  <button onClick={() => removeMat(i)} className="text-muted-foreground hover:text-red-400">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold">Gold Cost</Label>
+            <div className="flex items-center gap-2">
+              <Image src="/images/bundle/gold.png" alt="gold" width={24} height={24} className="object-contain" />
+              <Input type="number" min={0} value={form.goldCost}
+                onChange={e => up({ goldCost: Number(e.target.value) || 0 })}
+                className="w-40 text-sm" placeholder="5000000" />
+            </div>
+          </div>
+
+          <div className="flex gap-2 justify-end pt-2">
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
+            <Button onClick={() => onSave(form)} disabled={!canSave} className="gap-1.5">
+              <Save className="h-4 w-4" /> Save Equipment
+            </Button>
+          </div>
+        </div>
+
+        {showIconPicker && (
+          <IconPickerModal current={form.iconUrl}
+            onSelect={v => { up({ iconUrl: v }); setShowIconPicker(false) }}
+            onClose={() => setShowIconPicker(false)} />
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/* ================================================================== */
+/*  FORGE: SET MANAGER MODAL                                           */
+/* ================================================================== */
+
+const BLANK_SET = (): EquipmentSet => ({ id: uid(), name: '', bonuses: [] })
+
+function SetManagerModal({
+  sets, onSaveSets, onClose,
+}: { sets: EquipmentSet[]; onSaveSets: (sets: EquipmentSet[]) => void; onClose: () => void }) {
+  const [localSets, setLocalSets] = useState<EquipmentSet[]>(sets)
+  const [editing, setEditing] = useState<EquipmentSet | null>(null)
+
+  const saveEditing = () => {
+    if (!editing || !editing.name.trim()) return
+    const exists = localSets.some(s => s.id === editing.id)
+    setLocalSets(exists
+      ? localSets.map(s => s.id === editing.id ? editing : s)
+      : [...localSets, editing])
+    setEditing(null)
+  }
+  const removeSet = (id: string) => setLocalSets(localSets.filter(s => s.id !== id))
+  const upEditing = (patch: Partial<EquipmentSet>) => setEditing(e => e ? { ...e, ...patch } : e)
+  const addBonus = () => upEditing({ bonuses: [...(editing?.bonuses ?? []), { pieces: 2, description: '' }] })
+  const setBonus = (i: number, patch: { pieces?: number; description?: string }) =>
+    upEditing({ bonuses: (editing?.bonuses ?? []).map((b, j) => j === i ? { ...b, ...patch } : b) })
+  const removeBonus = (i: number) =>
+    upEditing({ bonuses: (editing?.bonuses ?? []).filter((_, j) => j !== i) })
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Layers className="h-4 w-4 text-primary" /> Manage Equipment Sets
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          {localSets.length > 0 && (
+            <div className="space-y-2">
+              {localSets.map(s => (
+                <div key={s.id}
+                  className="flex items-center gap-2 rounded-lg border border-border bg-secondary/20 px-3 py-2">
+                  <Layers className="h-4 w-4 text-primary flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{s.name}</p>
+                    <p className="text-[10px] text-muted-foreground">{s.bonuses.length} bonus(es)</p>
+                  </div>
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0"
+                    onClick={() => setEditing({ ...s })}>
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button size="sm" variant="ghost"
+                    className="h-7 w-7 p-0 text-red-400 hover:text-red-300"
+                    onClick={() => removeSet(s.id)}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+          {!editing && (
+            <Button variant="outline" className="w-full gap-1.5 text-sm"
+              onClick={() => setEditing(BLANK_SET())}>
+              <Plus className="h-4 w-4" /> Add New Set
+            </Button>
+          )}
+          {editing && (
+            <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+              <p className="text-sm font-semibold text-foreground">
+                {localSets.some(s => s.id === editing.id) ? 'Edit Set' : 'New Set'}
+              </p>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Set Name</Label>
+                <Input value={editing.name} onChange={e => upEditing({ name: e.target.value })}
+                  placeholder="e.g. Hellish Wasteland Set" />
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Set Bonuses</Label>
+                  <Button size="sm" variant="outline" className="h-6 text-xs gap-1 px-2" onClick={addBonus}>
+                    <Plus className="h-3 w-3" /> Add Bonus
+                  </Button>
+                </div>
+                {editing.bonuses.map((b, i) => (
+                  <div key={i} className="flex gap-2 items-center">
+                    <div className="flex items-center gap-1">
+                      <Input type="number" min={1} value={b.pieces}
+                        onChange={e => setBonus(i, { pieces: Number(e.target.value) || 1 })}
+                        className="w-16 h-8 text-sm" />
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">pc:</span>
+                    </div>
+                    <Input value={b.description} onChange={e => setBonus(i, { description: e.target.value })}
+                      placeholder="Troop Health +3%" className="flex-1 h-8 text-sm" />
+                    <button onClick={() => removeBonus(i)}
+                      className="text-muted-foreground hover:text-red-400">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="ghost" size="sm" onClick={() => setEditing(null)}>Cancel</Button>
+                <Button size="sm" onClick={saveEditing}
+                  disabled={!editing.name.trim()} className="gap-1.5">
+                  <Check className="h-3.5 w-3.5" /> Save Set
+                </Button>
+              </div>
+            </div>
+          )}
+          <div className="flex gap-2 justify-end pt-2">
+            <Button variant="outline" onClick={onClose}>Cancel</Button>
+            <Button onClick={() => { onSaveSets(localSets); onClose() }} className="gap-1.5">
+              <Save className="h-4 w-4" /> Save All Sets
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/* ================================================================== */
+/*  CALCULATOR: ITEM PICKER MODAL                                      */
 /* ================================================================== */
 
 function ItemPickerModal({
@@ -231,22 +787,24 @@ function ItemPickerModal({
 }: { slot: SlotKey; onSelect: (id: string) => void; onClose: () => void }) {
   const [search, setSearch] = useState('')
   const [rarityFilter, setRarityFilter] = useState<string>('All')
-
-  // Map accessory1/2 → accessory slot in data
-  const dataSlot = slot === 'accessory1' || slot === 'accessory2' ? 'accessory' : slot
+  const dataSlot = (slot === 'accessory1' || slot === 'accessory2') ? 'accessory' : slot
 
   const filtered = useMemo(() => {
     const base = EQUIPMENT_FORGE_SEED_ITEMS.filter(i => i.slot === dataSlot)
-    const byRarity = rarityFilter === 'All' ? base : base.filter(i => {
-      const q = i.rarity
-      const map: Record<string, string> = { common: 'Normal', uncommon: 'Advanced', rare: 'Elite', epic: 'Epic', legendary: 'Legendary' }
-      return map[q] === rarityFilter
-    })
+    const rarityMap: Record<string, string> = {
+      common: 'Normal', uncommon: 'Advanced', rare: 'Elite', epic: 'Epic', legendary: 'Legendary',
+    }
+    const byRarity = rarityFilter === 'All'
+      ? base
+      : base.filter(i => rarityMap[i.rarity] === rarityFilter)
     if (!search.trim()) return byRarity
     return byRarity.filter(i => i.name.toLowerCase().includes(search.toLowerCase()))
   }, [dataSlot, rarityFilter, search])
 
   const rarities = ['All', 'Legendary', 'Epic', 'Elite', 'Advanced', 'Normal']
+  const rarityMap: Record<string, string> = {
+    common: 'Normal', uncommon: 'Advanced', rare: 'Elite', epic: 'Epic', legendary: 'Legendary',
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -255,12 +813,15 @@ function ItemPickerModal({
         style={{ width: 700, maxHeight: '85vh' }}>
         <div className="flex items-center justify-between p-4 border-b border-border">
           <h3 className="text-base font-bold">Select {SLOT_LABELS[slot]}</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="h-5 w-5" />
+          </button>
         </div>
         <div className="p-3 border-b border-border flex flex-col gap-2">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search equipment..." className="pl-9 h-9" />
+            <Input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search equipment..." className="pl-9 h-9" />
           </div>
           <div className="flex gap-1 flex-wrap">
             {rarities.map(r => (
@@ -277,18 +838,22 @@ function ItemPickerModal({
         </div>
         <div className="overflow-y-auto p-3 grid grid-cols-4 gap-2 flex-1">
           {filtered.map(item => {
-            const qLabel = { common: 'Normal', uncommon: 'Advanced', rare: 'Elite', epic: 'Epic', legendary: 'Legendary' }[item.rarity] ?? 'Normal'
+            const qLabel = rarityMap[item.rarity] ?? 'Normal'
             return (
               <button key={item.id} onClick={() => { onSelect(item.id); onClose() }}
-                className={cn('flex flex-col items-center gap-1 p-2 rounded-lg border-2 text-left transition-all hover:scale-[1.03] hover:border-primary/60',
-                  RARITY_BG[qLabel], RARITY_BORDER[qLabel]
+                className={cn(
+                  'flex flex-col items-center gap-1 p-2 rounded-lg border-2 text-left',
+                  'transition-all hover:scale-[1.03] hover:border-primary/60',
+                  RARITY_BG[qLabel], RARITY_BORDER[qLabel],
                 )}>
                 <div className="h-14 w-14 flex items-center justify-center">
                   {item.iconUrl
                     ? <Image src={item.iconUrl} alt={item.name} width={52} height={52} className="object-contain" />
                     : <div className="h-12 w-12 rounded bg-black/30" />}
                 </div>
-                <span className={cn('text-[10px] font-semibold text-center leading-tight', RARITY_COLORS[qLabel])}>{item.name}</span>
+                <span className={cn('text-[10px] font-semibold text-center leading-tight', RARITY_COLORS[qLabel])}>
+                  {item.name}
+                </span>
               </button>
             )
           })}
@@ -302,11 +867,11 @@ function ItemPickerModal({
 }
 
 /* ================================================================== */
-/*  LOADOUT GRID COMPONENT                                             */
+/*  CALCULATOR: LOADOUT GRID                                           */
 /* ================================================================== */
 
 function LoadoutGrid({
-  loadout, label, onSlotClick, onRemove, showRefined, showAwakenBadge, onToggleRefine, onSetAwaken, onContextMenu,
+  loadout, label, onSlotClick, onRemove, showRefined, showAwakenBadge, onContextMenu,
 }: {
   loadout: Loadout
   label?: string
@@ -314,52 +879,59 @@ function LoadoutGrid({
   onRemove: (slot: SlotKey) => void
   showRefined: boolean
   showAwakenBadge: boolean
-  onToggleRefine?: (slot: SlotKey) => void
-  onSetAwaken?: (slot: SlotKey) => void
   onContextMenu?: (e: React.MouseEvent, slot: SlotKey) => void
 }) {
+  const rarityMap: Record<string, string> = {
+    common: 'Normal', uncommon: 'Advanced', rare: 'Elite', epic: 'Epic', legendary: 'Legendary',
+  }
   return (
     <div>
-      {label && <p className="text-xs font-bold text-muted-foreground text-center mb-2 uppercase tracking-wide">{label}</p>}
+      {label && (
+        <p className="text-xs font-bold text-muted-foreground text-center mb-2 uppercase tracking-wide">{label}</p>
+      )}
       <div className="grid grid-cols-4 gap-1.5">
         {SLOT_ORDER.map(slot => {
           const item = loadout[slot]
           const data = item ? EQUIPMENT_FORGE_SEED_ITEMS.find(d => d.id === item.id) : null
-          const qLabel = data ? ({ common: 'Normal', uncommon: 'Advanced', rare: 'Elite', epic: 'Epic', legendary: 'Legendary' }[data.rarity] ?? 'Normal') : null
-
+          const qLabel = data ? (rarityMap[data.rarity] ?? 'Normal') : null
           return (
             <div key={slot} className="flex flex-col items-center gap-0.5">
               <div
                 className={cn(
-                  'relative h-16 w-16 rounded-lg border-2 cursor-pointer transition-all hover:brightness-110 overflow-hidden flex items-center justify-center',
+                  'relative h-16 w-16 rounded-lg border-2 cursor-pointer',
+                  'transition-all hover:brightness-110 overflow-hidden flex items-center justify-center',
                   item && qLabel ? `${RARITY_BG[qLabel]} ${RARITY_BORDER[qLabel]}` : 'border-border bg-secondary/30',
                   item?.refined && showRefined ? 'ring-2 ring-amber-400/60' : '',
                 )}
                 onClick={() => onSlotClick(slot)}
-                onContextMenu={e => { if (item && onContextMenu) { e.preventDefault(); onContextMenu(e, slot) } }}
+                onContextMenu={e => {
+                  if (item && onContextMenu) { e.preventDefault(); onContextMenu(e, slot) }
+                }}
               >
-                <Image
-                  src={data?.iconUrl ?? SLOT_PLACEHOLDERS[slot]}
-                  alt={data?.name ?? slot}
-                  width={52} height={52}
-                  className="object-contain"
-                />
+                <Image src={data?.iconUrl ?? SLOT_PLACEHOLDERS[slot]} alt={data?.name ?? slot}
+                  width={52} height={52} className="object-contain" />
                 {item?.awakenLevel && item.awakenLevel > 0 && showAwakenBadge && (
                   <div className="absolute top-0.5 left-0.5 bg-purple-900/90 text-purple-200 text-[8px] font-bold rounded px-0.5 leading-4">
                     {toRoman(item.awakenLevel)}
                   </div>
                 )}
                 {item?.refined && showRefined && (
-                  <div className="absolute bottom-0 right-0 bg-amber-600/90 text-[7px] font-bold text-white px-0.5 rounded-tl">R</div>
+                  <div className="absolute bottom-0 right-0 bg-amber-600/90 text-[7px] font-bold text-white px-0.5 rounded-tl">
+                    R
+                  </div>
                 )}
                 {item && (
                   <button
                     onClick={e => { e.stopPropagation(); onRemove(slot) }}
                     className="absolute top-0 right-0 h-4 w-4 bg-black/70 text-red-400 flex items-center justify-center rounded-bl opacity-0 hover:opacity-100 transition-opacity text-xs"
-                  >×</button>
+                  >
+                    ×
+                  </button>
                 )}
               </div>
-              <span className="text-[9px] text-muted-foreground text-center leading-tight w-16 truncate text-center">{data?.name ?? SLOT_LABELS[slot]}</span>
+              <span className="text-[9px] text-muted-foreground text-center leading-tight w-16 truncate">
+                {data?.name ?? SLOT_LABELS[slot]}
+              </span>
             </div>
           )
         })}
@@ -369,7 +941,7 @@ function LoadoutGrid({
 }
 
 /* ================================================================== */
-/*  STATS SUMMARY                                                      */
+/*  CALCULATOR: STATS SUMMARY                                          */
 /* ================================================================== */
 
 function StatsSummary({ result }: { result: TotalStats }) {
@@ -383,10 +955,10 @@ function StatsSummary({ result }: { result: TotalStats }) {
     grouped[t].push(key)
   })
 
-  // sort: troop type groups by total value desc, within group: attack→defense→health
-  const statPriority = (k: string) => k.includes('attack') ? 0 : k.includes('defense') ? 1 : k.includes('health') ? 2 : 3
-  const groupOrder = ['infantry', 'cavalry', 'archer', 'siege', 'general']
+  const statPriority = (k: string) =>
+    k.includes('attack') ? 0 : k.includes('defense') ? 1 : k.includes('health') ? 2 : 3
 
+  const groupOrder = ['infantry', 'cavalry', 'archer', 'siege', 'general']
   const specialKeys = Object.keys(result.special).filter(k => result.special[k])
   const hasIconic = Object.values(result.iconicBonusesByTier).some(t => Object.keys(t).length > 0)
 
@@ -395,23 +967,33 @@ function StatsSummary({ result }: { result: TotalStats }) {
       {groupOrder.filter(g => grouped[g]?.length).map(group => (
         <div key={group}>
           <div className="flex items-center gap-1 mb-0.5">
-            {TROOP_ICONS[group] && <Image src={TROOP_ICONS[group]} alt={group} width={14} height={14} className="object-contain" />}
-            <span className={cn('text-[10px] font-bold uppercase tracking-wider', TROOP_COLORS[group])}>{group}</span>
+            {TROOP_ICONS[group] && (
+              <Image src={TROOP_ICONS[group]} alt={group} width={14} height={14} className="object-contain" />
+            )}
+            <span className={cn('text-[10px] font-bold uppercase tracking-wider', TROOP_COLORS[group])}>
+              {group}
+            </span>
           </div>
-          {grouped[group].sort((a, b) => statPriority(a) - statPriority(b)).map(key => (
-            <div key={key} className="flex items-center justify-between px-1 py-0.5 rounded text-xs hover:bg-secondary/30">
-              <span className="text-muted-foreground">{formatStatName(key)}</span>
-              <span className={cn('font-bold', TROOP_COLORS[group])}>+{result.stats[key].toFixed(1).replace('.0', '')}%</span>
-            </div>
-          ))}
+          {grouped[group]
+            .sort((a, b) => statPriority(a) - statPriority(b))
+            .map(key => (
+              <div key={key}
+                className="flex items-center justify-between px-1 py-0.5 rounded text-xs hover:bg-secondary/30">
+                <span className="text-muted-foreground">{formatStatName(key)}</span>
+                <span className={cn('font-bold', TROOP_COLORS[group])}>
+                  +{result.stats[key].toFixed(1).replace('.0', '')}%
+                </span>
+              </div>
+            ))}
         </div>
       ))}
-
       {(specialKeys.length > 0 || hasIconic) && (
         <div>
-          <button onClick={() => setShowSpecial(v => !v)}
-            className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground w-full">
-            Extra Bonuses {showSpecial ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          <button
+            onClick={() => setShowSpecial(v => !v)}
+            className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground w-full"
+          >
+            Extra Bonuses{showSpecial ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
           </button>
           {showSpecial && (
             <div className="mt-1 space-y-0.5">
@@ -432,7 +1014,6 @@ function StatsSummary({ result }: { result: TotalStats }) {
           )}
         </div>
       )}
-
       {Object.keys(grouped).length === 0 && specialKeys.length === 0 && (
         <p className="text-xs text-muted-foreground text-center py-4">Equip items to see stats</p>
       )}
@@ -441,17 +1022,15 @@ function StatsSummary({ result }: { result: TotalStats }) {
 }
 
 /* ================================================================== */
-/*  MATERIALS SUMMARY                                                  */
+/*  CALCULATOR: MATERIALS SUMMARY                                      */
 /* ================================================================== */
 
 function MaterialsSummary({ loadout }: { loadout: Loadout }) {
   const mats = calcLoadoutMaterials(loadout)
   const hasAny = MATS.some(m => mats[m] > 0) || mats.gold > 0
-
-  if (!hasAny) return (
-    <p className="text-xs text-muted-foreground text-center py-4">Equip items to see materials</p>
-  )
-
+  if (!hasAny) {
+    return <p className="text-xs text-muted-foreground text-center py-4">Equip items to see materials</p>
+  }
   return (
     <div className="space-y-2">
       {MATS.filter(m => mats[m] > 0).map(mat => (
@@ -463,18 +1042,24 @@ function MaterialsSummary({ loadout }: { loadout: Loadout }) {
               <span className="font-bold text-foreground">{mats[mat].toLocaleString()}</span>
             </div>
             <div className="h-1.5 rounded-full bg-secondary/50 overflow-hidden">
-              <div className="h-full rounded-full bg-gradient-to-r from-amber-700 to-amber-500" style={{ width: '100%' }} />
+              <div className="h-full rounded-full bg-gradient-to-r from-amber-700 to-amber-500"
+                style={{ width: '100%' }} />
             </div>
           </div>
         </div>
       ))}
       {mats.gold > 0 && (
         <div className="flex items-center gap-2 pt-1 border-t border-border">
-          <Image src="/images/equipment/mat_icons/gold_icon.webp" alt="Gold" width={28} height={28} className="object-contain flex-shrink-0" />
+          <Image src="/images/equipment/mat_icons/gold_icon.webp" alt="Gold" width={28} height={28}
+            className="object-contain flex-shrink-0" />
           <div className="flex-1">
             <div className="flex justify-between text-xs">
               <span className="text-muted-foreground">Gold</span>
-              <span className="font-bold text-yellow-400">{mats.gold >= 1_000_000 ? `${(mats.gold / 1_000_000).toFixed(1)}M` : mats.gold.toLocaleString()}</span>
+              <span className="font-bold text-yellow-400">
+                {mats.gold >= 1000000
+                  ? `${(mats.gold / 1000000).toFixed(1)}M`
+                  : mats.gold.toLocaleString()}
+              </span>
             </div>
           </div>
         </div>
@@ -484,7 +1069,7 @@ function MaterialsSummary({ loadout }: { loadout: Loadout }) {
 }
 
 /* ================================================================== */
-/*  COMPARE STATS TABLE                                                */
+/*  CALCULATOR: COMPARE STATS TABLE                                    */
 /* ================================================================== */
 
 function CompareStatsTable({ statsA, statsB }: { statsA: TotalStats; statsB: TotalStats }) {
@@ -501,10 +1086,11 @@ function CompareStatsTable({ statsA, statsB }: { statsA: TotalStats; statsB: Tot
     grouped[t].push(k)
   })
 
-  const statPriority = (k: string) => k.includes('attack') ? 0 : k.includes('defense') ? 1 : k.includes('health') ? 2 : 3
+  const statPriority = (k: string) =>
+    k.includes('attack') ? 0 : k.includes('defense') ? 1 : k.includes('health') ? 2 : 3
+
   const groupOrder = ['infantry', 'cavalry', 'archer', 'siege', 'general']
   const troopFilters = ['all', 'infantry', 'cavalry', 'archer', 'siege']
-
   const allSpecial = [...new Set([...Object.keys(statsA.special), ...Object.keys(statsB.special)])]
 
   const rows: { key: string; group: string; vA: number; vB: number }[] = []
@@ -518,12 +1104,15 @@ function CompareStatsTable({ statsA, statsB }: { statsA: TotalStats; statsB: Tot
   const visibleRows = filter === 'all' ? rows : rows.filter(r => r.group === filter)
 
   if (rows.length === 0 && allSpecial.length === 0) {
-    return <p className="text-sm text-muted-foreground text-center py-8">Equip items in both loadouts to compare stats</p>
+    return (
+      <p className="text-sm text-muted-foreground text-center py-8">
+        Equip items in both loadouts to compare stats
+      </p>
+    )
   }
 
   return (
     <div className="space-y-2">
-      {/* filter + toggle */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex gap-1 flex-wrap">
           {troopFilters.map(f => (
@@ -533,17 +1122,22 @@ function CompareStatsTable({ statsA, statsB }: { statsA: TotalStats; statsB: Tot
                   ? 'border-primary bg-primary/20 text-primary'
                   : 'border-border text-muted-foreground hover:text-foreground hover:bg-secondary/50'
               )}>
-              {f === 'all' ? 'All' : <span className="flex items-center gap-1">
-                {TROOP_ICONS[f] && <Image src={TROOP_ICONS[f]} alt={f} width={12} height={12} className="object-contain" />}
-                {f.charAt(0).toUpperCase() + f.slice(1)}
-              </span>}
+              {f === 'all' ? 'All' : (
+                <span className="flex items-center gap-1">
+                  {TROOP_ICONS[f] && (
+                    <Image src={TROOP_ICONS[f]} alt={f} width={12} height={12} className="object-contain" />
+                  )}
+                  {f.charAt(0).toUpperCase() + f.slice(1)}
+                </span>
+              )}
             </button>
           ))}
         </div>
         <button onClick={() => setShowExtra(v => !v)}
           className={cn('px-2.5 py-0.5 rounded text-xs font-medium border transition-colors',
-            showExtra ? 'border-cyan-500 bg-cyan-500/10 text-cyan-300' : 'border-border text-muted-foreground hover:text-foreground'
-          )}>
+            showExtra
+              ? 'border-cyan-500 bg-cyan-500/10 text-cyan-300'
+              : 'border-border text-muted-foreground hover:text-foreground')}>
           Extra Bonuses
         </button>
       </div>
@@ -559,17 +1153,28 @@ function CompareStatsTable({ statsA, statsB }: { statsA: TotalStats; statsB: Tot
           {visibleRows.map(({ key, group, vA, vB }) => {
             const delta = vB - vA
             return (
-              <div key={key} className="grid grid-cols-[1fr_80px_80px_80px] px-3 py-1 border-b border-border/40 hover:bg-secondary/20 text-xs">
+              <div key={key}
+                className="grid grid-cols-[1fr_80px_80px_80px] px-3 py-1 border-b border-border/40 hover:bg-secondary/20 text-xs">
                 <span className="flex items-center gap-1 text-muted-foreground">
-                  {TROOP_ICONS[group] && <Image src={TROOP_ICONS[group]} alt={group} width={11} height={11} className="object-contain flex-shrink-0" />}
+                  {TROOP_ICONS[group] && (
+                    <Image src={TROOP_ICONS[group]} alt={group} width={11} height={11}
+                      className="object-contain flex-shrink-0" />
+                  )}
                   {formatStatName(key)}
                 </span>
-                <span className="text-center text-blue-300 font-medium">{vA > 0 ? `+${vA.toFixed(1).replace('.0', '')}%` : '—'}</span>
-                <span className="text-center text-orange-300 font-medium">{vB > 0 ? `+${vB.toFixed(1).replace('.0', '')}%` : '—'}</span>
-                <span className={cn('text-center font-bold flex items-center justify-center gap-0.5',
-                  delta > 0 ? 'text-green-400' : delta < 0 ? 'text-red-400' : 'text-muted-foreground'
+                <span className="text-center text-blue-300 font-medium">
+                  {vA > 0 ? `+${vA.toFixed(1).replace('.0', '')}%` : '-'}
+                </span>
+                <span className="text-center text-orange-300 font-medium">
+                  {vB > 0 ? `+${vB.toFixed(1).replace('.0', '')}%` : '-'}
+                </span>
+                <span className={cn(
+                  'text-center font-bold flex items-center justify-center gap-0.5',
+                  delta > 0 ? 'text-green-400' : delta < 0 ? 'text-red-400' : 'text-muted-foreground',
                 )}>
-                  {delta > 0 ? <ArrowUp className="h-2.5 w-2.5" /> : delta < 0 ? <ArrowDown className="h-2.5 w-2.5" /> : <Minus className="h-2.5 w-2.5" />}
+                  {delta > 0 ? <ArrowUp className="h-2.5 w-2.5" />
+                    : delta < 0 ? <ArrowDown className="h-2.5 w-2.5" />
+                    : <Minus className="h-2.5 w-2.5" />}
                   {delta !== 0 ? `${Math.abs(delta).toFixed(1).replace('.0', '')}%` : ''}
                 </span>
               </div>
@@ -593,10 +1198,11 @@ function CompareStatsTable({ statsA, statsB }: { statsA: TotalStats; statsB: Tot
             <p className="text-xs text-muted-foreground text-center py-4">No extra bonuses</p>
           )}
           {allSpecial.map((k, i) => (
-            <div key={i} className="grid grid-cols-[1fr_80px_80px_80px] px-3 py-1 border-b border-border/40 text-xs">
+            <div key={i}
+              className="grid grid-cols-[1fr_80px_80px_80px] px-3 py-1 border-b border-border/40 text-xs">
               <span className="text-muted-foreground pr-2">{k}</span>
-              <span className="text-center">{statsA.special[k] ? '✓' : ''}</span>
-              <span className="text-center">{statsB.special[k] ? '✓' : ''}</span>
+              <span className="text-center">{statsA.special[k] ? 'Y' : ''}</span>
+              <span className="text-center">{statsB.special[k] ? 'Y' : ''}</span>
               <span />
             </div>
           ))}
@@ -607,10 +1213,12 @@ function CompareStatsTable({ statsA, statsB }: { statsA: TotalStats; statsB: Tot
 }
 
 /* ================================================================== */
-/*  AWAKEN MODAL                                                       */
+/*  CALCULATOR: AWAKEN MODAL                                           */
 /* ================================================================== */
 
-function AwakenModal({ itemName, current, onSet, onClose }: { itemName: string; current: number; onSet: (level: number) => void; onClose: () => void }) {
+function AwakenModal({
+  itemName, current, onSet, onClose,
+}: { itemName: string; current: number; onSet: (level: number) => void; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
@@ -621,9 +1229,10 @@ function AwakenModal({ itemName, current, onSet, onClose }: { itemName: string; 
           {[0, 1, 2, 3, 4, 5].map(lvl => (
             <button key={lvl} onClick={() => { onSet(lvl); onClose() }}
               className={cn('h-8 rounded-lg text-sm font-bold border transition-colors',
-                current === lvl ? 'border-primary bg-primary/20 text-primary' : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground'
-              )}>
-              {lvl === 0 ? '–' : toRoman(lvl)}
+                current === lvl
+                  ? 'border-primary bg-primary/20 text-primary'
+                  : 'border-border text-muted-foreground hover:border-primary/50 hover:text-foreground')}>
+              {lvl === 0 ? '-' : toRoman(lvl)}
             </button>
           ))}
         </div>
@@ -633,7 +1242,7 @@ function AwakenModal({ itemName, current, onSet, onClose }: { itemName: string; 
 }
 
 /* ================================================================== */
-/*  CALCULATOR TAB                                                     */
+/*  CALCULATOR: CALCULATOR TAB                                         */
 /* ================================================================== */
 
 function CalculatorTab({
@@ -657,34 +1266,32 @@ function CalculatorTab({
     setContextMenu({ slot, x: e.clientX, y: e.clientY })
   }, [loadout])
 
-  const slotData = contextMenu ? EQUIPMENT_FORGE_SEED_ITEMS.find(d => d.id === loadout[contextMenu.slot]?.id) : null
-
   return (
     <div className="flex gap-4">
-      {/* Left: Loadout */}
       <div className="flex-shrink-0 w-[340px]">
         <div className="rounded-xl border border-border bg-secondary/10 p-4">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-bold">Equipment Loadout</p>
-            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground hover:text-red-400"
+            <Button variant="ghost" size="sm"
+              className="h-7 text-xs gap-1 text-muted-foreground hover:text-red-400"
               onClick={onClear}>
               <RotateCcw className="h-3 w-3" /> Clear
             </Button>
           </div>
-          <LoadoutGrid
-            loadout={loadout} onSlotClick={onSlotClick} onRemove={onRemove}
-            showRefined showAwakenBadge
-            onToggleRefine={onToggleRefine} onSetAwaken={onSetAwaken}
-            onContextMenu={handleSlotContext}
-          />
-          <p className="text-[10px] text-muted-foreground text-center mt-3">Click slot to equip · Right-click for options</p>
+          <LoadoutGrid loadout={loadout} onSlotClick={onSlotClick} onRemove={onRemove}
+            showRefined showAwakenBadge onContextMenu={handleSlotContext} />
+          <p className="text-[10px] text-muted-foreground text-center mt-3">
+            Click slot to equip - Right-click for options
+          </p>
         </div>
-        {/* Right-click context menu */}
-        {contextMenu && slotData && (
+
+        {contextMenu && loadout[contextMenu.slot] && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setContextMenu(null)} />
-            <div className="fixed z-50 bg-background border border-border rounded-lg shadow-xl py-1 text-sm w-44"
-              style={{ left: contextMenu.x, top: contextMenu.y }}>
+            <div
+              className="fixed z-50 bg-background border border-border rounded-lg shadow-xl py-1 text-sm w-44"
+              style={{ left: contextMenu.x, top: contextMenu.y }}
+            >
               <button className="w-full text-left px-3 py-1.5 hover:bg-secondary/50"
                 onClick={() => { onToggleRefine(contextMenu.slot); setContextMenu(null) }}>
                 {loadout[contextMenu.slot]?.refined ? 'Remove Refine' : 'Mark as Refined'}
@@ -702,14 +1309,16 @@ function CalculatorTab({
         )}
       </div>
 
-      {/* Right: Stats + Materials */}
       <div className="flex-1 min-w-0">
         <div className="rounded-xl border border-border bg-secondary/10">
           <div className="flex border-b border-border">
             {(['stats', 'materials'] as const).map(p => (
               <button key={p} onClick={() => setPanel(p)}
-                className={cn('flex-1 py-2.5 text-xs font-semibold uppercase tracking-wide transition-colors capitalize',
-                  panel === p ? 'text-foreground border-b-2 border-primary' : 'text-muted-foreground hover:text-foreground'
+                className={cn(
+                  'flex-1 py-2.5 text-xs font-semibold uppercase tracking-wide transition-colors capitalize',
+                  panel === p
+                    ? 'text-foreground border-b-2 border-primary'
+                    : 'text-muted-foreground hover:text-foreground',
                 )}>
                 {p}
               </button>
@@ -725,7 +1334,7 @@ function CalculatorTab({
 }
 
 /* ================================================================== */
-/*  COMPARE TAB                                                        */
+/*  CALCULATOR: COMPARE TAB                                            */
 /* ================================================================== */
 
 function CompareTab({ kvkSeason }: { kvkSeason: KvkSeason }) {
@@ -745,24 +1354,18 @@ function CompareTab({ kvkSeason }: { kvkSeason: KvkSeason }) {
     const setter = lo === 'A' ? setLoadoutA : setLoadoutB
     setter(prev => { const n = { ...prev }; delete n[slot]; return n })
   }
-  const toggleRefine = (lo: 'A' | 'B', slot: SlotKey) => {
-    const setter = lo === 'A' ? setLoadoutA : setLoadoutB
-    setter(prev => prev[slot] ? { ...prev, [slot]: { ...prev[slot]!, refined: !prev[slot]!.refined } } : prev)
-  }
-  const setAwaken = (lo: 'A' | 'B', slot: SlotKey, level: number) => {
-    const setter = lo === 'A' ? setLoadoutA : setLoadoutB
-    setter(prev => prev[slot] ? { ...prev, [slot]: { ...prev[slot]!, awakenLevel: level } } : prev)
-  }
   const clearLoadout = (lo: 'A' | 'B') => (lo === 'A' ? setLoadoutA : setLoadoutB)({})
 
   const awakenItem = awakenFor
-    ? EQUIPMENT_FORGE_SEED_ITEMS.find(d => d.id === (awakenFor.loadout === 'A' ? loadoutA : loadoutB)[awakenFor.slot]?.id)
+    ? EQUIPMENT_FORGE_SEED_ITEMS.find(d =>
+        d.id === (awakenFor.loadout === 'A' ? loadoutA : loadoutB)[awakenFor.slot]?.id)
     : null
-  const awakenCurrent = awakenFor ? ((awakenFor.loadout === 'A' ? loadoutA : loadoutB)[awakenFor.slot]?.awakenLevel ?? 0) : 0
+  const awakenCurrent = awakenFor
+    ? ((awakenFor.loadout === 'A' ? loadoutA : loadoutB)[awakenFor.slot]?.awakenLevel ?? 0)
+    : 0
 
   return (
     <div className="space-y-4">
-      {/* Two loadout grids */}
       <div className="grid grid-cols-2 gap-4">
         {(['A', 'B'] as const).map(lo => {
           const loadout = lo === 'A' ? loadoutA : loadoutB
@@ -772,22 +1375,18 @@ function CompareTab({ kvkSeason }: { kvkSeason: KvkSeason }) {
                 <p className={cn('text-sm font-bold', lo === 'A' ? 'text-blue-400' : 'text-orange-400')}>
                   Loadout {lo}
                 </p>
-                <div className="flex gap-1">
-                  <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 text-muted-foreground hover:text-red-400 px-1.5"
-                    onClick={() => clearLoadout(lo)}>
-                    <RotateCcw className="h-3 w-3" />
-                  </Button>
-                </div>
+                <Button variant="ghost" size="sm"
+                  className="h-6 text-xs gap-1 text-muted-foreground hover:text-red-400 px-1.5"
+                  onClick={() => clearLoadout(lo)}>
+                  <RotateCcw className="h-3 w-3" />
+                </Button>
               </div>
               <LoadoutGrid
                 loadout={loadout}
                 onSlotClick={slot => setPickerFor({ loadout: lo, slot })}
                 onRemove={slot => removeItem(lo, slot)}
                 showRefined showAwakenBadge
-                onToggleRefine={slot => toggleRefine(lo, slot)}
-                onSetAwaken={slot => setAwakenFor({ loadout: lo, slot })}
               />
-              {/* Materials for this loadout */}
               <div className="mt-3 pt-3 border-t border-border">
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase mb-2">Total Materials</p>
                 <MaterialsSummary loadout={loadout} />
@@ -796,8 +1395,6 @@ function CompareTab({ kvkSeason }: { kvkSeason: KvkSeason }) {
           )
         })}
       </div>
-
-      {/* Comparison table */}
       <div className="rounded-xl border border-border bg-secondary/10 p-4">
         <p className="text-sm font-bold mb-3">Stat Comparison</p>
         <div className="flex items-center gap-3 mb-3">
@@ -828,8 +1425,325 @@ function CompareTab({ kvkSeason }: { kvkSeason: KvkSeason }) {
         <AwakenModal
           itemName={awakenItem.name}
           current={awakenCurrent}
-          onSet={lvl => setAwaken(awakenFor.loadout, awakenFor.slot, lvl)}
+          onSet={lvl => {
+            const setter = awakenFor.loadout === 'A' ? setLoadoutA : setLoadoutB
+            setter(prev => prev[awakenFor.slot]
+              ? { ...prev, [awakenFor.slot]: { ...prev[awakenFor.slot]!, awakenLevel: lvl } }
+              : prev)
+          }}
           onClose={() => setAwakenFor(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+/* ================================================================== */
+/*  FORGE: MAIN FORGE TAB (3-panel RoK UI)                            */
+/* ================================================================== */
+
+function ForgeTabContent({
+  state, onUpdateState,
+}: { state: ForgeState; onUpdateState: (next: ForgeState) => void }) {
+  const [activeFilter, setActiveFilter] = useState<ForgeFilter>('all')
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
+  const [editingItem, setEditingItem] = useState<ForgeItem | null>(null)
+  const [showAddItem, setShowAddItem] = useState(false)
+  const [showSetManager, setShowSetManager] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
+  const [activeSubTab, setActiveSubTab] = useState<'forge' | 'refine' | 'awaken' | 'dismantle'>('forge')
+
+  const filteredItems = useMemo(() => {
+    const { items } = state
+    if (activeFilter === 'all') return items
+    if (activeFilter === 'forgeable') return items.filter(i => i.canForge)
+    if (activeFilter === 'sets') return items.filter(i => !!i.setId)
+    return items.filter(i => i.slot === activeFilter)
+  }, [state, activeFilter])
+
+  const selectedItem = useMemo(
+    () => state.items.find(i => i.id === selectedItemId) ?? filteredItems[0] ?? null,
+    [state.items, selectedItemId, filteredItems],
+  )
+
+  const selectedSet = useMemo(
+    () => selectedItem?.setId
+      ? state.sets.find(s => s.id === selectedItem.setId) ?? null
+      : null,
+    [selectedItem, state.sets],
+  )
+
+  const handleSaveItem = (item: ForgeItem) => {
+    const exists = state.items.some(i => i.id === item.id)
+    const items = exists
+      ? state.items.map(i => i.id === item.id ? item : i)
+      : [...state.items, item]
+    onUpdateState({ ...state, items })
+    setSelectedItemId(item.id)
+    setEditingItem(null)
+    setShowAddItem(false)
+  }
+
+  const handleDeleteItem = (id: string) => {
+    onUpdateState({ ...state, items: state.items.filter(i => i.id !== id) })
+    if (selectedItemId === id) setSelectedItemId(null)
+    setShowDeleteConfirm(null)
+  }
+
+  const rc = selectedItem ? RARITY_CONFIG[selectedItem.rarity] : null
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-1">
+          {(['forge', 'refine', 'awaken', 'dismantle'] as const).map(tab => (
+            <button key={tab} onClick={() => setActiveSubTab(tab)}
+              className={cn(
+                'px-4 py-1.5 text-xs font-bold uppercase tracking-widest rounded transition-all',
+                tab === activeSubTab
+                  ? 'bg-amber-700/70 text-amber-100 border border-amber-500/60 shadow-[0_0_12px_rgba(251,191,36,0.25)]'
+                  : 'text-muted-foreground hover:text-foreground bg-secondary/30 border border-transparent',
+              )}>
+              {tab}
+            </button>
+          ))}
+        </div>
+        <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8"
+          onClick={() => setShowSetManager(true)}>
+          <Layers className="h-3.5 w-3.5" /> Manage Sets
+        </Button>
+      </div>
+
+      {activeSubTab !== 'forge' ? (
+        <div className="flex items-center justify-center min-h-40 rounded-xl border border-border bg-secondary/10">
+          <p className="text-muted-foreground text-sm capitalize">{activeSubTab} - coming soon</p>
+        </div>
+      ) : (
+        <div className="flex gap-3 min-h-[560px]">
+
+          <div className="flex gap-2 flex-shrink-0" style={{ width: '300px' }}>
+            <div className="flex flex-col gap-0.5" style={{ width: '88px' }}>
+              <Button size="sm" onClick={() => setShowAddItem(true)}
+                className="h-8 w-full text-xs gap-1 mb-1.5 bg-amber-600 hover:bg-amber-500 text-white border-amber-500 font-bold">
+                <Plus className="h-3 w-3" /> Add
+              </Button>
+              {FORGE_FILTERS.map(f => (
+                <button key={f.key} onClick={() => setActiveFilter(f.key)}
+                  className={cn(
+                    'py-1.5 px-2 text-[11px] font-medium rounded text-left transition-all',
+                    activeFilter === f.key
+                      ? 'bg-amber-700/30 text-amber-300 border border-amber-600/50'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50 border border-transparent',
+                  )}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex-1 overflow-y-auto" style={{ maxHeight: '560px' }}>
+              {filteredItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-center py-10">
+                  <Sword className="h-10 w-10 text-muted-foreground/20 mb-3" />
+                  <p className="text-xs text-muted-foreground mb-3">No items yet</p>
+                  <Button size="sm" onClick={() => setShowAddItem(true)} className="text-xs h-7 gap-1">
+                    <Plus className="h-3 w-3" /> Add Equipment
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2 pr-1">
+                  {filteredItems.map(item => {
+                    const irc = RARITY_CONFIG[item.rarity]
+                    const isSelected = item.id === (selectedItem?.id ?? '')
+                    return (
+                      <button key={item.id} onClick={() => setSelectedItemId(item.id)}
+                        className={cn(
+                          'relative flex flex-col items-center justify-between rounded-lg border-2 p-1.5',
+                          'transition-all aspect-square overflow-hidden',
+                          irc.itemBg,
+                          isSelected
+                            ? `${irc.itemBorder} scale-[1.04]`
+                            : 'border-transparent hover:border-white/20',
+                        )}
+                        style={isSelected ? { boxShadow: irc.glow } : {}}>
+                        {isSelected && (
+                          <div className="absolute inset-0 rounded-lg"
+                            style={{
+                              background: `radial-gradient(circle at center, ${irc.glowColor}22 0%, transparent 70%)`,
+                            }} />
+                        )}
+                        <div className="flex-1 flex items-center justify-center z-10">
+                          {item.iconUrl ? (
+                            <Image src={item.iconUrl} alt={item.name} width={52} height={52}
+                              className="object-contain drop-shadow-lg" />
+                          ) : (
+                            <div className="h-12 w-12 rounded-lg bg-black/30 flex items-center justify-center">
+                              <Sword className={cn('h-6 w-6', irc.nameCls)} />
+                            </div>
+                          )}
+                        </div>
+                        {item.canForge && (
+                          <div className="absolute bottom-0 left-0 right-0 bg-green-600/95 text-center text-[9px] font-bold text-white py-0.5 z-20">
+                            Can Forge
+                          </div>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-col flex-1 min-w-0 gap-3">
+            <div
+              className="relative flex-1 flex items-center justify-center rounded-2xl overflow-hidden"
+              style={{
+                background: 'radial-gradient(ellipse at 50% 70%, rgba(200,90,10,0.3) 0%, rgba(100,40,5,0.45) 35%, rgba(8,6,3,0.97) 75%), linear-gradient(to bottom, #0e0a06, #1a0e05)',
+                border: '1px solid rgba(180,90,15,0.25)',
+                minHeight: '280px',
+              }}>
+              <div className="absolute inset-0 pointer-events-none"
+                style={{
+                  background: 'radial-gradient(ellipse at 50% 90%, rgba(255,140,0,0.18) 0%, transparent 55%)',
+                }} />
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 h-px w-1/2"
+                style={{
+                  background: 'linear-gradient(90deg, transparent, rgba(255,160,30,0.4), transparent)',
+                }} />
+              <div className={cn('z-10 relative', selectedItem && 'forge-float')}>
+                {selectedItem?.iconUrl ? (
+                  <Image src={selectedItem.iconUrl} alt={selectedItem.name} width={160} height={160}
+                    className="object-contain"
+                    style={{ filter: rc ? `drop-shadow(0 0 32px ${rc.glowColor})` : undefined }} />
+                ) : (
+                  <div className="h-36 w-36 rounded-2xl flex items-center justify-center"
+                    style={{
+                      background: selectedItem
+                        ? `radial-gradient(circle, ${rc!.glowColor}40 0%, rgba(0,0,0,0.85) 70%)`
+                        : 'radial-gradient(circle, rgba(120,60,10,0.4) 0%, rgba(0,0,0,0.85) 70%)',
+                      boxShadow: rc ? `0 0 40px ${rc.glowColor}` : undefined,
+                    }}>
+                    <Sword className={cn('h-16 w-16', rc ? rc.nameCls : 'text-amber-800/50')} />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {selectedItem ? (
+              <div className="space-y-2">
+                <p className="text-xs text-center font-medium text-muted-foreground tracking-wide">
+                  Materials Needed
+                </p>
+                <div className="flex items-end justify-center gap-4 flex-wrap">
+                  {selectedItem.materials.map((mat, idx) => {
+                    const def = FORGE_MATERIAL_DEFS.find(d => d.id === mat.materialId)
+                    return (
+                      <div key={idx} className="flex flex-col items-center gap-0.5">
+                        <div className="h-14 w-14 rounded-lg border-2 flex items-center justify-center overflow-hidden"
+                          style={{
+                            borderColor: def?.rarityColor ?? '#555',
+                            background: `radial-gradient(circle, ${def?.rarityColor ?? '#333'}22 0%, rgba(0,0,0,0.6) 100%)`,
+                            boxShadow: `0 0 10px ${def?.rarityColor ?? '#333'}44`,
+                          }}>
+                          {def ? (
+                            <Image src={def.iconPath} alt={def.name} width={44} height={44}
+                              className="object-contain p-0.5" />
+                          ) : (
+                            <Package className="h-6 w-6 text-muted-foreground" />
+                          )}
+                        </div>
+                        <span className="text-xs text-muted-foreground tabular-nums">
+                          0/{mat.amount}
+                        </span>
+                      </div>
+                    )
+                  })}
+                  {selectedItem.goldCost > 0 && (
+                    <div className="flex flex-col items-center gap-0.5">
+                      <div
+                        className="h-14 w-14 rounded-lg border-2 border-yellow-600/60 flex items-center justify-center overflow-hidden bg-yellow-900/20"
+                        style={{ boxShadow: '0 0 10px rgba(251,191,36,0.3)' }}>
+                        <Image src="/images/bundle/gold.png" alt="Gold" width={44} height={44}
+                          className="object-contain p-0.5" />
+                      </div>
+                      <span className="text-xs text-yellow-400 tabular-nums font-medium">
+                        {selectedItem.goldCost >= 1000000
+                          ? `${(selectedItem.goldCost / 1000000).toFixed(1)}M`
+                          : selectedItem.goldCost.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="flex justify-center pt-1">
+                  <button
+                    className="px-10 py-2.5 rounded-lg font-bold text-sm uppercase tracking-wider transition-all hover:brightness-110 active:scale-95"
+                    style={{
+                      background: 'linear-gradient(180deg, #f59e0b 0%, #d97706 50%, #b45309 100%)',
+                      boxShadow: '0 4px 14px rgba(251,191,36,0.35), inset 0 1px 0 rgba(255,255,255,0.2)',
+                      color: '#1c1005',
+                    }}>
+                    Quick Forge
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex justify-center pt-2">
+                <p className="text-xs text-muted-foreground text-center">
+                  Add equipment pieces or select one to view details
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex-shrink-0 overflow-y-auto" style={{ width: '260px', maxHeight: '560px' }}>
+            {selectedItem ? (
+              <ItemDetailsPanel
+                item={selectedItem}
+                set={selectedSet}
+                onEdit={() => { setEditingItem(selectedItem); setShowAddItem(false) }}
+                onDelete={() => setShowDeleteConfirm(selectedItem.id)}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full text-center gap-2 py-10">
+                <Package className="h-12 w-12 text-muted-foreground/20" />
+                <p className="text-xs text-muted-foreground">
+                  Select equipment from the list to view its details
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {(showAddItem || editingItem) && (
+        <ItemEditorModal
+          item={editingItem}
+          sets={state.sets}
+          onSave={handleSaveItem}
+          onClose={() => { setEditingItem(null); setShowAddItem(false) }}
+        />
+      )}
+      {showDeleteConfirm && (
+        <Dialog open onOpenChange={() => setShowDeleteConfirm(null)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader><DialogTitle>Delete Equipment?</DialogTitle></DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              This will permanently remove this equipment piece. This cannot be undone.
+            </p>
+            <div className="flex gap-2 justify-end mt-2">
+              <Button variant="outline" onClick={() => setShowDeleteConfirm(null)}>Cancel</Button>
+              <Button variant="destructive" onClick={() => handleDeleteItem(showDeleteConfirm!)}>
+                <Trash2 className="h-4 w-4 mr-1.5" /> Delete
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+      {showSetManager && (
+        <SetManagerModal
+          sets={state.sets}
+          onSaveSets={sets => onUpdateState({ ...state, sets })}
+          onClose={() => setShowSetManager(false)}
         />
       )}
     </div>
@@ -841,81 +1755,106 @@ function CompareTab({ kvkSeason }: { kvkSeason: KvkSeason }) {
 /* ================================================================== */
 
 const STORAGE_KEY = 'equipment_calculator_v1'
-
-interface SavedState {
-  loadout: Loadout
-  kvkSeason: KvkSeason
-}
+interface SavedCalcState { loadout: Loadout; kvkSeason: KvkSeason }
 
 export function EquipmentForge() {
-  const [tab, setTab] = useState<'calculator' | 'compare'>('calculator')
+  const [mainTab, setMainTab] = useState<'forge' | 'calculator' | 'compare'>('forge')
   const [kvkSeason, setKvkSeason] = useState<KvkSeason>('soc')
+
   const [loadout, setLoadout] = useState<Loadout>(() => {
     try {
       const s = localStorage.getItem(STORAGE_KEY)
-      if (s) { const parsed: SavedState = JSON.parse(s); return parsed.loadout ?? {} }
+      if (s) {
+        const parsed: SavedCalcState = JSON.parse(s)
+        return parsed.loadout ?? {}
+      }
     } catch { /* ignore */ }
     return {}
   })
+
   const [pickerSlot, setPickerSlot] = useState<SlotKey | null>(null)
   const [awakenSlot, setAwakenSlot] = useState<SlotKey | null>(null)
 
-  // persist
+  const [forgeState, setForgeState] = useState<ForgeState>(() => {
+    const saved = loadForgeState()
+    if (saved.items.length === 0) return { items: EQUIPMENT_FORGE_SEED_ITEMS, sets: saved.sets }
+    return saved
+  })
+
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ loadout, kvkSeason })) } catch { /* ignore */ }
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ loadout, kvkSeason }))
+    } catch { /* ignore */ }
   }, [loadout, kvkSeason])
+
+  const updateForgeState = useCallback((next: ForgeState) => {
+    setForgeState(next)
+    saveForgeState(next)
+  }, [])
 
   const setItem = useCallback((slot: SlotKey, id: string) => {
     setLoadout(prev => ({ ...prev, [slot]: { id, refined: false, awakenLevel: 0 } }))
   }, [])
+
   const removeItem = useCallback((slot: SlotKey) => {
     setLoadout(prev => { const n = { ...prev }; delete n[slot]; return n })
   }, [])
+
   const toggleRefine = useCallback((slot: SlotKey) => {
-    setLoadout(prev => prev[slot] ? { ...prev, [slot]: { ...prev[slot]!, refined: !prev[slot]!.refined } } : prev)
-  }, [])
-  const setAwakenLevel = useCallback((slot: SlotKey, level: number) => {
-    setLoadout(prev => prev[slot] ? { ...prev, [slot]: { ...prev[slot]!, awakenLevel: level } } : prev)
+    setLoadout(prev => prev[slot]
+      ? { ...prev, [slot]: { ...prev[slot]!, refined: !prev[slot]!.refined } }
+      : prev)
   }, [])
 
-  const awakenItem = awakenSlot ? EQUIPMENT_FORGE_SEED_ITEMS.find(d => d.id === loadout[awakenSlot]?.id) : null
+  const setAwakenLevel = useCallback((slot: SlotKey, level: number) => {
+    setLoadout(prev => prev[slot]
+      ? { ...prev, [slot]: { ...prev[slot]!, awakenLevel: level } }
+      : prev)
+  }, [])
+
+  const awakenItem = awakenSlot
+    ? EQUIPMENT_FORGE_SEED_ITEMS.find(d => d.id === loadout[awakenSlot]?.id)
+    : null
   const awakenCurrent = awakenSlot ? (loadout[awakenSlot]?.awakenLevel ?? 0) : 0
 
   return (
     <div className="space-y-4">
-      {/* Top bar */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-1">
-          {(['calculator', 'compare'] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={cn('px-4 py-1.5 text-xs font-bold uppercase tracking-widest rounded transition-all capitalize',
-                t === tab
+          {(['forge', 'calculator', 'compare'] as const).map(t => (
+            <button key={t} onClick={() => setMainTab(t)}
+              className={cn(
+                'px-4 py-1.5 text-xs font-bold uppercase tracking-widest rounded transition-all capitalize',
+                t === mainTab
                   ? 'bg-amber-700/60 text-amber-100 border border-amber-500/60'
-                  : 'text-muted-foreground hover:text-foreground bg-secondary/30 border border-transparent'
+                  : 'text-muted-foreground hover:text-foreground bg-secondary/30 border border-transparent',
               )}>
               {t}
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">KvK Season:</span>
-          <div className="flex gap-1">
-            {KVK_SEASONS.map(s => (
-              <button key={s.value} onClick={() => setKvkSeason(s.value)}
-                className={cn('px-2.5 py-1 rounded text-xs font-medium border transition-colors',
-                  kvkSeason === s.value
-                    ? 'border-primary bg-primary/20 text-primary'
-                    : 'border-border text-muted-foreground hover:text-foreground hover:bg-secondary/50'
-                )}>
-                {s.label}
-              </button>
-            ))}
+        {(mainTab === 'calculator' || mainTab === 'compare') && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">KvK Season:</span>
+            <div className="flex gap-1">
+              {KVK_SEASONS.map(s => (
+                <button key={s.value} onClick={() => setKvkSeason(s.value)}
+                  className={cn('px-2.5 py-1 rounded text-xs font-medium border transition-colors',
+                    kvkSeason === s.value
+                      ? 'border-primary bg-primary/20 text-primary'
+                      : 'border-border text-muted-foreground hover:text-foreground hover:bg-secondary/50')}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* Content */}
-      {tab === 'calculator' ? (
+      {mainTab === 'forge' && (
+        <ForgeTabContent state={forgeState} onUpdateState={updateForgeState} />
+      )}
+      {mainTab === 'calculator' && (
         <CalculatorTab
           loadout={loadout}
           kvkSeason={kvkSeason}
@@ -925,11 +1864,9 @@ export function EquipmentForge() {
           onSetAwaken={slot => setAwakenSlot(slot)}
           onClear={() => setLoadout({})}
         />
-      ) : (
-        <CompareTab kvkSeason={kvkSeason} />
       )}
+      {mainTab === 'compare' && <CompareTab kvkSeason={kvkSeason} />}
 
-      {/* Modals */}
       {pickerSlot && (
         <ItemPickerModal
           slot={pickerSlot}
