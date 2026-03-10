@@ -1,0 +1,5 @@
+companion-app/
+node_modules/
+.next/
+test-api.sh
+test-parser.mjs
