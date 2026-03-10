@@ -4,7 +4,7 @@
 
 export type ForgeRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
 export type ForgeSlot = 'weapon' | 'helmet' | 'chest' | 'gloves' | 'legs' | 'boots' | 'accessory'
-export type ForgeFilter = 'all' | 'forgeable' | 'weapon' | 'helmet' | 'chest' | 'gloves' | 'legs' | 'boots' | 'accessory' | 'sets'
+export type ForgeFilter = 'all' | 'weapon' | 'helmet' | 'chest' | 'gloves' | 'legs' | 'boots' | 'accessory' | 'sets'
 export type AttributeColor = 'red' | 'green' | 'blue' | 'purple' | 'orange' | 'cyan' | 'yellow' | 'pink'
 
 export interface EquipmentAttribute {
@@ -162,7 +162,6 @@ export const SLOT_CONFIG: Record<ForgeSlot, { label: string; plural: string }> =
 
 export const FORGE_FILTERS: { key: ForgeFilter; label: string }[] = [
   { key: 'all',       label: 'All'          },
-  { key: 'forgeable', label: 'Forgeable'    },
   { key: 'weapon',    label: 'Weapons'      },
   { key: 'helmet',    label: 'Helmets'      },
   { key: 'chest',     label: 'Chest'        },

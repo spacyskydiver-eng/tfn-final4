@@ -496,31 +496,15 @@ function ItemEditorModal({
                 onChange={e => up({ equipmentLevel: Number(e.target.value) || 1 })} />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Set (optional)</Label>
-              <Select value={form.setId ?? 'none'} onValueChange={v => up({ setId: v === 'none' ? undefined : v })}>
-                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No Set</SelectItem>
-                  {sets.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Can Forge?</Label>
-              <div className="flex items-center gap-3 h-9">
-                <button onClick={() => up({ canForge: !form.canForge })}
-                  className={cn('relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-                    form.canForge ? 'bg-green-600' : 'bg-secondary')}>
-                  <span className={cn('inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform',
-                    form.canForge ? 'translate-x-6' : 'translate-x-1')} />
-                </button>
-                <span className="text-sm text-muted-foreground">
-                  {form.canForge ? 'Yes — shows "Can Forge" badge' : 'No'}
-                </span>
-              </div>
-            </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Set (optional)</Label>
+            <Select value={form.setId ?? 'none'} onValueChange={v => up({ setId: v === 'none' ? undefined : v })}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No Set</SelectItem>
+                {sets.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2.5">
@@ -870,8 +854,24 @@ function ItemPickerModal({
 /*  CALCULATOR: LOADOUT GRID                                           */
 /* ================================================================== */
 
+// RoK silhouette grid positions (3 cols × 4 rows):
+//   Row 1:  ·    Helmet   ·
+//   Row 2: Wpn   Chest   Gloves
+//   Row 3: Legs   ·      Boots
+//   Row 4: Acc1   ·      Acc2
+const SLOT_GRID: Record<SlotKey, { row: number; col: number }> = {
+  helmet:     { row: 1, col: 2 },
+  weapon:     { row: 2, col: 1 },
+  chest:      { row: 2, col: 2 },
+  gloves:     { row: 2, col: 3 },
+  legs:       { row: 3, col: 1 },
+  boots:      { row: 3, col: 3 },
+  accessory1: { row: 4, col: 1 },
+  accessory2: { row: 4, col: 3 },
+}
+
 function LoadoutGrid({
-  loadout, label, onSlotClick, onRemove, showRefined, showAwakenBadge, onContextMenu,
+  loadout, label, onSlotClick, onRemove, showRefined, showAwakenBadge, onContextMenu, onSlotDrop,
 }: {
   loadout: Loadout
   label?: string
@@ -880,36 +880,63 @@ function LoadoutGrid({
   showRefined: boolean
   showAwakenBadge: boolean
   onContextMenu?: (e: React.MouseEvent, slot: SlotKey) => void
+  onSlotDrop?: (slot: SlotKey, itemId: string) => void
 }) {
   const rarityMap: Record<string, string> = {
     common: 'Normal', uncommon: 'Advanced', rare: 'Elite', epic: 'Epic', legendary: 'Legendary',
   }
+  const [dragOver, setDragOver] = useState<SlotKey | null>(null)
+
   return (
     <div>
       {label && (
         <p className="text-xs font-bold text-muted-foreground text-center mb-2 uppercase tracking-wide">{label}</p>
       )}
-      <div className="grid grid-cols-4 gap-1.5">
+      <div
+        className="mx-auto"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 72px)',
+          gridTemplateRows: 'repeat(4, auto)',
+          gap: '8px',
+          width: 'fit-content',
+        }}
+      >
         {SLOT_ORDER.map(slot => {
+          const pos = SLOT_GRID[slot]
           const item = loadout[slot]
           const data = item ? EQUIPMENT_FORGE_SEED_ITEMS.find(d => d.id === item.id) : null
           const qLabel = data ? (rarityMap[data.rarity] ?? 'Normal') : null
+          const isDragOver = dragOver === slot
           return (
-            <div key={slot} className="flex flex-col items-center gap-0.5">
+            <div
+              key={slot}
+              className="flex flex-col items-center gap-0.5"
+              style={{ gridRow: pos.row, gridColumn: pos.col }}
+            >
               <div
                 className={cn(
-                  'relative h-16 w-16 rounded-lg border-2 cursor-pointer',
+                  'relative h-[72px] w-[72px] rounded-lg border-2 cursor-pointer',
                   'transition-all hover:brightness-110 overflow-hidden flex items-center justify-center',
                   item && qLabel ? `${RARITY_BG[qLabel]} ${RARITY_BORDER[qLabel]}` : 'border-border bg-secondary/30',
                   item?.refined && showRefined ? 'ring-2 ring-amber-400/60' : '',
+                  isDragOver ? 'ring-2 ring-amber-400 border-amber-500 brightness-125' : '',
                 )}
                 onClick={() => onSlotClick(slot)}
                 onContextMenu={e => {
                   if (item && onContextMenu) { e.preventDefault(); onContextMenu(e, slot) }
                 }}
+                onDragOver={e => { e.preventDefault(); setDragOver(slot) }}
+                onDragLeave={() => setDragOver(null)}
+                onDrop={e => {
+                  e.preventDefault()
+                  setDragOver(null)
+                  const id = e.dataTransfer.getData('text/plain')
+                  if (id && onSlotDrop) onSlotDrop(slot, id)
+                }}
               >
                 <Image src={data?.iconUrl ?? SLOT_PLACEHOLDERS[slot]} alt={data?.name ?? slot}
-                  width={52} height={52} className="object-contain" />
+                  width={56} height={56} className="object-contain" />
                 {item?.awakenLevel && item.awakenLevel > 0 && showAwakenBadge && (
                   <div className="absolute top-0.5 left-0.5 bg-purple-900/90 text-purple-200 text-[8px] font-bold rounded px-0.5 leading-4">
                     {toRoman(item.awakenLevel)}
@@ -929,7 +956,7 @@ function LoadoutGrid({
                   </button>
                 )}
               </div>
-              <span className="text-[9px] text-muted-foreground text-center leading-tight w-16 truncate">
+              <span className="text-[9px] text-muted-foreground text-center leading-tight w-[72px] truncate">
                 {data?.name ?? SLOT_LABELS[slot]}
               </span>
             </div>
@@ -1246,7 +1273,7 @@ function AwakenModal({
 /* ================================================================== */
 
 function CalculatorTab({
-  loadout, kvkSeason, onSlotClick, onRemove, onToggleRefine, onSetAwaken, onClear,
+  loadout, kvkSeason, onSlotClick, onRemove, onToggleRefine, onSetAwaken, onClear, onSlotDrop,
 }: {
   loadout: Loadout
   kvkSeason: KvkSeason
@@ -1255,6 +1282,7 @@ function CalculatorTab({
   onToggleRefine: (slot: SlotKey) => void
   onSetAwaken: (slot: SlotKey) => void
   onClear: () => void
+  onSlotDrop: (slot: SlotKey, id: string) => void
 }) {
   const result = useMemo(() => calcLoadoutStats(loadout, kvkSeason), [loadout, kvkSeason])
   const [panel, setPanel] = useState<'stats' | 'materials'>('stats')
@@ -1279,9 +1307,9 @@ function CalculatorTab({
             </Button>
           </div>
           <LoadoutGrid loadout={loadout} onSlotClick={onSlotClick} onRemove={onRemove}
-            showRefined showAwakenBadge onContextMenu={handleSlotContext} />
+            showRefined showAwakenBadge onContextMenu={handleSlotContext} onSlotDrop={onSlotDrop} />
           <p className="text-[10px] text-muted-foreground text-center mt-3">
-            Click slot to equip - Right-click for options
+            Click slot to equip · Drag items from forge above · Right-click for options
           </p>
         </div>
 
@@ -1456,7 +1484,6 @@ function ForgeTabContent({
   const filteredItems = useMemo(() => {
     const { items } = state
     if (activeFilter === 'all') return items
-    if (activeFilter === 'forgeable') return items.filter(i => i.canForge)
     if (activeFilter === 'sets') return items.filter(i => !!i.setId)
     return items.filter(i => i.slot === activeFilter)
   }, [state, activeFilter])
@@ -1556,6 +1583,11 @@ function ForgeTabContent({
                     const isSelected = item.id === (selectedItem?.id ?? '')
                     return (
                       <button key={item.id} onClick={() => setSelectedItemId(item.id)}
+                        draggable
+                        onDragStart={e => {
+                          e.dataTransfer.effectAllowed = 'copy'
+                          e.dataTransfer.setData('text/plain', item.id)
+                        }}
                         className={cn(
                           'relative flex flex-col items-center justify-between rounded-lg border-2 p-1.5',
                           'transition-all aspect-square overflow-hidden',
@@ -1581,11 +1613,7 @@ function ForgeTabContent({
                             </div>
                           )}
                         </div>
-                        {item.canForge && (
-                          <div className="absolute bottom-0 left-0 right-0 bg-green-600/95 text-center text-[9px] font-bold text-white py-0.5 z-20">
-                            Can Forge
-                          </div>
-                        )}
+
                       </button>
                     )
                   })}
@@ -1674,17 +1702,7 @@ function ForgeTabContent({
                     </div>
                   )}
                 </div>
-                <div className="flex justify-center pt-1">
-                  <button
-                    className="px-10 py-2.5 rounded-lg font-bold text-sm uppercase tracking-wider transition-all hover:brightness-110 active:scale-95"
-                    style={{
-                      background: 'linear-gradient(180deg, #f59e0b 0%, #d97706 50%, #b45309 100%)',
-                      boxShadow: '0 4px 14px rgba(251,191,36,0.35), inset 0 1px 0 rgba(255,255,255,0.2)',
-                      color: '#1c1005',
-                    }}>
-                    Quick Forge
-                  </button>
-                </div>
+
               </div>
             ) : (
               <div className="flex justify-center pt-2">
@@ -1758,7 +1776,6 @@ const STORAGE_KEY = 'equipment_calculator_v1'
 interface SavedCalcState { loadout: Loadout; kvkSeason: KvkSeason }
 
 export function EquipmentForge() {
-  const [mainTab, setMainTab] = useState<'forge' | 'calculator' | 'compare'>('forge')
   const [kvkSeason, setKvkSeason] = useState<KvkSeason>('soc')
 
   const [loadout, setLoadout] = useState<Loadout>(() => {
@@ -1812,28 +1829,27 @@ export function EquipmentForge() {
       : prev)
   }, [])
 
+  const handleSlotDrop = useCallback((slot: SlotKey, id: string) => {
+    const item = EQUIPMENT_FORGE_SEED_ITEMS.find(d => d.id === id)
+    if (!item) return
+    const isCompat = item.slot === 'accessory'
+      ? (slot === 'accessory1' || slot === 'accessory2')
+      : (item.slot as string) === slot
+    if (isCompat) setItem(slot, id)
+  }, [setItem])
+
   const awakenItem = awakenSlot
     ? EQUIPMENT_FORGE_SEED_ITEMS.find(d => d.id === loadout[awakenSlot]?.id)
     : null
   const awakenCurrent = awakenSlot ? (loadout[awakenSlot]?.awakenLevel ?? 0) : 0
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-1">
-          {(['forge', 'calculator', 'compare'] as const).map(t => (
-            <button key={t} onClick={() => setMainTab(t)}
-              className={cn(
-                'px-4 py-1.5 text-xs font-bold uppercase tracking-widest rounded transition-all capitalize',
-                t === mainTab
-                  ? 'bg-amber-700/60 text-amber-100 border border-amber-500/60'
-                  : 'text-muted-foreground hover:text-foreground bg-secondary/30 border border-transparent',
-              )}>
-              {t}
-            </button>
-          ))}
-        </div>
-        {(mainTab === 'calculator' || mainTab === 'compare') && (
+    <div className="space-y-6">
+      <ForgeTabContent state={forgeState} onUpdateState={updateForgeState} />
+
+      <div className="border-t border-border/50 pt-6">
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
+          <p className="text-sm font-bold tracking-wide uppercase text-muted-foreground">Equipment Calculator</p>
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">KvK Season:</span>
             <div className="flex gap-1">
@@ -1848,13 +1864,7 @@ export function EquipmentForge() {
               ))}
             </div>
           </div>
-        )}
-      </div>
-
-      {mainTab === 'forge' && (
-        <ForgeTabContent state={forgeState} onUpdateState={updateForgeState} />
-      )}
-      {mainTab === 'calculator' && (
+        </div>
         <CalculatorTab
           loadout={loadout}
           kvkSeason={kvkSeason}
@@ -1863,9 +1873,14 @@ export function EquipmentForge() {
           onToggleRefine={toggleRefine}
           onSetAwaken={slot => setAwakenSlot(slot)}
           onClear={() => setLoadout({})}
+          onSlotDrop={handleSlotDrop}
         />
-      )}
-      {mainTab === 'compare' && <CompareTab kvkSeason={kvkSeason} />}
+      </div>
+
+      <div className="border-t border-border/50 pt-6">
+        <p className="text-sm font-bold tracking-wide uppercase text-muted-foreground mb-4">Loadout Compare</p>
+        <CompareTab kvkSeason={kvkSeason} />
+      </div>
 
       {pickerSlot && (
         <ItemPickerModal
