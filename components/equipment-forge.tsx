@@ -1887,11 +1887,20 @@ function ForgeTabContent({
           <div className="flex flex-col flex-1 min-w-0 gap-3">
             <div
               className="relative flex-1 flex items-center justify-center rounded-2xl overflow-hidden"
+              onMouseMove={e => {
+                const rect = e.currentTarget.getBoundingClientRect()
+                e.currentTarget.style.setProperty('--mx', `${((e.clientX - rect.left) / rect.width) * 100}%`)
+                e.currentTarget.style.setProperty('--my', `${((e.clientY - rect.top) / rect.height) * 100}%`)
+                e.currentTarget.style.setProperty('--hover-opacity', '1')
+              }}
+              onMouseLeave={e => e.currentTarget.style.setProperty('--hover-opacity', '0')}
               style={{
                 background: 'radial-gradient(ellipse at 50% 70%, rgba(200,90,10,0.3) 0%, rgba(100,40,5,0.45) 35%, rgba(8,6,3,0.97) 75%), linear-gradient(to bottom, #0e0a06, #1a0e05)',
                 border: '1px solid rgba(180,90,15,0.25)',
                 minHeight: '280px',
-              }}>
+                '--mx': '50%', '--my': '50%', '--hover-opacity': '0',
+              } as React.CSSProperties}>
+              {/* Static ambient glow at base */}
               <div className="absolute inset-0 pointer-events-none"
                 style={{
                   background: 'radial-gradient(ellipse at 50% 90%, rgba(255,140,0,0.18) 0%, transparent 55%)',
@@ -1900,30 +1909,12 @@ function ForgeTabContent({
                 style={{
                   background: 'linear-gradient(90deg, transparent, rgba(255,160,30,0.4), transparent)',
                 }} />
-              {/* Animated forge fire */}
-              <div className="absolute bottom-0 left-0 right-0 overflow-hidden pointer-events-none" style={{ height: '96px', zIndex: 2 }}>
-                <div className="forge-fire-base absolute bottom-0 left-0 right-0 h-6"
-                  style={{ background: 'linear-gradient(90deg, transparent, rgba(234,88,12,0.5) 20%, rgba(251,146,60,0.65) 50%, rgba(234,88,12,0.5) 80%, transparent)', filter: 'blur(6px)' }} />
-                {[0,1,2,3,4,5,6,7,8,9].map(i => {
-                  const x = (i - 4.5) * 16
-                  const h = 22 + (i % 4) * 14
-                  const w = 10 + (i % 3) * 7
-                  const dur = (1.1 + (i % 4) * 0.14).toFixed(2)
-                  const del = (i * 0.11).toFixed(2)
-                  const grad = i % 3 === 0
-                    ? 'linear-gradient(to top,#dc2626,#f97316,#fde68a)'
-                    : i % 3 === 1
-                    ? 'linear-gradient(to top,#ea580c,#fb923c,#fbbf24)'
-                    : 'linear-gradient(to top,#f97316,#fbbf24,#fef9c3)'
-                  return (
-                    <div key={i} className="forge-flame-lick" style={{
-                      left: `calc(50% + ${x}px - ${w/2}px)`,
-                      width: `${w}px`, height: `${h}px`, background: grad,
-                      '--dur': `${dur}s`, '--del': `${del}s`,
-                    } as React.CSSProperties} />
-                  )
-                })}
-              </div>
+              {/* Mouse-tracking glow */}
+              <div className="absolute inset-0 pointer-events-none transition-opacity duration-300"
+                style={{
+                  opacity: 'var(--hover-opacity)',
+                  background: 'radial-gradient(circle 160px at var(--mx) var(--my), rgba(251,146,60,0.12) 0%, transparent 70%)',
+                }} />
               <div className={cn('z-10 relative', selectedItem && 'forge-float')}>
                 {selectedItem?.iconUrl ? (
                   <Image src={selectedItem.iconUrl} alt={selectedItem.name} width={160} height={160}
