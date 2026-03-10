@@ -1539,8 +1539,7 @@ function CalculatorTab({
   onSlotDrop: (slot: SlotKey, id: string) => void
 }) {
   const result = useMemo(() => calcLoadoutStats(loadout, kvkSeason), [loadout, kvkSeason])
-  const [panel, setPanel] = useState<'stats' | 'materials' | 'inventory'>('stats')
-  const [inventory, setInventory] = useState<Record<string, number>>({})
+  const [panel, setPanel] = useState<'stats' | 'materials'>('stats')
   const [contextMenu, setContextMenu] = useState<{ slot: SlotKey; x: number; y: number } | null>(null)
 
   const handleSlotContext = useCallback((e: React.MouseEvent, slot: SlotKey) => {
@@ -1595,7 +1594,7 @@ function CalculatorTab({
       <div className="flex-1 min-w-0">
         <div className="rounded-xl border border-border bg-secondary/10">
           <div className="flex border-b border-border">
-            {(['stats', 'materials', 'inventory'] as const).map(p => (
+            {(['stats', 'materials'] as const).map(p => (
               <button key={p} onClick={() => setPanel(p)}
                 className={cn(
                   'flex-1 py-2.5 text-xs font-semibold uppercase tracking-wide transition-colors capitalize',
@@ -1610,9 +1609,7 @@ function CalculatorTab({
           <div className="p-4 max-h-[480px] overflow-y-auto">
             {panel === 'stats'
               ? <StatsSummary result={result} />
-              : panel === 'materials'
-              ? <MaterialsSummary loadout={loadout} />
-              : <InventoryPanel loadout={loadout} inventory={inventory} setInventory={setInventory} />}
+              : <MaterialsSummary loadout={loadout} />}
           </div>
         </div>
       </div>
@@ -1739,8 +1736,6 @@ function ForgeTabContent({
   const [showSetManager, setShowSetManager] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
   const [activeSubTab, setActiveSubTab] = useState<'forge' | 'refine' | 'awaken' | 'dismantle'>('forge')
-  const [showInventory, setShowInventory] = useState(false)
-  const [forgeInventory, setForgeInventory] = useState<Record<string, number>>({})
 
   const filteredItems = useMemo(() => {
     const { items } = state
@@ -1990,52 +1985,6 @@ function ForgeTabContent({
                           ? `${(selectedItem.goldCost / 1000000).toFixed(1)}M`
                           : selectedItem.goldCost.toLocaleString()}
                       </span>
-                    </div>
-                  )}
-                </div>
-                {/* ── Inventory check ── */}
-                <div className="pt-1.5">
-                  <button onClick={() => setShowInventory(v => !v)}
-                    className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-amber-300 transition-colors w-full justify-center py-1 rounded hover:bg-secondary/20">
-                    <Package className="h-3 w-3" />
-                    {showInventory ? 'Hide Inventory' : 'Check My Inventory'}
-                    <ChevronDown className={cn('h-3 w-3 transition-transform duration-200', showInventory && 'rotate-180')} />
-                  </button>
-                  {showInventory && (
-                    <div className="space-y-1.5 mt-1.5 rounded-lg p-2 bg-black/30 border border-amber-900/20">
-                      {selectedItem!.materials.map((mat, midx) => {
-                        const def = FORGE_MATERIAL_DEFS.find(d => d.id === mat.materialId)
-                        const have = forgeInventory[mat.materialId] ?? 0
-                        const ok = have >= mat.amount
-                        return (
-                          <div key={midx} className="flex items-center gap-1.5">
-                            {def && <Image src={def.iconPath} alt={def.name} width={16} height={16} className="object-contain flex-shrink-0" />}
-                            <span className="text-[10px] text-muted-foreground flex-1 capitalize truncate">{def?.name ?? mat.materialId}</span>
-                            <input type="number" min={0} value={have === 0 ? '' : have} placeholder="0"
-                              onChange={e => setForgeInventory(prev => ({ ...prev, [mat.materialId]: Math.max(0, Number(e.target.value) || 0) }))}
-                              className="w-14 h-6 text-[11px] bg-background border border-border rounded px-1 text-center tabular-nums" />
-                            <span className={cn('text-[10px] font-bold w-12 text-right', ok ? 'text-green-400' : 'text-red-400')}>
-                              {ok ? `✓` : `✗ -${mat.amount - have}`}
-                            </span>
-                          </div>
-                        )
-                      })}
-                      {(selectedItem!.goldCost > 0) && (() => {
-                        const have = forgeInventory['gold'] ?? 0
-                        const ok = have >= selectedItem!.goldCost
-                        return (
-                          <div className="flex items-center gap-1.5 pt-1 border-t border-border/30">
-                            <Image src="/images/equipment/mat_icons/gold_icon.webp" alt="Gold" width={16} height={16} className="object-contain flex-shrink-0" />
-                            <span className="text-[10px] text-muted-foreground flex-1">Gold</span>
-                            <input type="number" min={0} value={have === 0 ? '' : have} placeholder="0"
-                              onChange={e => setForgeInventory(prev => ({ ...prev, gold: Math.max(0, Number(e.target.value) || 0) }))}
-                              className="w-14 h-6 text-[11px] bg-background border border-border rounded px-1 text-center tabular-nums" />
-                            <span className={cn('text-[10px] font-bold w-12 text-right', ok ? 'text-green-400' : 'text-red-400')}>
-                              {ok ? `✓` : `✗`}
-                            </span>
-                          </div>
-                        )
-                      })()}
                     </div>
                   )}
                 </div>
@@ -2406,9 +2355,17 @@ export function EquipmentForge() {
     : null
   const awakenCurrent = awakenSlot ? (loadout[awakenSlot]?.awakenLevel ?? 0) : 0
 
+  const [inventory, setInventory] = useState<Record<string, number>>({})
+
   return (
     <div className="space-y-6">
       <ForgeTabContent state={forgeState} onUpdateState={updateForgeState} />
+
+      {/* ══ MATERIAL INVENTORY ══ */}
+      <div className="border-t border-border/50 pt-6">
+        <p className="text-sm font-bold tracking-wide uppercase text-muted-foreground mb-4">Material Inventory</p>
+        <InventoryPanel loadout={loadout} inventory={inventory} setInventory={setInventory} />
+      </div>
 
       <div className="border-t border-border/50 pt-6">
         <div className="flex items-center justify-between flex-wrap gap-2 mb-4">
