@@ -1727,8 +1727,8 @@ function CompareTab({ kvkSeason }: { kvkSeason: KvkSeason }) {
 /* ================================================================== */
 
 function ForgeTabContent({
-  state, onUpdateState,
-}: { state: ForgeState; onUpdateState: (next: ForgeState) => void }) {
+  state, onUpdateState, inventory,
+}: { state: ForgeState; onUpdateState: (next: ForgeState) => void; inventory: Record<string, number> }) {
   const [activeFilter, setActiveFilter] = useState<ForgeFilter>('all')
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null)
   const [editingItem, setEditingItem] = useState<ForgeItem | null>(null)
@@ -1951,6 +1951,16 @@ function ForgeTabContent({
                 <div className="flex items-end justify-center gap-4 flex-wrap">
                   {selectedItem.materials.map((mat, idx) => {
                     const def = FORGE_MATERIAL_DEFS.find(d => d.id === mat.materialId)
+                    const tierKey = RARITY_TO_TIER[selectedItem.rarity] ?? 'legendary'
+                    const mult = RARITY_MULTIPLIERS[tierKey] ?? 256
+                    // Sum all tiers from inventory for this material (in item-rarity equivalents)
+                    const haveCommon = INV_TIERS.reduce((sum, tier) => {
+                      return sum + (inventory[`${mat.materialId}_${tier.key}`] ?? 0) * RARITY_MULTIPLIERS[tier.key]
+                    }, 0)
+                    const haveInRarity = Math.floor(haveCommon / mult)
+                    const need = mat.amount
+                    const ok = haveInRarity >= need
+                    const hasAny = haveInRarity > 0
                     return (
                       <div key={idx} className="flex flex-col items-center gap-0.5">
                         <div className="h-14 w-14 rounded-lg border-2 flex items-center justify-center overflow-hidden"
@@ -1966,27 +1976,39 @@ function ForgeTabContent({
                             <Package className="h-6 w-6 text-muted-foreground" />
                           )}
                         </div>
-                        <span className="text-xs text-muted-foreground tabular-nums">
-                          0/{mat.amount}
+                        <span className={cn(
+                          'text-xs tabular-nums font-medium',
+                          !hasAny ? 'text-muted-foreground' : ok ? 'text-green-400' : 'text-red-400',
+                        )}>
+                          {haveInRarity}/{need}
                         </span>
                       </div>
                     )
                   })}
-                  {selectedItem.goldCost > 0 && (
-                    <div className="flex flex-col items-center gap-0.5">
-                      <div
-                        className="h-14 w-14 rounded-lg border-2 border-yellow-600/60 flex items-center justify-center overflow-hidden bg-yellow-900/20"
-                        style={{ boxShadow: '0 0 10px rgba(251,191,36,0.3)' }}>
-                        <Image src="/images/bundle/gold.png" alt="Gold" width={44} height={44}
-                          className="object-contain p-0.5" />
+                  {selectedItem.goldCost > 0 && (() => {
+                    const haveGold = inventory['gold'] ?? 0
+                    const needGold = selectedItem.goldCost
+                    const goldOk = haveGold >= needGold
+                    const hasGold = haveGold > 0
+                    return (
+                      <div className="flex flex-col items-center gap-0.5">
+                        <div
+                          className="h-14 w-14 rounded-lg border-2 border-yellow-600/60 flex items-center justify-center overflow-hidden bg-yellow-900/20"
+                          style={{ boxShadow: '0 0 10px rgba(251,191,36,0.3)' }}>
+                          <Image src="/images/bundle/gold.png" alt="Gold" width={44} height={44}
+                            className="object-contain p-0.5" />
+                        </div>
+                        <span className={cn(
+                          'text-xs tabular-nums font-medium',
+                          !hasGold ? 'text-yellow-400' : goldOk ? 'text-green-400' : 'text-red-400',
+                        )}>
+                          {selectedItem.goldCost >= 1000000
+                            ? `${(selectedItem.goldCost / 1000000).toFixed(1)}M`
+                            : selectedItem.goldCost.toLocaleString()}
+                        </span>
                       </div>
-                      <span className="text-xs text-yellow-400 tabular-nums font-medium">
-                        {selectedItem.goldCost >= 1000000
-                          ? `${(selectedItem.goldCost / 1000000).toFixed(1)}M`
-                          : selectedItem.goldCost.toLocaleString()}
-                      </span>
-                    </div>
-                  )}
+                    )
+                  })()}
                 </div>
               </div>
             ) : (
@@ -2356,15 +2378,23 @@ export function EquipmentForge() {
   const awakenCurrent = awakenSlot ? (loadout[awakenSlot]?.awakenLevel ?? 0) : 0
 
   const [inventory, setInventory] = useState<Record<string, number>>({})
+  const [showInventory, setShowInventory] = useState(true)
 
   return (
     <div className="space-y-6">
-      <ForgeTabContent state={forgeState} onUpdateState={updateForgeState} />
+      <ForgeTabContent state={forgeState} onUpdateState={updateForgeState} inventory={inventory} />
 
       {/* ══ MATERIAL INVENTORY ══ */}
       <div className="border-t border-border/50 pt-6">
-        <p className="text-sm font-bold tracking-wide uppercase text-muted-foreground mb-4">Material Inventory</p>
-        <InventoryPanel loadout={loadout} inventory={inventory} setInventory={setInventory} />
+        <button
+          onClick={() => setShowInventory(v => !v)}
+          className="flex items-center gap-2 w-full text-left mb-4 group">
+          <p className="text-sm font-bold tracking-wide uppercase text-muted-foreground group-hover:text-foreground transition-colors">Material Inventory</p>
+          <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform duration-200', showInventory && 'rotate-180')} />
+        </button>
+        {showInventory && (
+          <InventoryPanel loadout={loadout} inventory={inventory} setInventory={setInventory} />
+        )}
       </div>
 
       <div className="border-t border-border/50 pt-6">
