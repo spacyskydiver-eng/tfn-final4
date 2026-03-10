@@ -5,7 +5,7 @@
 import path from "path";
 import { defineConfig } from "prisma/config";
 import * as dotenv from "dotenv";
-dotenv.config();
+dotenv.config(); // no-op on Vercel (env vars already injected); loads .env locally
 
 export default defineConfig({
   earlyAccess: true,
