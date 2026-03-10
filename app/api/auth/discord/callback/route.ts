@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
+import { prisma } from '@/lib/prisma'
 
 function getBaseUrl(request: NextRequest): string {
   if (process.env.NEXT_PUBLIC_BASE_URL) return process.env.NEXT_PUBLIC_BASE_URL
@@ -56,14 +57,32 @@ export async function GET(request: NextRequest) {
   const adminIds = (process.env.DISCORD_ADMIN_IDS || '').split(',').map(s => s.trim()).filter(Boolean)
   const isAdmin = adminIds.includes(discordUser.id)
 
-  // Create session data
+  // Upsert user in DB — creates on first login, updates username/avatar on subsequent logins
+  const dbUser = await prisma.user.upsert({
+    where: { discordId: discordUser.id },
+    create: {
+      discordId: discordUser.id,
+      username: discordUser.username,
+      avatar: discordUser.avatar
+        ? `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png`
+        : null,
+      isAdmin,
+    },
+    update: {
+      username: discordUser.username,
+      avatar: discordUser.avatar
+        ? `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png`
+        : null,
+      isAdmin,
+    },
+  })
+
+  // Create session data using the DB user's cuid (not the Discord snowflake)
   const sessionData = {
-    id: discordUser.id,
-    username: discordUser.username,
-    avatar: discordUser.avatar
-      ? `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png`
-      : null,
-    isAdmin,
+    id: dbUser.id,
+    username: dbUser.username,
+    avatar: dbUser.avatar,
+    isAdmin: dbUser.isAdmin,
   }
 
   // Store session in a secure HTTP-only cookie
