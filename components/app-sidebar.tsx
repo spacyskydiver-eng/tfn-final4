@@ -33,6 +33,7 @@ import {
   Flag,
   ShoppingCart,
   LayoutDashboard,
+  ClipboardList,
 } from "lucide-react";
 
 function UserFooter({ collapsed }: { collapsed: boolean }) {
@@ -135,6 +136,7 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const { user } = useAuth();
   const [botsOpen, setBotsOpen] = useState(true);
+  const [staffOpen, setStaffOpen] = useState(true);
 
   return (
     <aside
@@ -245,26 +247,54 @@ export function AppSidebar({
             </div>
           )}
         </div>
-      </nav>
 
-      {/* Staff portal link (admin only) */}
-      {user?.isAdmin && (
-        <div className="px-3 pb-2">
-          <button
-            onClick={() => onTabChange('staff-portal')}
-            className={cn(
-              "group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
-              activeTab === 'staff-portal'
-                ? "bg-primary/15 text-primary"
-                : "text-muted-foreground hover:bg-secondary hover:text-foreground",
-              collapsed && "justify-center px-0"
+        {/* Staff section (admin only) */}
+        {user?.isAdmin && (
+          <div className="pt-2">
+            <button
+              onClick={() => setStaffOpen(o => !o)}
+              className={cn(
+                "flex w-full items-center gap-2 rounded-lg px-3 py-2 transition-colors hover:bg-secondary/50",
+                collapsed ? "justify-center" : "justify-between"
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <Shield className={cn("h-4 w-4 shrink-0", activeTab === 'staff-portal' ? "text-primary" : "text-muted-foreground")} />
+                {!collapsed && (
+                  <span className={cn("text-xs font-semibold uppercase tracking-wider", activeTab === 'staff-portal' ? "text-primary" : "text-muted-foreground")}>
+                    Staff
+                  </span>
+                )}
+              </div>
+              {!collapsed && (
+                staffOpen
+                  ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+                  : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+              )}
+            </button>
+
+            {(staffOpen || collapsed) && (
+              <div className={cn("space-y-0.5", !collapsed && "pl-2 mt-0.5")}>
+                <button
+                  onClick={() => onTabChange('staff-portal')}
+                  className={cn(
+                    "group relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
+                    activeTab === 'staff-portal'
+                      ? "bg-primary/15 text-primary shadow-[0_0_20px_-4px_hsl(var(--glow)/0.3)]"
+                      : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  )}
+                >
+                  {activeTab === 'staff-portal' && (
+                    <div className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary" />
+                  )}
+                  <ClipboardList className={cn("h-4 w-4 shrink-0", activeTab === 'staff-portal' ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
+                  {!collapsed && <span>Orders</span>}
+                </button>
+              </div>
             )}
-          >
-            <Shield className="h-4 w-4 shrink-0" />
-            {!collapsed && <span>Staff Portal</span>}
-          </button>
-        </div>
-      )}
+          </div>
+        )}
+      </nav>
 
       {/* Cart button */}
       {(cartCount > 0 || activeTab === 'bot-tools-home') && (
