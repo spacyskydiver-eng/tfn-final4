@@ -806,9 +806,12 @@ function StatsTab() {
 
   useEffect(() => {
     fetch('/api/staff/stats')
-      .then(r => r.json())
-      .then(data => setStats(data))
-      .catch(() => setError('Failed to load stats'))
+      .then(async r => {
+        const data = await r.json()
+        if (!r.ok) throw new Error(data.error ?? 'Failed to load stats')
+        setStats(data)
+      })
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load stats'))
       .finally(() => setLoading(false))
   }, [])
 
