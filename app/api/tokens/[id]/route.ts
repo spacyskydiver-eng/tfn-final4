@@ -20,14 +20,16 @@ async function getSessionUser(_req: NextRequest) {
  */
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const user = await getSessionUser(req)
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const { id } = await params
+
   // Verify ownership before revoking
   const token = await prisma.apiToken.findFirst({
-    where: { id: params.id, userId: user.id },
+    where: { id, userId: user.id },
     select: { id: true, revokedAt: true },
   })
 
@@ -40,7 +42,7 @@ export async function DELETE(
   }
 
   await prisma.apiToken.update({
-    where: { id: params.id },
+    where: { id },
     data: { revokedAt: new Date() },
   })
 

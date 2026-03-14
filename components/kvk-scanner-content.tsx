@@ -670,14 +670,14 @@ export function KvkScannerContent({ onNavigate }: KvkScannerContentProps = {}) {
       </Section>
 
       {/* ── Kingdoms & Map ── */}
-      <Section title="Kingdoms & Camps" icon={MapIcon} badge={`${MOCK_KINGDOMS.length} kingdoms`}>
+      <Section title="Kingdoms & Camps" icon={MapIcon} badge={`${kingdoms.length} kingdoms`}>
         <div className="p-4 space-y-4">
           <div className="grid gap-4 lg:grid-cols-[1fr_1.6fr]">
             {/* Camp overview cards */}
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Camp Overview</p>
               {allCamps.filter(c => c !== 'All').map(camp => {
-                const kds = MOCK_KINGDOMS.filter(k => k.camp === camp)
+                const kds = kingdoms.filter(k => k.camp === camp)
                 const campKp = kds.reduce((s, k) => s + k.kp, 0)
                 const col = CAMP_COLORS[camp]
                 return (
@@ -759,7 +759,7 @@ export function KvkScannerContent({ onNavigate }: KvkScannerContentProps = {}) {
       </Section>
 
       {/* ── Detailed Stats ── */}
-      <Section title="Detailed Stats" icon={Zap} defaultOpen={false} badge={`${MOCK_PLAYERS.length * MOCK_KINGDOMS.length / 10 | 0} entries`}>
+      <Section title="Detailed Stats" icon={Zap} defaultOpen={false} badge={`${players.length} entries`}>
         <div className="p-4 space-y-3">
           <div className="flex flex-wrap gap-2">
             <select value={kdFilter} onChange={e => setKdFilter(e.target.value)}
