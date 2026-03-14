@@ -78,19 +78,25 @@ interface KingdomEntry { id: string; kdNum: string; camp: string; tracked: boole
 
 // ─── Steps ────────────────────────────────────────────────────────────────────
 
-const STEPS = ['KvK Type', 'Bundle', 'Kingdoms', 'Review']
-
 interface CreateKvkModalProps {
   onClose: () => void
   onCreated: (data: { name: string; kvkType: string; bundle: string; isSoC: boolean; kingdoms: KingdomEntry[] }) => void
+  // When provided, skip the bundle step (user already purchased)
+  purchaseBundle?: string
+  purchaseIsSoC?: boolean
 }
 
-export function CreateKvkModal({ onClose, onCreated }: CreateKvkModalProps) {
+export function CreateKvkModal({ onClose, onCreated, purchaseBundle, purchaseIsSoC }: CreateKvkModalProps) {
+  const alreadyPurchased = !!purchaseBundle
+
+  // When purchased, skip bundle step: steps are KvK Type → Kingdoms → Review
+  const STEPS = alreadyPurchased ? ['KvK Type', 'Kingdoms', 'Review'] : ['KvK Type', 'Bundle', 'Kingdoms', 'Review']
+
   const [step, setStep] = useState(0)
   const [kvkName, setKvkName] = useState('')
   const [kvkType, setKvkType] = useState('')
-  const [isSoC, setIsSoC] = useState(true)
-  const [bundle, setBundle] = useState('')
+  const [isSoC, setIsSoC] = useState(purchaseIsSoC ?? true)
+  const [bundle, setBundle] = useState(purchaseBundle ?? '')
   const [kingdoms, setKingdoms] = useState<KingdomEntry[]>([{ id: '1', kdNum: '', camp: '', tracked: true }])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -114,11 +120,17 @@ export function CreateKvkModal({ onClose, onCreated }: CreateKvkModalProps) {
 
   const trackedCount = kingdoms.filter(k => k.tracked).length
 
+  // Step mapping differs depending on whether bundle is pre-filled
+  // alreadyPurchased: 0=KvK Type, 1=Kingdoms, 2=Review
+  // normal:           0=KvK Type, 1=Bundle,   2=Kingdoms, 3=Review
+  const kingdomsStep = alreadyPurchased ? 1 : 2
+  const reviewStep   = alreadyPurchased ? 2 : 3
+
   const canNext = (
     (step === 0 && kvkType !== '' && kvkName.trim() !== '') ||
-    (step === 1 && bundle !== '') ||
-    (step === 2 && kingdoms.some(k => k.kdNum.trim() !== '' && k.camp !== '')) ||
-    step === 3
+    (!alreadyPurchased && step === 1 && bundle !== '') ||
+    (step === kingdomsStep && kingdoms.some(k => k.kdNum.trim() !== '' && k.camp !== '')) ||
+    step === reviewStep
   )
 
   async function handleSubmit() {
@@ -152,7 +164,7 @@ export function CreateKvkModal({ onClose, onCreated }: CreateKvkModalProps) {
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border/50 px-6 py-4">
           <div>
-            <h2 className="text-lg font-bold text-foreground">Create New KvK</h2>
+            <h2 className="text-lg font-bold text-foreground">{alreadyPurchased ? 'Submit Kingdom Details' : 'Create New KvK'}</h2>
             <p className="text-xs text-muted-foreground mt-0.5">Step {step + 1} of {STEPS.length} — {STEPS[step]}</p>
           </div>
           <button onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
@@ -231,8 +243,8 @@ export function CreateKvkModal({ onClose, onCreated }: CreateKvkModalProps) {
             </div>
           )}
 
-          {/* Step 1: Bundle */}
-          {step === 1 && (
+          {/* Step 1: Bundle (only shown when not pre-purchased) */}
+          {!alreadyPurchased && step === 1 && (
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground">
                 Pricing shown for <span className="text-foreground font-medium">{isSoC ? 'Season of Conquest' : 'Non-SoC'}</span> kingdoms.
@@ -277,8 +289,8 @@ export function CreateKvkModal({ onClose, onCreated }: CreateKvkModalProps) {
             </div>
           )}
 
-          {/* Step 2: Kingdoms */}
-          {step === 2 && (
+          {/* Step: Kingdoms */}
+          {step === kingdomsStep && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div>
@@ -354,8 +366,8 @@ export function CreateKvkModal({ onClose, onCreated }: CreateKvkModalProps) {
             </div>
           )}
 
-          {/* Step 3: Review */}
-          {step === 3 && (
+          {/* Step: Review */}
+          {step === reviewStep && (
             <div className="space-y-4">
               <div className="rounded-xl border border-border/50 bg-muted/10 p-4 space-y-3">
                 <div className="flex justify-between text-sm">
@@ -372,12 +384,14 @@ export function CreateKvkModal({ onClose, onCreated }: CreateKvkModalProps) {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Bundle</span>
-                  <span className="font-medium text-foreground">{selectedBundle?.label}</span>
+                  <span className="font-medium text-foreground">{selectedBundle?.label ?? bundle}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Price</span>
-                  <span className="font-bold text-primary text-base">${isSoC ? selectedBundle?.priceSoC : selectedBundle?.priceNonSoC}</span>
-                </div>
+                {!alreadyPurchased && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Price</span>
+                    <span className="font-bold text-primary text-base">${isSoC ? selectedBundle?.priceSoC : selectedBundle?.priceNonSoC}</span>
+                  </div>
+                )}
                 <div className="border-t border-border/50 pt-3">
                   <span className="text-xs text-muted-foreground">Kingdoms</span>
                   <div className="mt-2 flex flex-wrap gap-1.5">

@@ -354,6 +354,8 @@ export function KvkScannerContent({ onNavigate }: KvkScannerContentProps = {}) {
   const [loading, setLoading] = useState(true)
   const [activeKvkId, setActiveKvkId] = useState<string | null>(null)
   const [hasPurchased, setHasPurchased] = useState(false)
+  const [purchaseBundle, setPurchaseBundle] = useState<string | undefined>()
+  const [purchaseIsSoC, setPurchaseIsSoC] = useState<boolean | undefined>()
   const [showCreateModal, setShowCreateModal] = useState(false)
 
   // Fetch user's KvKs and orders on mount
@@ -365,11 +367,16 @@ export function KvkScannerContent({ onNavigate }: KvkScannerContentProps = {}) {
       const active = kvkData.kvks?.find((k: { status: string }) => k.status === 'active')
       if (active) setActiveKvkId(active.id)
 
-      const purchased = orderData.orders?.some((o: { items: Array<{toolId: string}>, status: string }) =>
+      const order = orderData.orders?.find((o: { items: Array<{toolId: string; bundle?: string; isSoC?: boolean}>, status: string }) =>
         (o.status === 'active' || o.status === 'confirmed') &&
         o.items?.some((i) => i.toolId === 'kvk-scanner')
       )
-      setHasPurchased(!!purchased)
+      if (order) {
+        setHasPurchased(true)
+        const item = order.items?.find((i: {toolId: string}) => i.toolId === 'kvk-scanner')
+        if (item?.bundle) setPurchaseBundle(item.bundle)
+        if (item?.isSoC !== undefined) setPurchaseIsSoC(item.isSoC)
+      }
     }).finally(() => setLoading(false))
   }, [])
 
@@ -492,6 +499,8 @@ export function KvkScannerContent({ onNavigate }: KvkScannerContentProps = {}) {
           {showCreateModal && (
             <CreateKvkModal
               onClose={() => setShowCreateModal(false)}
+              purchaseBundle={purchaseBundle}
+              purchaseIsSoC={purchaseIsSoC}
               onCreated={(_data) => {
                 setShowCreateModal(false)
                 setLoading(true)
