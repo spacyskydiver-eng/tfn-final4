@@ -146,47 +146,39 @@ client.on(Events.InteractionCreate, async interaction => {
       const staffRoleId = process.env.DISCORD_STAFF_ROLE_ID
       const staffChannelId = process.env.DISCORD_STAFF_CHANNEL_ID
 
+      // Build items list from the order
+      const items = Array.isArray(order.items) ? order.items : []
+      const itemLines = items.map(item => {
+        const socTag = item.isSoC !== undefined ? ` (${item.isSoC ? 'SoC' : 'Non-SoC'})` : ''
+        return `• ${item.label}${socTag} — $${item.price}`
+      }).join('\n') || '• (no items)'
+      const totalUsd = order.totalUsd ?? order.priceUsd ?? 0
+      const toolSummary = items.length === 1 ? items[0].label : `${items.length} tools`
+
       // Create a private ticket channel
       const channelName = `ticket-${productKey.toLowerCase()}`
       const ticketChannel = await guild.channels.create({
         name: channelName,
         type: ChannelType.GuildText,
-        topic: `Order: ${productKey} | Tool: ${order.toolType}`,
+        topic: `Order: ${productKey} | ${toolSummary}`,
         permissionOverwrites: [
-          // Deny everyone
           { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
-          // Allow the user who activated
           { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
-          // Allow staff role if configured
           ...(staffRoleId
             ? [{ id: staffRoleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels] }]
             : []),
         ],
       })
 
-      // Post welcome message in the ticket
-      const toolLabel = {
-        'kvk-scanner':   'KvK Scanner',
-        'title-giving':  'Title Giving',
-        'fort-tracking': 'Fort Tracking',
-        'player-finder': 'Player Finder',
-        'alliance-mob':  'Alliance Mobilization',
-        'discord-verify':'Discord Verification',
-      }[order.toolType] ?? order.toolType
-
-      const bundleInfo = order.bundle
-        ? ` — ${order.bundle.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())} (${order.isSoC ? 'SoC' : 'Non-SoC'})`
-        : ''
-
       const ticketEmbed = new EmbedBuilder()
-        .setTitle(`🎫 Order Ticket — ${toolLabel}${bundleInfo}`)
+        .setTitle(`🎫 Order Ticket`)
         .setColor(0x7c3aed)
         .setDescription(
           `Thanks for your order, <@${interaction.user.id}>!\n\n` +
           `A staff member will be with you shortly to complete payment and set up your bot.\n\n` +
-          `**Product Key:** \`${productKey}\`\n` +
-          `**Tool:** ${toolLabel}${bundleInfo}\n` +
-          `**Price:** $${order.priceUsd}`
+          `**Product Key:** \`${productKey}\`\n\n` +
+          `**Items:**\n${itemLines}\n\n` +
+          `**Total: $${totalUsd}**`
         )
         .addFields(
           { name: 'Payment', value: 'Staff will send a PayPal invoice or payment link shortly.', inline: false },
@@ -200,7 +192,6 @@ client.on(Events.InteractionCreate, async interaction => {
         embeds: [ticketEmbed],
       })
 
-      // Notify staff channel if configured
       if (staffChannelId) {
         const staffChannel = guild.channels.cache.get(staffChannelId)
         if (staffChannel?.isTextBased()) {
@@ -209,10 +200,11 @@ client.on(Events.InteractionCreate, async interaction => {
               .setTitle('🛒 New Order Activated')
               .setColor(0xf59e0b)
               .addFields(
-                { name: 'User',        value: `<@${interaction.user.id}> (${interaction.user.tag})`, inline: true },
-                { name: 'Tool',        value: toolLabel,                                              inline: true },
-                { name: 'Key',         value: `\`${productKey}\``,                                   inline: true },
-                { name: 'Ticket',      value: `<#${ticketChannel.id}>`,                               inline: true },
+                { name: 'User',   value: `<@${interaction.user.id}> (${interaction.user.tag})`, inline: true },
+                { name: 'Tools',  value: toolSummary,                                            inline: true },
+                { name: 'Total',  value: `$${totalUsd}`,                                         inline: true },
+                { name: 'Key',    value: `\`${productKey}\``,                                    inline: true },
+                { name: 'Ticket', value: `<#${ticketChannel.id}>`,                               inline: true },
               )
               .setTimestamp()
             ],

@@ -206,10 +206,15 @@ model Order {
   userId      String
   productKey  String   @unique // e.g. "TFN-A1B2-C3D4-E5F6"
 
-  toolType    String   // kvk-scanner | title-giving | fort-tracking | player-finder | alliance-mob | discord-verify
-  bundle      String?  // full-kvk | two-camp | one-camp (KvK Scanner only)
-  isSoC       Boolean? // KvK Scanner only
-  priceUsd    Float
+  // All cart items bundled into one order
+  items       Json?    // [{toolId, label, bundle?, isSoC?, price}]
+  totalUsd    Float?   // sum of all item prices
+
+  // Legacy single-item fields (null for multi-item orders)
+  toolType    String?
+  bundle      String?
+  isSoC       Boolean?
+  priceUsd    Float?
 
   // Lifecycle
   status      String   @default("pending") // pending | confirmed | active | cancelled

@@ -363,8 +363,8 @@ function CheckoutPanel({ cart, onClose, onRemove, onCheckoutComplete }: Checkout
   const [step, setStep] = useState<'cart' | 'keys'>('cart')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [productKeys, setProductKeys] = useState<{ key: string; label: string }[]>([])
-  const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [productKey, setProductKey] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const total = cart.reduce((s, i) => s + i.price, 0)
 
@@ -378,6 +378,7 @@ function CheckoutPanel({ cart, onClose, onRemove, onCheckoutComplete }: Checkout
         body: JSON.stringify({
           items: cart.map(i => ({
             toolId: i.toolId,
+            label: i.label,
             bundle: i.bundle,
             isSoC: i.isSoC,
             price: i.price,
@@ -386,12 +387,7 @@ function CheckoutPanel({ cart, onClose, onRemove, onCheckoutComplete }: Checkout
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Checkout failed')
-      setProductKeys(
-        data.orders.map((o: { productKey: string }, idx: number) => ({
-          key: o.productKey,
-          label: cart[idx]?.label ?? o.productKey,
-        }))
-      )
+      setProductKey(data.order.productKey)
       setStep('keys')
       onCheckoutComplete()
     } catch (e: unknown) {
@@ -401,10 +397,11 @@ function CheckoutPanel({ cart, onClose, onRemove, onCheckoutComplete }: Checkout
     }
   }
 
-  function copyKey(key: string) {
-    navigator.clipboard.writeText(key)
-    setCopiedKey(key)
-    setTimeout(() => setCopiedKey(null), 2000)
+  function copyKey() {
+    if (!productKey) return
+    navigator.clipboard.writeText(productKey)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   return (
@@ -463,23 +460,39 @@ function CheckoutPanel({ cart, onClose, onRemove, onCheckoutComplete }: Checkout
           {step === 'keys' && (
             <div className="space-y-5">
               <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-4 text-sm text-green-400">
-                Order placed! Copy your product key(s) and redeem them in our Discord server.
+                Order placed! Copy your product key and redeem it in our Discord server.
               </div>
 
-              {productKeys.map(({ key, label }) => (
-                <div key={key} className="rounded-xl border border-border/50 bg-muted/20 p-4 space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">{label}</p>
+              {/* Items summary */}
+              <div className="rounded-xl border border-border/50 bg-muted/20 p-4 space-y-2">
+                <p className="text-xs font-semibold text-foreground mb-2">Order summary</p>
+                {cart.map(item => (
+                  <div key={item.cartId} className="flex justify-between text-xs text-muted-foreground">
+                    <span>{item.label}{item.isSoC !== undefined ? ` (${item.isSoC ? 'SoC' : 'Non-SoC'})` : ''}</span>
+                    <span>${item.price}</span>
+                  </div>
+                ))}
+                <div className="flex justify-between text-xs font-semibold text-foreground border-t border-border/50 pt-2 mt-2">
+                  <span>Total</span>
+                  <span>${total}</span>
+                </div>
+              </div>
+
+              {/* Single product key */}
+              {productKey && (
+                <div className="rounded-xl border border-border/50 bg-muted/20 p-4 space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Your product key</p>
                   <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm font-semibold text-foreground tracking-widest">
-                    <span className="flex-1 select-all">{key}</span>
+                    <span className="flex-1 select-all">{productKey}</span>
                     <button
-                      onClick={() => copyKey(key)}
+                      onClick={copyKey}
                       className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
                     >
-                      {copiedKey === key ? <CheckCheck className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
+                      {copied ? <CheckCheck className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
                     </button>
                   </div>
                 </div>
-              ))}
+              )}
 
               <div className="rounded-xl border border-border/50 bg-muted/20 p-4 space-y-3">
                 <p className="text-xs font-semibold text-foreground">Next steps</p>

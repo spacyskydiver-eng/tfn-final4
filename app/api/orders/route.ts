@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
 
     type CartItem = {
       toolId: string
+      label: string
       bundle?: string
       isSoC?: boolean
       price: number
@@ -39,24 +40,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'items array required' }, { status: 400 })
     }
 
-    // Create all orders in a transaction
-    const orders = await prisma.$transaction(
-      items.map(item =>
-        prisma.order.create({
-          data: {
-            userId: user.id,
-            productKey: generateProductKey(),
-            toolType: item.toolId,
-            bundle: item.bundle ?? null,
-            isSoC: item.isSoC ?? null,
-            priceUsd: item.price,
-            status: 'pending',
-          },
-        })
-      )
-    )
+    const totalUsd = items.reduce((sum, i) => sum + i.price, 0)
 
-    return NextResponse.json({ orders }, { status: 201 })
+    // Create a single order for the whole cart
+    const order = await prisma.order.create({
+      data: {
+        userId: user.id,
+        productKey: generateProductKey(),
+        items: items as object[],
+        totalUsd,
+        status: 'pending',
+      },
+    })
+
+    return NextResponse.json({ order }, { status: 201 })
   } catch (err) {
     console.error('[POST /api/orders]', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
