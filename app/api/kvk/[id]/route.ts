@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma'
 
 // ─── PATCH /api/kvk/[id] — update status, formula, schedules ─────────────────
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getSession()
     if (!session?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -12,7 +12,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const user = await prisma.user.findUnique({ where: { id: session.id } })
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
-    const kvk = await prisma.kvkSetup.findUnique({ where: { id: params.id } })
+    const { id } = await params
+    const kvk = await prisma.kvkSetup.findUnique({ where: { id } })
     if (!kvk) return NextResponse.json({ error: 'KvK not found' }, { status: 404 })
 
     if (!user.isAdmin && kvk.createdById !== user.id) {
@@ -28,7 +29,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
     if ('status' in updates && !user.isAdmin) delete updates.status
 
-    const updated = await prisma.kvkSetup.update({ where: { id: params.id }, data: updates })
+    const updated = await prisma.kvkSetup.update({ where: { id }, data: updates })
     return NextResponse.json({ id: updated.id, status: updated.status })
   } catch (err) {
     console.error('[PATCH /api/kvk/:id]', err)
@@ -38,7 +39,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
 // ─── DELETE /api/kvk/[id] — admin only ───────────────────────────────────────
 
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getSession()
     if (!session?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -46,7 +47,8 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     const user = await prisma.user.findUnique({ where: { id: session.id } })
     if (!user?.isAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-    await prisma.kvkSetup.delete({ where: { id: params.id } })
+    const { id } = await params
+    await prisma.kvkSetup.delete({ where: { id } })
     return NextResponse.json({ deleted: true })
   } catch (err) {
     console.error('[DELETE /api/kvk/:id]', err)

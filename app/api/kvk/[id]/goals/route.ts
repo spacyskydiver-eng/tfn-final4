@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/server-auth'
 import { prisma } from '@/lib/prisma'
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getSession()
     if (!session?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -10,7 +10,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const user = await prisma.user.findUnique({ where: { id: session.id } })
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
-    const kvk = await prisma.kvkSetup.findUnique({ where: { id: params.id } })
+    const { id } = await params
+    const kvk = await prisma.kvkSetup.findUnique({ where: { id } })
     if (!kvk) return NextResponse.json({ error: 'KvK not found' }, { status: 404 })
     if (!user.isAdmin && kvk.createdById !== user.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -28,8 +29,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const upserts = await Promise.all(
       goals.map(g =>
         prisma.kvkPlayerGoal.upsert({
-          where: { kvkId_govId: { kvkId: params.id, govId: g.govId } },
-          create: { kvkId: params.id, setById: user.id, ...g },
+          where: { kvkId_govId: { kvkId: id, govId: g.govId } },
+          create: { kvkId: id, setById: user.id, ...g },
           update: { setById: user.id, ...g },
         })
       )
@@ -42,12 +43,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getSession()
     if (!session?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const goals = await prisma.kvkPlayerGoal.findMany({ where: { kvkId: params.id } })
+    const { id } = await params
+    const goals = await prisma.kvkPlayerGoal.findMany({ where: { kvkId: id } })
     return NextResponse.json({ goals })
   } catch (err) {
     console.error('[GET /api/kvk/:id/goals]', err)

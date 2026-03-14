@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/server-auth'
 import { prisma } from '@/lib/prisma'
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getSession()
     if (!session?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -10,7 +10,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const user = await prisma.user.findUnique({ where: { id: session.id } })
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
-    const kvk = await prisma.kvkSetup.findUnique({ where: { id: params.id } })
+    const { id } = await params
+    const kvk = await prisma.kvkSetup.findUnique({ where: { id } })
     if (!kvk) return NextResponse.json({ error: 'KvK not found' }, { status: 404 })
     if (!user.isAdmin && kvk.createdById !== user.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
 
     const schedule = await prisma.scanSchedule.create({
-      data: { kvkId: params.id, label, cronExpr, scanType, topN: topN ?? 300, enabled: enabled ?? true },
+      data: { kvkId: id, label, cronExpr, scanType, topN: topN ?? 300, enabled: enabled ?? true },
     })
 
     return NextResponse.json(schedule, { status: 201 })
@@ -36,13 +37,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getSession()
     if (!session?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+    const { id } = await params
     const schedules = await prisma.scanSchedule.findMany({
-      where: { kvkId: params.id },
+      where: { kvkId: id },
       orderBy: { createdAt: 'asc' },
     })
     return NextResponse.json({ schedules })

@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma'
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getSession()
@@ -29,11 +29,12 @@ export async function PATCH(
       notes?: string
     }
 
-    const existing = await prisma.order.findUnique({ where: { id: params.id } })
+    const { id } = await params
+    const existing = await prisma.order.findUnique({ where: { id } })
     if (!existing) return NextResponse.json({ error: 'Order not found' }, { status: 404 })
 
     const updated = await prisma.order.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         ...(status !== undefined && { status }),
         ...(kvkSetupId !== undefined && { kvkSetupId }),
@@ -57,7 +58,7 @@ export async function PATCH(
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getSession()
@@ -68,8 +69,9 @@ export async function GET(
     const user = await prisma.user.findUnique({ where: { id: session.id } })
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
+    const { id } = await params
     const order = await prisma.order.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: { user: { select: { id: true, username: true, discordId: true } } },
     })
 

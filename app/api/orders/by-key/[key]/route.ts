@@ -7,15 +7,16 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { key: string } }
+  { params }: { params: Promise<{ key: string }> }
 ) {
   const secret = req.headers.get('x-bot-secret')
   if (!secret || secret !== process.env.BOT_API_SECRET) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  const { key } = await params
   const order = await prisma.order.findUnique({
-    where: { productKey: params.key.toUpperCase() },
+    where: { productKey: key.toUpperCase() },
     include: { user: { select: { id: true, username: true, discordId: true } } },
   })
 
