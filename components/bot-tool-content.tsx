@@ -1,6 +1,7 @@
 'use client'
 
-import { Crown, Flag, Search, Bell, MessageSquare, Lock, ShoppingCart, Circle } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Crown, Flag, Search, Bell, MessageSquare, Lock, ShoppingCart, Circle, CheckCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const TOOL_META: Record<string, {
@@ -54,6 +55,20 @@ interface BotToolContentProps {
 
 export function BotToolContent({ toolId, onNavigate }: BotToolContentProps) {
   const meta = TOOL_META[toolId]
+  const [hasPurchased, setHasPurchased] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/orders')
+      .then(r => r.json())
+      .then(data => {
+        const purchased = data.orders?.some((o: { items: Array<{toolId: string}>, status: string }) =>
+          (o.status === 'active' || o.status === 'confirmed') &&
+          o.items?.some((i) => i.toolId === toolId)
+        )
+        setHasPurchased(!!purchased)
+      })
+      .catch(() => {})
+  }, [toolId])
 
   if (!meta) return null
 
@@ -84,23 +99,34 @@ export function BotToolContent({ toolId, onNavigate }: BotToolContentProps) {
         </div>
       </div>
 
-      {/* Locked / coming soon state */}
-      <div className="rounded-xl border border-border/50 bg-card/60 p-10 flex flex-col items-center text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/40 mb-4">
-          <Lock className="h-7 w-7 text-muted-foreground/50" />
+      {hasPurchased ? (
+        <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-10 flex flex-col items-center text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-green-500/10 mb-4">
+            <CheckCircle className="h-7 w-7 text-green-400" />
+          </div>
+          <h3 className="text-base font-semibold text-foreground mb-2">Purchase Confirmed</h3>
+          <p className="text-sm text-muted-foreground max-w-sm">
+            Our staff are setting up {meta.label} for your kingdom. This usually takes up to 24 hours after payment. You&apos;ll be notified in your Discord ticket when it&apos;s live.
+          </p>
         </div>
-        <h3 className="text-base font-semibold text-foreground mb-2">Bot not yet active</h3>
-        <p className="text-sm text-muted-foreground max-w-sm mb-6">
-          This tool is not yet set up for your kingdom. Purchase it from the Bot Store — our staff will configure and activate it for you after payment.
-        </p>
-        <button
-          onClick={() => onNavigate?.('bot-tools-home')}
-          className="flex items-center gap-2 rounded-xl bg-primary/15 border border-primary/20 px-5 py-2.5 text-sm font-medium text-primary hover:bg-primary/25 transition-colors"
-        >
-          <ShoppingCart className="h-4 w-4" />
-          Go to Bot Store
-        </button>
-      </div>
+      ) : (
+        <div className="rounded-xl border border-border/50 bg-card/60 p-10 flex flex-col items-center text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/40 mb-4">
+            <Lock className="h-7 w-7 text-muted-foreground/50" />
+          </div>
+          <h3 className="text-base font-semibold text-foreground mb-2">Bot not yet active</h3>
+          <p className="text-sm text-muted-foreground max-w-sm mb-6">
+            This tool is not yet set up for your kingdom. Purchase it from the Bot Store — our staff will configure and activate it for you after payment.
+          </p>
+          <button
+            onClick={() => onNavigate?.('bot-tools-home')}
+            className="flex items-center gap-2 rounded-xl bg-primary/15 border border-primary/20 px-5 py-2.5 text-sm font-medium text-primary hover:bg-primary/25 transition-colors"
+          >
+            <ShoppingCart className="h-4 w-4" />
+            Go to Bot Store
+          </button>
+        </div>
+      )}
     </div>
   )
 }

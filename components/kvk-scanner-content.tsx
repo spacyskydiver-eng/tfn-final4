@@ -4,10 +4,11 @@ import { useState, useMemo, useEffect } from 'react'
 import {
   ChevronDown, ChevronUp, Search, Download, Edit2, Check, X,
   Trophy, Swords, Skull, Shield, Zap, Users, Map as MapIcon,
-  Target, Clock, Trash2, ToggleLeft, ToggleRight, ScanSearch, Loader2,
+  Target, Clock, Trash2, ToggleLeft, ToggleRight, ScanSearch, Loader2, Plus,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth-context'
+import { CreateKvkModal } from '@/components/create-kvk-modal'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -352,19 +353,24 @@ export function KvkScannerContent({ onNavigate }: KvkScannerContentProps = {}) {
   const [kingdoms, setKingdoms] = useState<Kingdom[]>([])
   const [loading, setLoading] = useState(true)
   const [activeKvkId, setActiveKvkId] = useState<string | null>(null)
+  const [hasPurchased, setHasPurchased] = useState(false)
+  const [showCreateModal, setShowCreateModal] = useState(false)
 
-  // Fetch user's KvKs on mount
+  // Fetch user's KvKs and orders on mount
   useEffect(() => {
-    fetch('/api/kvk')
-      .then(r => r.json())
-      .then(data => {
-        const active = data.kvks?.find((k: { status: string }) => k.status === 'active')
-        if (active) setActiveKvkId(active.id)
-        // players/kingdoms will be populated by the bot when it scans
-        // for now they remain empty until the bot writes data
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    Promise.all([
+      fetch('/api/kvk').then(r => r.json()).catch(() => ({ kvks: [] })),
+      fetch('/api/orders').then(r => r.json()).catch(() => ({ orders: [] })),
+    ]).then(([kvkData, orderData]) => {
+      const active = kvkData.kvks?.find((k: { status: string }) => k.status === 'active')
+      if (active) setActiveKvkId(active.id)
+
+      const purchased = orderData.orders?.some((o: { items: Array<{toolId: string}>, status: string }) =>
+        (o.status === 'active' || o.status === 'confirmed') &&
+        o.items?.some((i) => i.toolId === 'kvk-scanner')
+      )
+      setHasPurchased(!!purchased)
+    }).finally(() => setLoading(false))
   }, [])
 
   const [activeTab, setActiveTab] = useState<'dkp' | 'pre-kvk' | 'honor' | 'summary'>('dkp')
@@ -464,6 +470,42 @@ export function KvkScannerContent({ onNavigate }: KvkScannerContentProps = {}) {
 
   // ── No active KvK ──────────────────────────────────────────────────────────
   if (!activeKvkId) {
+    if (hasPurchased) {
+      return (
+        <>
+          <div className="flex flex-col items-center justify-center py-20 text-center max-w-md mx-auto">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 mb-5">
+              <ScanSearch className="h-8 w-8 text-primary" />
+            </div>
+            <h2 className="text-lg font-semibold text-foreground mb-2">KvK Scanner Purchased</h2>
+            <p className="text-sm text-muted-foreground mb-6">
+              Your purchase is confirmed. Submit your kingdom details and staff will configure your scanner within 24 hours.
+            </p>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-opacity"
+            >
+              <Plus className="h-4 w-4" />
+              Submit Kingdom Details
+            </button>
+          </div>
+          {showCreateModal && (
+            <CreateKvkModal
+              onClose={() => setShowCreateModal(false)}
+              onCreated={(_data) => {
+                setShowCreateModal(false)
+                setLoading(true)
+                fetch('/api/kvk').then(r => r.json()).then(data => {
+                  const active = data.kvks?.find((k: { status: string }) => k.status === 'active' || k.status === 'pending')
+                  if (active) setActiveKvkId(active.id)
+                }).finally(() => setLoading(false))
+              }}
+            />
+          )}
+        </>
+      )
+    }
+
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center max-w-md mx-auto">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 mb-5">
