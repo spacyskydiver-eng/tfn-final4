@@ -6,6 +6,7 @@ import { ContentPanel } from "@/components/content-panel";
 import { AnimatedBackground } from "@/components/animated-background";
 import { useTheme } from "@/lib/theme-context";
 import { cn } from "@/lib/utils";
+import type { CartItem } from "@/components/bot-tools-home";
 
 // ─── Mouse Trail Overlay ───────────────────────────────────────────────────────
 // Uses direct DOM manipulation (no React state) for 60fps performance.
@@ -124,7 +125,18 @@ function MouseTrailOverlay() {
 export function DashboardShell() {
   const [activeTab, setActiveTab] = useState("home");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [cart, setCart] = useState<CartItem[]>([]);
   const { settings, currentColor } = useTheme();
+
+  function addToCart(item: Omit<CartItem, 'cartId'>) {
+    setCart(prev => [...prev, { ...item, cartId: `${item.toolId}-${Date.now()}` }])
+  }
+  function removeFromCart(cartId: string) {
+    setCart(prev => prev.filter(i => i.cartId !== cartId))
+  }
+  function clearCart() {
+    setCart([])
+  }
 
   // Cursor glow tracking
   const glowRef = useRef<HTMLDivElement>(null);
@@ -188,6 +200,8 @@ export function DashboardShell() {
         onTabChange={setActiveTab}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        cartCount={cart.length}
+        onCartClick={() => setActiveTab('bot-tools-home')}
       />
       <div
         className={cn(
@@ -195,7 +209,14 @@ export function DashboardShell() {
           sidebarCollapsed ? "ml-[72px]" : "ml-[260px]"
         )}
       >
-        <ContentPanel activeTab={activeTab} onTabChange={setActiveTab} />
+        <ContentPanel
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          cart={cart}
+          onAddToCart={addToCart}
+          onRemoveFromCart={removeFromCart}
+          onClearCart={clearCart}
+        />
       </div>
     </div>
   );

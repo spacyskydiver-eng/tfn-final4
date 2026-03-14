@@ -23,6 +23,9 @@ model User {
 
   apiTokens  ApiToken[]
   killEvents KillEvent[]
+  commanderSubmissions CommanderSubmission[]
+  kvkSetups  KvkSetup[]
+  orders     Order[]
 }
 
 // ─── ApiToken ─────────────────────────────────────────────────────────────────
@@ -71,4 +74,181 @@ model KillEvent {
   @@unique([userId, contentHash])
   @@index([userId, reportType])
   @@index([userId, createdAt(sort: Desc)])
+}
+
+// ─── CommanderSubmission ──────────────────────────────────────────────────────
+// A commander build shared in kingdom chat, captured by the bot.
+// One row per unique (player + commander + snapshot).
+model CommanderSubmission {
+  id              String   @id @default(cuid())
+  userId          String   // API token owner (the bot operator)
+  contentHash     String   // SHA-256(commanderName+sharedByPlayer+stars+level) — dedup
+
+  // Who shared it
+  sharedByPlayer  String
+
+  // Commander identity
+  commanderName   String
+  commanderTitle  String?
+
+  // Stats visible on profile screen
+  stars           Int?
+  level           Int?
+  skillLevel      Int?   // secondary level (the /10 part)
+  commanderPower  Int?
+
+  // Skills (levels of each of the 5 skills)
+  skillLevels     Json?  // e.g. [5, 5, 5, 5, 4]
+
+  // Formation & armament
+  formationName   String?
+  armamentSet     String?
+  armamentStats   Json?  // e.g. ["Cavalry Attack +8.9%", "Cavalry Defense +9.3%"]
+
+  // Equipment (identified item names per slot, if recognisable)
+  equipment       Json?  // e.g. { head: "...", chest: "...", ... }
+
+  // Raw OCR dumps from each screen (for reprocessing later)
+  rawProfileText   String? @db.Text
+  rawEquipText     String? @db.Text
+  rawFormationText String? @db.Text
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, contentHash])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([commanderName])
+  @@map("commander_submissions")
+}
+
+// ─── KvkSetup ─────────────────────────────────────────────────────────────────
+// A KvK tracking contract created by a customer.
+// Staff are notified via Discord when one is created, then set it live.
+model KvkSetup {
+  id          String   @id @default(cuid())
+  createdById String   // User who purchased/created this KvK
+  name        String   // e.g. "Heroic Anthem #C13093"
+  kvkType     String   // heroic-anthem | tides-of-war | warriors-unbound | etc.
+  isSoC       Boolean  @default(true)
+  bundle      String   // full-kvk | two-camp | one-camp
+  status      String   @default("pending") // pending | active | paused | completed
+
+  // Date range for this KvK
+  startDate   DateTime?
+  endDate     DateTime?
+
+  // DKP formula weights (overridable by leadership)
+  dkpDeadWeight Float @default(12)
+  dkpT4Weight   Float @default(4)
+  dkpT5Weight   Float @default(8)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdBy     User             @relation(fields: [createdById], references: [id])
+  kingdoms      KvkKingdom[]
+  playerGoals   KvkPlayerGoal[]
+  scanSchedules ScanSchedule[]
+
+  @@index([createdById])
+  @@index([status])
+  @@map("kvk_setups")
+}
+
+// ─── KvkKingdom ───────────────────────────────────────────────────────────────
+// A participating kingdom in a KvK.
+model KvkKingdom {
+  id        String  @id @default(cuid())
+  kvkId     String
+  kdNumber  String  // e.g. "3517"
+  camp      String  // Fire | Earth | Water | Wind | etc.
+  tracked   Boolean @default(true) // false = map-only, not bot-scanned
+
+  kvk KvkSetup @relation(fields: [kvkId], references: [id], onDelete: Cascade)
+
+  @@unique([kvkId, kdNumber])
+  @@index([kvkId])
+  @@map("kvk_kingdoms")
+}
+
+// ─── KvkPlayerGoal ────────────────────────────────────────────────────────────
+// DKP and kill goals set by kingdom leadership for individual players.
+model KvkPlayerGoal {
+  id         String  @id @default(cuid())
+  kvkId      String
+  govId      String  // In-game governor ID
+  playerName String
+  alliance   String?
+
+  dkpGoal     Float?  // Target DKP score
+  t4KillGoal  Float?  // Target T4 kills
+  t5KillGoal  Float?  // Target T5 kills
+  deadGoal    Float?  // Target deaths (for farming DKP)
+  honorGoal   Float?  // Target honor points
+
+  setById   String   // User ID of who set this goal
+  updatedAt DateTime @updatedAt
+
+  kvk KvkSetup @relation(fields: [kvkId], references: [id], onDelete: Cascade)
+
+  @@unique([kvkId, govId])
+  @@index([kvkId])
+  @@map("kvk_player_goals")
+}
+
+// ─── Order ────────────────────────────────────────────────────────────────────
+// A purchase order created when a user checks out from the Bot Tools store.
+// Generates a unique product key the user redeems in Discord to open a ticket.
+model Order {
+  id          String   @id @default(cuid())
+  userId      String
+  productKey  String   @unique // e.g. "TFN-A1B2-C3D4-E5F6"
+
+  toolType    String   // kvk-scanner | title-giving | fort-tracking | player-finder | alliance-mob | discord-verify
+  bundle      String?  // full-kvk | two-camp | one-camp (KvK Scanner only)
+  isSoC       Boolean? // KvK Scanner only
+  priceUsd    Float
+
+  // Lifecycle
+  status      String   @default("pending") // pending | confirmed | active | cancelled
+
+  // Set by staff after payment confirmed
+  confirmedById String?
+  confirmedAt   DateTime?
+
+  // Linked KvK setup once staff creates it
+  kvkSetupId  String?
+
+  notes       String?  @db.Text // staff notes
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([productKey])
+  @@map("orders")
+}
+
+// ─── ScanSchedule ─────────────────────────────────────────────────────────────
+// When and what the bot should scan for a given KvK.
+model ScanSchedule {
+  id          String   @id @default(cuid())
+  kvkId       String
+  label       String   // e.g. "Daily Morning Scan"
+  cronExpr    String   // cron syntax, e.g. "0 6 * * *" = 06:00 UTC daily
+  scanType    String   // dkp | honor | pre-kvk | seeding | all
+  topN        Int      @default(300) // How many players to scan (100-1000)
+  enabled     Boolean  @default(true)
+  lastRunAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  kvk KvkSetup @relation(fields: [kvkId], references: [id], onDelete: Cascade)
+
+  @@index([kvkId])
+  @@map("scan_schedules")
 }

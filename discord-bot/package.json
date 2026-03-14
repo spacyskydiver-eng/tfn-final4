@@ -1,0 +1,15 @@
+{
+  "name": "tfn-discord-bot",
+  "version": "1.0.0",
+  "description": "TFN staff Discord bot — KvK management, scan triggers, goal setting",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "register": "node register-commands.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.3.1",
+    "node-fetch": "^3.3.2"
+  }
+}

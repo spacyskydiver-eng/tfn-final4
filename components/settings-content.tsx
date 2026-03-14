@@ -6,7 +6,7 @@ import { useTheme, COLOR_PRESETS, BACKGROUND_PRESETS } from '@/lib/theme-context
 import { ALL_ICONS } from '@/components/bundles-content'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Check, Palette, ImageIcon, Move, Eye, Sparkles, ChevronDown, ChevronUp, Wand2, Search, RotateCcw, Upload } from 'lucide-react'
+import { Check, Palette, ImageIcon, Move, Eye, Sparkles, ChevronDown, ChevronUp, Wand2, Search, RotateCcw, Upload, Bot, Crown, Sword, Users, Bell, ScanSearch, Trophy, Shield, Map, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export function SettingsContent() {
@@ -684,6 +684,256 @@ export function SettingsContent() {
             </div>
           )}
         </CardContent>
+      </Card>
+
+      {/* ── Divider: Bot Tools ─────────────────────────────────────────── */}
+      <BotToolsSection />
+
+      {/* ── Divider: KvK Scanner ──────────────────────────────────────── */}
+      <KvkScannerSection />
+    </div>
+  )
+}
+
+// ─── Bot Tools Section ────────────────────────────────────────────────────────
+
+const BOT_TOOLS = [
+  {
+    id: 'title-giving',
+    label: 'Title Giving',
+    icon: Crown,
+    description: 'Automatically rotates kingdom titles (Duke, Justice, etc.) on a configurable schedule.',
+    color: 'text-amber-400',
+    bg: 'bg-amber-400/10',
+  },
+  {
+    id: 'fort-tracking',
+    label: 'Fort Tracking',
+    icon: Shield,
+    description: 'Monitors fort attack and defense events in kingdom chat and logs them.',
+    color: 'text-blue-400',
+    bg: 'bg-blue-400/10',
+  },
+  {
+    id: 'player-finder',
+    label: 'Player Finder',
+    icon: Users,
+    description: 'Searches for specific players across the map and reports their location.',
+    color: 'text-violet-400',
+    bg: 'bg-violet-400/10',
+  },
+  {
+    id: 'alliance-mobilization',
+    label: 'Alliance Mobilization',
+    icon: Zap,
+    description: 'Sends coordinated rally and mobilization messages to alliance members.',
+    color: 'text-red-400',
+    bg: 'bg-red-400/10',
+  },
+  {
+    id: 'discord-verification',
+    label: 'Discord Verification',
+    icon: Bell,
+    description: 'Links in-game accounts to Discord and assigns verified member roles automatically.',
+    color: 'text-green-400',
+    bg: 'bg-green-400/10',
+  },
+]
+
+function BotToolsSection() {
+  const [open, setOpen] = useState(false)
+  const [enabled, setEnabled] = useState<Record<string, boolean>>({})
+
+  return (
+    <div className="relative">
+      {/* Divider with label */}
+      <div className="flex items-center gap-3 mb-4">
+        <div className="h-px flex-1 bg-border" />
+        <div className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1">
+          <Bot className="h-3.5 w-3.5 text-primary" />
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Bot Tools</span>
+        </div>
+        <div className="h-px flex-1 bg-border" />
+      </div>
+
+      <Card className="border-border bg-card">
+        <CardHeader className="cursor-pointer select-none" onClick={() => setOpen(o => !o)}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                <Bot className="h-5 w-5" />
+              </div>
+              <div>
+                <CardTitle className="text-foreground">Bot Tools</CardTitle>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Configure automated bots for your kingdom
+                </p>
+              </div>
+            </div>
+            {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+          </div>
+        </CardHeader>
+
+        {open && (
+          <CardContent className="space-y-3">
+            {BOT_TOOLS.map(tool => {
+              const Icon = tool.icon
+              const isOn = enabled[tool.id] ?? false
+              return (
+                <div
+                  key={tool.id}
+                  className={cn(
+                    'flex items-start gap-4 rounded-xl border p-4 transition-all',
+                    isOn ? 'border-primary/30 bg-primary/5' : 'border-border/50 bg-card/40'
+                  )}
+                >
+                  <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', tool.bg)}>
+                    <Icon className={cn('h-5 w-5', tool.color)} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium text-foreground">{tool.label}</span>
+                      {/* Toggle */}
+                      <button
+                        onClick={() => setEnabled(e => ({ ...e, [tool.id]: !e[tool.id] }))}
+                        className={cn(
+                          'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border-2 transition-colors',
+                          isOn ? 'border-primary bg-primary' : 'border-border bg-card'
+                        )}
+                        role="switch"
+                        aria-checked={isOn}
+                      >
+                        <span
+                          className={cn(
+                            'pointer-events-none block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform',
+                            isOn ? 'translate-x-[14px]' : 'translate-x-0.5'
+                          )}
+                        />
+                      </button>
+                    </div>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{tool.description}</p>
+                    {isOn && (
+                      <button className="mt-2 text-xs text-primary hover:underline">Configure →</button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </CardContent>
+        )}
+      </Card>
+    </div>
+  )
+}
+
+// ─── KvK Scanner Section ──────────────────────────────────────────────────────
+
+const KVK_SCANNER_ITEMS = [
+  { id:'pre-kvk',  label:'Pre-KvK Rankings', icon: Sword,      description:'Track player power and rankings before KvK begins.' },
+  { id:'honor',    label:'Honor Rankings',    icon: Trophy,     description:'Real-time honor leaderboard during KvK.' },
+  { id:'dkp',      label:'DKP Score',         icon: Zap,        description:'Custom DKP formula scoring with configurable weights.' },
+  { id:'summary',  label:'Summary View',      icon: Map,        description:'Combined view of all rankings, kingdoms, and camps.' },
+]
+
+function KvkScannerSection() {
+  const [open, setOpen] = useState(false)
+  const [subOpen, setSubOpen] = useState(false)
+  const [scanInterval, setScanInterval] = useState(30)
+
+  return (
+    <div className="relative">
+      {/* Divider with label */}
+      <div className="flex items-center gap-3 mb-4">
+        <div className="h-px flex-1 bg-border" />
+        <div className="flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 py-1">
+          <ScanSearch className="h-3.5 w-3.5 text-primary" />
+          <span className="text-xs font-semibold uppercase tracking-wider text-primary">KvK Scanner</span>
+        </div>
+        <div className="h-px flex-1 bg-border" />
+      </div>
+
+      <Card className="border-primary/20 bg-card">
+        <CardHeader className="cursor-pointer select-none" onClick={() => setOpen(o => !o)}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                <ScanSearch className="h-5 w-5" />
+              </div>
+              <div>
+                <CardTitle className="text-foreground">KvK Scanner</CardTitle>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Configure live KvK tracking, scan intervals, and DKP formula
+                </p>
+              </div>
+            </div>
+            {open ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+          </div>
+        </CardHeader>
+
+        {open && (
+          <CardContent className="space-y-5">
+            {/* Scan interval */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-foreground">Scan Interval</label>
+                <span className="text-xs text-muted-foreground tabular-nums">every {scanInterval}s</span>
+              </div>
+              <input
+                type="range" min={10} max={120} step={5}
+                value={scanInterval}
+                onChange={e => setScanInterval(Number(e.target.value))}
+                className="w-full accent-primary h-2 cursor-pointer"
+              />
+              <div className="flex justify-between text-[10px] text-muted-foreground">
+                <span>10s (fast)</span><span>120s (slow)</span>
+              </div>
+            </div>
+
+            {/* Kingdom numbers */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Kingdom Numbers to Scan</label>
+              <input
+                type="text"
+                placeholder="e.g. 3497, 3499, 3500, 3504..."
+                className="w-full rounded-lg border border-border bg-card/50 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+              <p className="text-xs text-muted-foreground">Comma-separated list of kingdom IDs. Leave empty to scan your kingdom only.</p>
+            </div>
+
+            {/* Sub-sections collapse */}
+            <div className="rounded-xl border border-border/50 overflow-hidden">
+              <button
+                onClick={() => setSubOpen(o => !o)}
+                className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium text-foreground hover:bg-white/[0.02] transition-colors"
+              >
+                <span>Tracking Modules</span>
+                {subOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+              </button>
+              {subOpen && (
+                <div className="border-t border-border/50 p-3 space-y-2">
+                  {KVK_SCANNER_ITEMS.map(item => {
+                    const Icon = item.icon
+                    return (
+                      <div key={item.id} className="flex items-start gap-3 rounded-lg border border-border/40 bg-card/30 p-3">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          <Icon className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-foreground">{item.label}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5">{item.description}</div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            <p className="text-xs text-muted-foreground/60">
+              DKP formula and leadership settings are managed from the KvK Scanner page directly.
+            </p>
+          </CardContent>
+        )}
       </Card>
     </div>
   )

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -13,6 +14,8 @@ import {
   TrendingUp,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Swords,
   LogIn,
   LogOut,
@@ -22,9 +25,16 @@ import {
   Map,
   Boxes,
   Receipt,
-  Sword,
-  History,
+  ScanSearch,
+  Bot,
+  Search,
+  MessageSquare,
+  Bell,
+  Flag,
+  ShoppingCart,
+  LayoutDashboard,
 } from "lucide-react";
+
 function UserFooter({ collapsed }: { collapsed: boolean }) {
   const { user, loading, login, logout } = useAuth();
 
@@ -83,32 +93,49 @@ interface AppSidebarProps {
   onTabChange: (tab: string) => void;
   collapsed: boolean;
   onToggleCollapse: () => void;
+  cartCount?: number;
+  onCartClick?: () => void;
 }
 
-const navItems = [
-  { id: "home", label: "Home", icon: Home },
-  { id: "calendar", label: "Calendar", icon: CalendarDays },
-  { id: "kvk", label: "KvK Tracker", icon: CrosshairIcon },
-  { id: "commander", label: "Commander Prep", icon: Crown },
-  { id: "kill-tracker", label: "Kill Tracker", icon: Sword },
-  { id: "sync-history", label: "Sync History", icon: History },
-  { id: "guides", label: "Guides", icon: BookOpen },
-  { id: "general-tools", label: "General Tools", icon: Wrench },
-  { id: "accounts", label: "Accounts", icon: Users },
-  { id: "calculator", label: "Calculator", icon: Calculator },
-  { id: "progression-plans", label: "Progression Plans", icon: TrendingUp },
-  { id: "bundles", label: "Bundles", icon: Boxes },
-  { id: "spending", label: "Spending Tracker", icon: Receipt },
-  { id: "territory-planner", label: "Territory Planner", icon: Map },
-  { id: "settings", label: "Settings", icon: Settings },
+const mainNavItems = [
+  { id: "home",               label: "Home",              icon: Home },
+  { id: "calendar",           label: "Calendar",          icon: CalendarDays },
+  { id: "kvk",                label: "KvK Tracker",       icon: CrosshairIcon },
+  { id: "commander",          label: "Commander Prep",    icon: Crown },
+  { id: "guides",             label: "Guides",            icon: BookOpen },
+  { id: "general-tools",      label: "General Tools",     icon: Wrench },
+  { id: "accounts",           label: "Accounts",          icon: Users },
+  { id: "calculator",         label: "Calculator",        icon: Calculator },
+  { id: "progression-plans",  label: "Progression Plans", icon: TrendingUp },
+  { id: "bundles",            label: "Bundles",           icon: Boxes },
+  { id: "spending",           label: "Spending Tracker",  icon: Receipt },
+  { id: "territory-planner",  label: "Territory Planner", icon: Map },
+  { id: "settings",           label: "Settings",          icon: Settings },
 ];
+
+const botNavItems = [
+  { id: "bot-tools-home",  label: "Bot Store",              icon: LayoutDashboard },
+  { id: "title-giving",    label: "Title Giving",           icon: Crown },
+  { id: "fort-tracking",   label: "Fort Tracking",          icon: Flag },
+  { id: "player-finder",   label: "Player Finder",          icon: Search },
+  { id: "alliance-mob",    label: "Alliance Mobilization",  icon: Bell },
+  { id: "discord-verify",  label: "Discord Verification",   icon: MessageSquare },
+  { id: "kvk-scanner",     label: "KvK Scanner",            icon: ScanSearch },
+];
+
+const botTabIds = new Set(botNavItems.map(b => b.id));
 
 export function AppSidebar({
   activeTab,
   onTabChange,
   collapsed,
   onToggleCollapse,
+  cartCount = 0,
+  onCartClick,
 }: AppSidebarProps) {
+  const { user } = useAuth();
+  const [botsOpen, setBotsOpen] = useState(true);
+
   return (
     <aside
       className={cn(
@@ -142,8 +169,9 @@ export function AppSidebar({
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 px-3 py-4">
-        {navItems.map((item) => {
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+        {/* Main nav items */}
+        {mainNavItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
           return (
@@ -160,17 +188,108 @@ export function AppSidebar({
               {isActive && (
                 <div className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r-full bg-primary" />
               )}
-              <Icon
-                className={cn(
-                  "h-5 w-5 shrink-0 transition-colors duration-200",
-                  isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
-                )}
-              />
+              <Icon className={cn("h-5 w-5 shrink-0 transition-colors duration-200", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
               {!collapsed && <span>{item.label}</span>}
             </button>
           );
         })}
+
+        {/* Bot Tools divider + collapsible section */}
+        <div className="pt-2">
+          <button
+            onClick={() => setBotsOpen(o => !o)}
+            className={cn(
+              "flex w-full items-center gap-2 rounded-lg px-3 py-2 transition-colors hover:bg-secondary/50",
+              collapsed ? "justify-center" : "justify-between"
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <Bot className={cn("h-4 w-4 shrink-0", botTabIds.has(activeTab) ? "text-primary" : "text-muted-foreground")} />
+              {!collapsed && (
+                <span className={cn("text-xs font-semibold uppercase tracking-wider", botTabIds.has(activeTab) ? "text-primary" : "text-muted-foreground")}>
+                  Bot Tools
+                </span>
+              )}
+            </div>
+            {!collapsed && (
+              botsOpen
+                ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+                : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+            )}
+          </button>
+
+          {(botsOpen || collapsed) && (
+            <div className={cn("space-y-0.5", !collapsed && "pl-2 mt-0.5")}>
+              {botNavItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => onTabChange(item.id)}
+                    className={cn(
+                      "group relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
+                      isActive
+                        ? "bg-primary/15 text-primary shadow-[0_0_20px_-4px_hsl(var(--glow)/0.3)]"
+                        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    )}
+                  >
+                    {isActive && (
+                      <div className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary" />
+                    )}
+                    <Icon className={cn("h-4 w-4 shrink-0 transition-colors duration-200", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
+                    {!collapsed && <span>{item.label}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </nav>
+
+      {/* Staff portal link (admin only) */}
+      {user?.isAdmin && (
+        <div className="px-3 pb-2">
+          <button
+            onClick={() => onTabChange('staff-portal')}
+            className={cn(
+              "group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
+              activeTab === 'staff-portal'
+                ? "bg-primary/15 text-primary"
+                : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+              collapsed && "justify-center px-0"
+            )}
+          >
+            <Shield className="h-4 w-4 shrink-0" />
+            {!collapsed && <span>Staff Portal</span>}
+          </button>
+        </div>
+      )}
+
+      {/* Cart button */}
+      {(cartCount > 0 || activeTab === 'bot-tools-home') && (
+        <div className="px-3 pb-2">
+          <button
+            onClick={onCartClick}
+            className={cn(
+              "group relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
+              "bg-primary/10 text-primary hover:bg-primary/20",
+              collapsed && "justify-center px-0"
+            )}
+          >
+            <ShoppingCart className="h-4 w-4 shrink-0" />
+            {!collapsed && <span>Cart</span>}
+            {cartCount > 0 && (
+              <span className={cn(
+                "flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground",
+                collapsed ? "absolute -right-1 -top-1" : "ml-auto"
+              )}>
+                {cartCount}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Auth / Footer */}
       <UserFooter collapsed={collapsed} />

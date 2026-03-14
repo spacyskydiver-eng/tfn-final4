@@ -16,8 +16,13 @@ import {
   Map,
   Boxes,
   Receipt,
-  Sword,
-  History,
+  ScanSearch,
+  Flag,
+  Search,
+  Bell,
+  MessageSquare,
+  LayoutDashboard,
+  Shield,
 } from "lucide-react";
 
 import { AccountsContent } from "@/components/accounts-content";
@@ -33,8 +38,10 @@ import { CommanderContent } from "@/components/commander-content";
 import { TerritoryPlannerContent } from "@/components/territory-planner-content";
 import { BundlesContent } from "@/components/bundles-content";
 import { SpendingTrackerContent } from "@/components/spending-tracker-content";
-import { KillTrackerContent } from "@/components/kill-tracker-content";
-import { SyncHistoryContent } from "@/components/sync-history-content";
+import { KvkScannerContent } from "@/components/kvk-scanner-content";
+import { BotToolContent } from "@/components/bot-tool-content";
+import { BotToolsHome, type CartItem } from "@/components/bot-tools-home";
+import { StaffPortal } from "@/components/staff-portal";
 
 const tabMeta: Record<string, { label: string; description: string; icon: React.ElementType }> = {
   home: {
@@ -97,15 +104,45 @@ const tabMeta: Record<string, { label: string; description: string; icon: React.
     description: "Plan and manage your territory strategy",
     icon: Map,
   },
-  "kill-tracker": {
-    label: "Kill Tracker",
-    description: "Track barbarian kills and fort kills synced from the companion app",
-    icon: Sword,
+  "kvk-scanner": {
+    label: "KvK Scanner",
+    description: "Live KvK rankings, DKP scores, kingdoms, and camp breakdown",
+    icon: ScanSearch,
   },
-  "sync-history": {
-    label: "Sync History",
-    description: "Browse all reports synced from the macOS companion app",
-    icon: History,
+  "bot-tools-home": {
+    label: "Bot Tools Store",
+    description: "Browse, purchase, and manage automation bots for your kingdom",
+    icon: LayoutDashboard,
+  },
+  "staff-portal": {
+    label: "Staff Portal",
+    description: "Manage orders, product keys, and customer bot setups",
+    icon: Shield,
+  },
+  "title-giving": {
+    label: "Title Giving",
+    description: "Automate kingdom title rotation — Duke, Architect, Justice, Scientist",
+    icon: Crown,
+  },
+  "fort-tracking": {
+    label: "Fort Tracking",
+    description: "Monitor fort attacks and defences in real time",
+    icon: Flag,
+  },
+  "player-finder": {
+    label: "Player Finder",
+    description: "Search for players across kingdoms by name, ID, or alliance",
+    icon: Search,
+  },
+  "alliance-mob": {
+    label: "Alliance Mobilization",
+    description: "Send coordinated mobilization messages to alliance chat",
+    icon: Bell,
+  },
+  "discord-verify": {
+    label: "Discord Verification",
+    description: "Link Discord accounts to governor IDs and auto-assign roles",
+    icon: MessageSquare,
   },
   settings: {
     label: "Settings",
@@ -114,12 +151,25 @@ const tabMeta: Record<string, { label: string; description: string; icon: React.
   },
 };
 
+const BOT_TOOL_IDS = new Set(['title-giving', 'fort-tracking', 'player-finder', 'alliance-mob', 'discord-verify']);
+
 interface ContentPanelProps {
   activeTab: string;
   onTabChange?: (tab: string) => void;
+  cart?: CartItem[];
+  onAddToCart?: (item: Omit<CartItem, 'cartId'>) => void;
+  onRemoveFromCart?: (cartId: string) => void;
+  onClearCart?: () => void;
 }
 
-export function ContentPanel({ activeTab, onTabChange }: ContentPanelProps) {
+export function ContentPanel({
+  activeTab,
+  onTabChange,
+  cart = [],
+  onAddToCart,
+  onRemoveFromCart,
+  onClearCart,
+}: ContentPanelProps) {
   const meta = tabMeta[activeTab] || tabMeta.home;
   const Icon = meta.icon;
 
@@ -140,7 +190,19 @@ export function ContentPanel({ activeTab, onTabChange }: ContentPanelProps) {
 
       {/* Tab content */}
       <main className="flex-1 overflow-y-auto p-8">
-        {activeTab === "accounts" ? (
+        {BOT_TOOL_IDS.has(activeTab) ? (
+          <BotToolContent toolId={activeTab} onNavigate={onTabChange} />
+        ) : activeTab === "bot-tools-home" ? (
+          <BotToolsHome
+            cart={cart}
+            onAddToCart={onAddToCart ?? (() => {})}
+            onRemoveFromCart={onRemoveFromCart ?? (() => {})}
+            onOpenCart={() => {}}
+            onNavigate={onTabChange ?? (() => {})}
+          />
+        ) : activeTab === "staff-portal" ? (
+          <StaffPortal />
+        ) : activeTab === "accounts" ? (
           <AccountsContent />
         ) : activeTab === "calculator" ? (
           <CalculatorContent />
@@ -162,10 +224,8 @@ export function ContentPanel({ activeTab, onTabChange }: ContentPanelProps) {
           <BundlesContent />
         ) : activeTab === "spending" ? (
           <SpendingTrackerContent />
-        ) : activeTab === "kill-tracker" ? (
-          <KillTrackerContent />
-        ) : activeTab === "sync-history" ? (
-          <SyncHistoryContent />
+        ) : activeTab === "kvk-scanner" ? (
+          <KvkScannerContent onNavigate={onTabChange} />
         ) : activeTab === "settings" ? (
           <SettingsContent />
         ) : (
@@ -175,4 +235,3 @@ export function ContentPanel({ activeTab, onTabChange }: ContentPanelProps) {
     </div>
   );
 }
-
