@@ -42,6 +42,7 @@ import { KvkScannerContent } from "@/components/kvk-scanner-content";
 import { BotToolContent } from "@/components/bot-tool-content";
 import { BotToolsHome, type CartItem } from "@/components/bot-tools-home";
 import { StaffPortal } from "@/components/staff-portal";
+import { VerifyContent } from "@/components/verify-content";
 
 const tabMeta: Record<string, { label: string; description: string; icon: React.ElementType }> = {
   home: {
@@ -141,8 +142,8 @@ const tabMeta: Record<string, { label: string; description: string; icon: React.
   },
   "discord-verify": {
     label: "Discord Verification",
-    description: "Link Discord accounts to governor IDs and auto-assign roles",
-    icon: MessageSquare,
+    description: "Auto-verify players using governor profile screenshots",
+    icon: Shield,
   },
   settings: {
     label: "Settings",
@@ -151,7 +152,7 @@ const tabMeta: Record<string, { label: string; description: string; icon: React.
   },
 };
 
-const BOT_TOOL_IDS = new Set(['title-giving', 'fort-tracking', 'player-finder', 'alliance-mob', 'discord-verify']);
+const BOT_TOOL_IDS = new Set(['title-giving', 'fort-tracking', 'player-finder', 'alliance-mob']);
 
 interface ContentPanelProps {
   activeTab: string;
@@ -200,6 +201,8 @@ export function ContentPanel({
             onOpenCart={() => {}}
             onNavigate={onTabChange ?? (() => {})}
           />
+        ) : activeTab === "discord-verify" ? (
+          <VerifyContent />
         ) : activeTab === "staff-portal" ? (
           <StaffPortal />
         ) : activeTab === "accounts" ? (

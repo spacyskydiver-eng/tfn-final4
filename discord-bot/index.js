@@ -1,7 +1,11 @@
 import 'dotenv/config'
 import { Client, GatewayIntentBits, EmbedBuilder, Events, ChannelType, PermissionFlagsBits } from 'discord.js'
 
-const client = new Client({ intents: [GatewayIntentBits.Guilds] })
+const client = new Client({ intents: [
+  GatewayIntentBits.Guilds,
+  GatewayIntentBits.GuildMessages,
+  GatewayIntentBits.MessageContent,
+] })
 const API = process.env.APP_URL
 const SECRET = process.env.BOT_API_SECRET
 
@@ -240,6 +244,124 @@ client.on(Events.InteractionCreate, async interaction => {
   } catch (err) {
     console.error(`[${commandName}]`, err)
     return interaction.editReply(`❌ Error: ${err.message}`)
+  }
+})
+
+// ─── Governor verification ─────────────────────────────────────────────────────
+
+// Cache server configs to avoid hitting API on every message (TTL 5 min)
+const serverConfigCache = new Map()
+const CACHE_TTL = 5 * 60 * 1000
+
+async function getVerifyConfig(guildId) {
+  const cached = serverConfigCache.get(guildId)
+  if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data
+  try {
+    const res = await fetch(`${API}/api/verify/servers/${guildId}`, {
+      headers: { 'x-bot-secret': SECRET },
+    })
+    if (!res.ok) { serverConfigCache.set(guildId, { ts: Date.now(), data: null }); return null }
+    const data = await res.json()
+    serverConfigCache.set(guildId, { ts: Date.now(), data: data.server })
+    return data.server
+  } catch { return null }
+}
+
+client.on(Events.MessageCreate, async message => {
+  if (message.author.bot) return
+  if (!message.guild) return
+
+  // Only process if there are image attachments
+  const images = message.attachments.filter(a =>
+    a.contentType?.startsWith('image/') || /\.(png|jpg|jpeg|webp)$/i.test(a.name ?? '')
+  )
+  if (!images.size) return
+
+  const guildId = message.guild.id
+  const config = await getVerifyConfig(guildId)
+  if (!config) return
+  if (!config.active) return
+  if (!config.channelId) return
+  if (message.channelId !== config.channelId) return
+
+  // Process first image
+  const image = images.first()
+
+  try {
+    const res = await fetch(`${API}/api/verify/check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-bot-secret': SECRET },
+      body: JSON.stringify({
+        guildId,
+        discordUserId: message.author.id,
+        discordUsername: message.author.username,
+        imageUrl: image.url,
+      }),
+    })
+    const data = await res.json()
+
+    const { result, govName, allianceTag, roleId, reason, staffRoleId } = data
+
+    if (result === 'success') {
+      // Assign role
+      const member = await message.guild.members.fetch(message.author.id).catch(() => null)
+      if (member && roleId) {
+        await member.roles.add(roleId).catch(err => console.error('[verify] role assign failed:', err))
+      }
+      await message.reply({
+        embeds: [{
+          title: '✅ Verified!',
+          description: `Welcome, **${govName ?? message.author.username}**! You've been successfully verified.`,
+          color: 0x22c55e,
+          fields: allianceTag ? [{ name: 'Alliance', value: allianceTag, inline: true }] : [],
+          footer: { text: 'TFN Verification System' },
+        }],
+      }).catch(() => {})
+
+    } else if (result === 'failed_alliance') {
+      const staffMention = staffRoleId ? `<@&${staffRoleId}>` : ''
+      await message.reply({
+        content: staffMention || undefined,
+        embeds: [{
+          title: '❌ Verification Failed',
+          description: `Your alliance tag **${allianceTag ?? 'none'}** is not recognized. ${staffMention ? 'A staff member has been notified.' : 'Please contact staff.'}`,
+          color: 0xef4444,
+          footer: { text: reason ?? '' },
+        }],
+      }).catch(() => {})
+
+    } else if (result === 'already_used') {
+      await message.reply({
+        embeds: [{
+          title: '⚠️ Already Verified',
+          description: `Governor ID **${data.govId}** has already been used for verification in this server.`,
+          color: 0xf59e0b,
+        }],
+      }).catch(() => {})
+
+    } else if (result === 'parse_failed') {
+      await message.reply({
+        embeds: [{
+          title: '⚠️ Could Not Read Profile',
+          description: reason ?? 'Please post a clear screenshot of your governor profile screen.',
+          color: 0xf59e0b,
+          footer: { text: 'Tip: Open your profile and screenshot the full pop-up showing your governor ID' },
+        }],
+      }).catch(() => {})
+
+    } else if (result === 'over_limit') {
+      await message.reply({
+        embeds: [{
+          title: '⚠️ Verification Limit Reached',
+          description: reason ?? 'This server has reached its monthly verification limit.',
+          color: 0xf59e0b,
+        }],
+      }).catch(() => {})
+    }
+    // Invalidate cache so next check picks up fresh config
+    serverConfigCache.delete(guildId)
+  } catch (err) {
+    console.error('[verify]', err)
   }
 })
 

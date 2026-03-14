@@ -268,3 +268,59 @@ model ScanSchedule {
   @@index([kvkId])
   @@map("scan_schedules")
 }
+
+// ─── Discord Verification Service ─────────────────────────────────────────────
+
+model VerificationServer {
+  id             String   @id @default(cuid())
+  guildId        String   @unique
+  guildName      String
+  channelId      String?  // verification channel ID to watch
+  staffRoleId    String?  // role to ping on failure
+  freeLimit      Int      @default(250)  // monthly free verifications; -1 = unlimited
+  usedCount      Int      @default(0)
+  addedById      String   // DB user cuid who registered it
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  rules VerificationRule[]
+  logs  VerificationLog[]
+
+  @@map("verification_servers")
+}
+
+model VerificationRule {
+  id          String @id @default(cuid())
+  serverId    String
+  allianceTag String   // e.g. "[T13O]" or "T13O" — matched case-insensitively
+  roleId      String   // Discord role ID to assign when match
+  label       String?  // friendly label e.g. "Twilight of Order"
+
+  server VerificationServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId])
+  @@map("verification_rules")
+}
+
+model VerificationLog {
+  id              String   @id @default(cuid())
+  serverId        String
+  guildId         String
+  discordUserId   String
+  discordUsername String
+  govId           String?
+  govName         String?
+  allianceTag     String?  // extracted from image
+  result          String   // success | failed_alliance | already_used | parse_failed | over_limit
+  roleAssigned    String?  // Discord role ID if assigned
+  roleName        String?  // role label for display
+  createdAt       DateTime @default(now())
+
+  server VerificationServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId])
+  @@index([govId, serverId])
+  @@index([discordUserId, serverId])
+  @@map("verification_logs")
+}
