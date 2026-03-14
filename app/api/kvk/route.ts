@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 
 // ─── Discord webhook notification ─────────────────────────────────────────────
 
+const STAFF_CHANNEL_ID = '1482492075822809128'
+
 async function notifyStaff(kvk: {
   id: string
   name: string
@@ -13,8 +15,8 @@ async function notifyStaff(kvk: {
   kingdoms: Array<{ kdNumber: string; camp: string; tracked: boolean }>
   createdBy: { username: string; discordId: string }
 }) {
+  const botToken = process.env.DISCORD_BOT_TOKEN
   const webhookUrl = process.env.DISCORD_STAFF_WEBHOOK_URL
-  if (!webhookUrl) return
 
   const bundleLabel: Record<string, string> = {
     'full-kvk': 'Full KvK',
@@ -29,13 +31,13 @@ async function notifyStaff(kvk: {
   }
 
   const price = prices[kvk.bundle]?.[kvk.isSoC ? 'soc' : 'nonsoc'] ?? '?'
-
   const tracked = kvk.kingdoms.filter(k => k.tracked)
   const mapOnly = kvk.kingdoms.filter(k => !k.tracked)
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tfn-final4-sand.vercel.app'
 
   const fields = [
     { name: 'KvK Type',     value: kvk.kvkType.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), inline: true },
-    { name: 'Bundle',       value: `${bundleLabel[kvk.bundle]} ($${price})`,                               inline: true },
+    { name: 'Bundle',       value: `${bundleLabel[kvk.bundle] ?? kvk.bundle} ($${price})`,                 inline: true },
     { name: 'Kingdom Type', value: kvk.isSoC ? 'Season of Conquest' : 'Non-SoC',                          inline: true },
     {
       name: `Tracked Kingdoms (${tracked.length})`,
@@ -52,23 +54,35 @@ async function notifyStaff(kvk: {
     })
   }
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://your-app.com'
+  const payload = {
+    content: `📋 **New KvK Setup Request** — action required in the Staff Portal\n${appUrl}?request=${kvk.id}`,
+    embeds: [{
+      title: `🗡️ ${kvk.name}`,
+      description: `**${kvk.createdBy.username}** submitted a KvK setup request and is waiting for activation.`,
+      color: 0x7c3aed,
+      fields,
+      footer: { text: `Discord ID: ${kvk.createdBy.discordId} • KvK ID: ${kvk.id}` },
+      timestamp: new Date().toISOString(),
+    }],
+  }
 
-  await fetch(webhookUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      embeds: [{
-        title: `🗡️ New KvK Setup — ${kvk.name}`,
-        description: `**${kvk.createdBy.username}** created a new KvK and is waiting for bot setup.\n\nKvK ID: \`${kvk.id}\`\n[View Dashboard](${appUrl}/kvk-scanner)`,
-        color: 0x7c3aed,
-        fields,
-        footer: { text: `Discord ID: ${kvk.createdBy.discordId}` },
-        timestamp: new Date().toISOString(),
-      }],
-      username: 'TFN Bot System',
-    }),
-  }).catch(err => console.error('[KvK webhook]', err))
+  // Prefer bot API (posts to specific channel), fall back to webhook
+  if (botToken) {
+    await fetch(`https://discord.com/api/v10/channels/${STAFF_CHANNEL_ID}/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bot ${botToken}`,
+      },
+      body: JSON.stringify(payload),
+    }).catch(err => console.error('[KvK discord bot notify]', err))
+  } else if (webhookUrl) {
+    await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...payload, username: 'TFN Bot System' }),
+    }).catch(err => console.error('[KvK webhook]', err))
+  }
 }
 
 // ─── POST /api/kvk ─────────────────────────────────────────────────────────────
@@ -98,6 +112,17 @@ export async function POST(req: NextRequest) {
     const user = await prisma.user.findUnique({ where: { id: session.id } })
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
+    // Find the user's most recent confirmed/active kvk-scanner order to link
+    const userOrders = await prisma.order.findMany({
+      where: { userId: user.id, status: { in: ['confirmed', 'active'] } },
+      select: { id: true, items: true },
+      orderBy: { createdAt: 'desc' },
+    })
+    const linkedOrder = userOrders.find(o => {
+      const items = o.items as Array<{ toolId: string }> | null
+      return items?.some(i => i.toolId === 'kvk-scanner')
+    })
+
     // Create KvK + kingdoms in a transaction
     const kvk = await prisma.kvkSetup.create({
       data: {
@@ -107,6 +132,7 @@ export async function POST(req: NextRequest) {
         bundle,
         isSoC: isSoC ?? true,
         status: 'pending',
+        orderId: linkedOrder?.id ?? null,
         kingdoms: {
           create: (kingdoms ?? [])
             .filter(k => k.kdNum?.trim())

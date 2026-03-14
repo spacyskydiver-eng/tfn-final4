@@ -147,6 +147,17 @@ model KvkSetup {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Staff assignment & task tracking
+  assignedToId    String?
+  assignedToName  String?
+  assignedAt      DateTime?
+  completedAt     DateTime?
+  completedById   String?
+  completedByName String?
+
+  // Linked purchase order (set when user creates KvK after buying)
+  orderId         String?
+
   createdBy     User             @relation(fields: [createdById], references: [id])
   kingdoms      KvkKingdom[]
   playerGoals   KvkPlayerGoal[]

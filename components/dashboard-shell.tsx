@@ -128,6 +128,13 @@ export function DashboardShell() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const { settings, currentColor } = useTheme();
 
+  // If URL contains ?request=<id>, auto-navigate to staff portal
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('request')) setActiveTab('staff-portal')
+  }, []);
+
   function addToCart(item: Omit<CartItem, 'cartId'>) {
     setCart(prev => [...prev, { ...item, cartId: `${item.toolId}-${Date.now()}` }])
   }
