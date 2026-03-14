@@ -357,6 +357,7 @@ export function KvkScannerContent({ onNavigate }: KvkScannerContentProps = {}) {
   const [purchaseBundle, setPurchaseBundle] = useState<string | undefined>()
   const [purchaseIsSoC, setPurchaseIsSoC] = useState<boolean | undefined>()
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
 
   // Fetch user's KvKs and orders on mount
   useEffect(() => {
@@ -366,6 +367,8 @@ export function KvkScannerContent({ onNavigate }: KvkScannerContentProps = {}) {
     ]).then(([kvkData, orderData]) => {
       const active = kvkData.kvks?.find((k: { status: string }) => k.status === 'active')
       if (active) setActiveKvkId(active.id)
+      const pending = kvkData.kvks?.find((k: { status: string }) => k.status === 'pending')
+      if (pending && !active) setSubmitted(true)
 
       const order = orderData.orders?.find((o: { items: Array<{toolId: string; bundle?: string; isSoC?: boolean}>, status: string }) =>
         (o.status === 'active' || o.status === 'confirmed') &&
@@ -475,6 +478,21 @@ export function KvkScannerContent({ onNavigate }: KvkScannerContentProps = {}) {
     )
   }
 
+  // ── Kingdom details submitted, waiting for staff to activate ──────────────
+  if (submitted) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center max-w-md mx-auto">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-green-500/10 mb-5">
+          <ScanSearch className="h-8 w-8 text-green-400" />
+        </div>
+        <h2 className="text-lg font-semibold text-foreground mb-2">Kingdom Details Submitted</h2>
+        <p className="text-sm text-muted-foreground">
+          Your kingdom details have been submitted. Staff will review and activate your KvK Scanner within 24 hours. You&apos;ll be notified in your Discord ticket when it&apos;s live.
+        </p>
+      </div>
+    )
+  }
+
   // ── No active KvK ──────────────────────────────────────────────────────────
   if (!activeKvkId) {
     if (hasPurchased) {
@@ -503,11 +521,7 @@ export function KvkScannerContent({ onNavigate }: KvkScannerContentProps = {}) {
               purchaseIsSoC={purchaseIsSoC}
               onCreated={(_data) => {
                 setShowCreateModal(false)
-                setLoading(true)
-                fetch('/api/kvk').then(r => r.json()).then(data => {
-                  const active = data.kvks?.find((k: { status: string }) => k.status === 'active' || k.status === 'pending')
-                  if (active) setActiveKvkId(active.id)
-                }).finally(() => setLoading(false))
+                setSubmitted(true)
               }}
             />
           )}
