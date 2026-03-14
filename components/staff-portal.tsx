@@ -556,8 +556,136 @@ function OrderRow({ order, onUpdated }: { order: Order; onUpdated: (o: Order) =>
 
 // ─── Requests tab ─────────────────────────────────────────────────────────────
 
+// ─── Order task card (non-KvK tools in Requests tab) ─────────────────────────
+
+function OrderTaskCard({ order, onUpdated }: { order: Order; onUpdated: (o: Order) => void }) {
+  const [expanded, setExpanded] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const items = order.items
+  const hasItems = items && items.length > 0
+  const primaryToolId = hasItems ? items[0].toolId : (order.toolType ?? '')
+  const primaryLabel = hasItems
+    ? items.map(i => i.label ?? TOOL_LABEL[i.toolId] ?? i.toolId).join(', ')
+    : (TOOL_LABEL[order.toolType ?? ''] ?? order.toolType ?? '—')
+  const displayPrice = order.totalUsd ?? order.priceUsd ?? 0
+  const ToolIcon = TOOL_ICON[primaryToolId] ?? ShieldCheck
+  const isPending = order.status === 'pending' || order.status === 'confirmed'
+
+  async function activate() {
+    setSaving(true); setError(null)
+    try {
+      const res = await fetch(`/api/orders/${order.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'active' }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Failed')
+      onUpdated(data.order)
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Failed') }
+    finally { setSaving(false) }
+  }
+
+  return (
+    <div className={cn(
+      'rounded-xl border bg-card/60 transition-all',
+      order.status === 'active' ? 'border-green-500/20 opacity-60' : 'border-border/50'
+    )}>
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="flex w-full items-start gap-4 px-5 py-4 text-left hover:bg-white/[0.01] transition-colors"
+      >
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+          <ToolIcon className="h-4 w-4 text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-semibold text-foreground">{primaryLabel}</span>
+            {isPending && (
+              <span className="rounded-full bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 text-[10px] font-medium text-amber-400">
+                Needs Setup
+              </span>
+            )}
+            {order.status === 'active' && (
+              <span className="rounded-full bg-green-500/10 border border-green-500/20 px-2 py-0.5 text-[10px] font-medium text-green-400">
+                Active
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
+            <span className="font-medium text-foreground/80">{order.user.username}</span>
+            <span>·</span>
+            <span className="font-mono">{order.productKey}</span>
+            <span>·</span>
+            <span className="text-green-400 font-semibold">${displayPrice}</span>
+            <span>·</span>
+            <span>{new Date(order.createdAt).toLocaleDateString()}</span>
+          </div>
+        </div>
+        {expanded
+          ? <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground mt-1" />
+          : <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground mt-1" />}
+      </button>
+
+      {expanded && (
+        <div className="border-t border-border/50 px-5 py-4 space-y-4">
+          {/* Items */}
+          {hasItems && (
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-2 uppercase tracking-wider">Items Purchased</p>
+              <div className="space-y-1">
+                {items!.map((item, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs">
+                    <span className="text-foreground">{item.label ?? TOOL_LABEL[item.toolId] ?? item.toolId}
+                      {item.bundle && <span className="ml-1 text-muted-foreground">— {item.bundle}</span>}
+                      {item.isSoC !== undefined && <span className="ml-1 text-muted-foreground">({item.isSoC ? 'SoC' : 'Non-SoC'})</span>}
+                    </span>
+                    <span className="text-muted-foreground">${item.price ?? 0}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* User info */}
+          <div className="text-xs text-muted-foreground flex gap-3">
+            <span>Discord: <span className="font-mono text-foreground">{order.user.discordId}</span></span>
+          </div>
+
+          {/* Activate button */}
+          {isPending && (
+            <div className="flex items-center gap-3 rounded-lg border border-green-500/20 bg-green-500/5 px-4 py-3">
+              <CheckCircle2 className="h-4 w-4 text-green-400 shrink-0" />
+              <p className="text-xs text-green-400 flex-1">Payment confirmed? Activate to unlock the tool for this user.</p>
+              <button
+                onClick={activate}
+                disabled={saving}
+                className="flex items-center gap-1.5 rounded-lg bg-green-500/15 border border-green-500/20 px-3 py-1.5 text-xs font-medium text-green-400 hover:bg-green-500/25 disabled:opacity-40"
+              >
+                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                Activate
+              </button>
+            </div>
+          )}
+
+          {error && (
+            <div className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-400">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />{error}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Requests tab ─────────────────────────────────────────────────────────────
+
 function RequestsTab({ currentUserId }: { currentUserId: string }) {
   const [requests, setRequests] = useState<KvkRequest[]>([])
+  const [orderTasks, setOrderTasks] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<'all' | 'pending' | 'active'>('pending')
@@ -578,10 +706,30 @@ function RequestsTab({ currentUserId }: { currentUserId: string }) {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/staff/requests')
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Failed to load requests')
-      setRequests(data.requests)
+      const [kvkRes, ordersRes] = await Promise.all([
+        fetch('/api/staff/requests'),
+        fetch('/api/orders'),
+      ])
+      const [kvkData, ordersData] = await Promise.all([kvkRes.json(), ordersRes.json()])
+      if (!kvkRes.ok) throw new Error(kvkData.error ?? 'Failed to load requests')
+      setRequests(kvkData.requests)
+
+      // Show orders for tools that ARE NOT kvk-scanner (that has its own KvkSetup flow)
+      // Also show kvk-scanner orders where the user hasn't submitted kingdom details yet
+      const kvkScannerOrderIds = new Set(
+        (kvkData.requests as KvkRequest[]).map(r => r.orderId).filter(Boolean)
+      )
+      const allOrders: Order[] = ordersData.orders ?? []
+      const nonKvkOrders = allOrders.filter(o => {
+        const items = o.items ?? []
+        const hasKvkScanner = items.some(i => i.toolId === 'kvk-scanner')
+        const hasOtherTools = items.some(i => i.toolId !== 'kvk-scanner')
+        // Show if: has non-KvK tools, OR is a KvK scanner order with no submitted setup
+        if (hasOtherTools) return true
+        if (hasKvkScanner && !kvkScannerOrderIds.has(o.id)) return true
+        return false
+      })
+      setOrderTasks(nonKvkOrders)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load requests')
     } finally {
@@ -594,18 +742,29 @@ function RequestsTab({ currentUserId }: { currentUserId: string }) {
   function handleUpdated(updated: KvkRequest) {
     setRequests(prev => prev.map(r => (r.id === updated.id ? updated : r)))
   }
+  function handleOrderUpdated(updated: Order) {
+    setOrderTasks(prev => prev.map(o => (o.id === updated.id ? updated : o)))
+  }
 
-  const filtered = filter === 'all'
+  const filteredKvk = filter === 'all'
     ? requests
-    : requests.filter(r => r.status === filter)
+    : filter === 'pending'
+    ? requests.filter(r => r.status === 'pending')
+    : requests.filter(r => r.status === 'active')
+
+  const filteredOrders = filter === 'all'
+    ? orderTasks
+    : filter === 'pending'
+    ? orderTasks.filter(o => o.status === 'pending' || o.status === 'confirmed')
+    : orderTasks.filter(o => o.status === 'active')
 
   const pendingCount = requests.filter(r => r.status === 'pending').length
+    + orderTasks.filter(o => o.status === 'pending' || o.status === 'confirmed').length
   const myCount = requests.filter(r => r.assignedToId === currentUserId && r.status === 'pending').length
   const completedToday = requests.filter(r => {
     if (!r.completedAt) return false
     const d = new Date(r.completedAt)
-    const today = new Date()
-    return d.toDateString() === today.toDateString()
+    return d.toDateString() === new Date().toDateString()
   }).length
 
   return (
@@ -645,7 +804,11 @@ function RequestsTab({ currentUserId }: { currentUserId: string }) {
             >
               {f === 'all' ? 'All' : f === 'pending' ? 'Pending' : 'Completed'}
               <span className="ml-1.5 rounded-full bg-muted/50 px-1.5 py-0.5 text-[10px]">
-                {f === 'all' ? requests.length : requests.filter(r => r.status === f).length}
+                {f === 'all'
+                  ? requests.length + orderTasks.length
+                  : f === 'pending'
+                  ? requests.filter(r => r.status === 'pending').length + orderTasks.filter(o => o.status === 'pending' || o.status === 'confirmed').length
+                  : requests.filter(r => r.status === 'active').length + orderTasks.filter(o => o.status === 'active').length}
               </span>
             </button>
           ))}
@@ -674,7 +837,7 @@ function RequestsTab({ currentUserId }: { currentUserId: string }) {
         </div>
       )}
 
-      {!loading && !error && filtered.length === 0 && (
+      {!loading && !error && filteredKvk.length === 0 && filteredOrders.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center rounded-xl border border-border/50 bg-card/60">
           <ListChecks className="h-10 w-10 text-muted-foreground/30 mb-3" />
           <p className="text-sm text-muted-foreground">No {filter === 'all' ? '' : filter} requests</p>
@@ -682,7 +845,12 @@ function RequestsTab({ currentUserId }: { currentUserId: string }) {
       )}
 
       <div className="space-y-3">
-        {filtered.map(r => (
+        {/* Order tasks (all tools) */}
+        {filteredOrders.map(o => (
+          <OrderTaskCard key={o.id} order={o} onUpdated={handleOrderUpdated} />
+        ))}
+        {/* KvK setup requests */}
+        {filteredKvk.map(r => (
           <RequestCard
             key={r.id}
             request={r}
