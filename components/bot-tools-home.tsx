@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useAuth } from '@/lib/auth-context'
 import {
   Crown, Flag, Search, Bell, MessageSquare, ScanSearch,
   ShoppingCart, Check, ChevronDown, ChevronUp, X, Copy, CheckCheck,
@@ -360,6 +361,7 @@ interface CheckoutProps {
 }
 
 function CheckoutPanel({ cart, onClose, onRemove, onCheckoutComplete }: CheckoutProps) {
+  const { user, login } = useAuth()
   const [step, setStep] = useState<'cart' | 'keys'>('cart')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -521,14 +523,28 @@ function CheckoutPanel({ cart, onClose, onRemove, onCheckoutComplete }: Checkout
               <span className="text-muted-foreground">Total</span>
               <span className="font-bold text-foreground">${total}</span>
             </div>
-            <button
-              onClick={handleCheckout}
-              disabled={loading}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              {loading ? 'Processing...' : 'Confirm Order'}
-            </button>
+            {!user ? (
+              <>
+                <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-400">
+                  You need to sign in with Discord before placing an order.
+                </div>
+                <button
+                  onClick={login}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+                >
+                  Sign in with Discord
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={handleCheckout}
+                disabled={loading}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {loading ? 'Processing...' : 'Confirm Order'}
+              </button>
+            )}
             <p className="text-center text-[10px] text-muted-foreground/60">
               Payment via PayPal after staff review. No charge yet.
             </p>
