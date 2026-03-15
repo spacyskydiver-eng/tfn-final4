@@ -388,7 +388,11 @@ export function VerifyContent() {
   async function deleteServer(guildId: string) {
     setDeleting(true); setDeleteError(null)
     try {
-      const res = await fetch(`/api/verify/servers/${guildId}/delete`, { method: 'POST' })
+      const res = await fetch(`/api/verify/servers/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guildId }),
+      })
       const data = await res.json().catch(() => ({})) as Record<string, unknown>
       if (!res.ok) throw new Error((data.error as string) ?? `Error ${res.status}`)
       const remaining = servers.filter(s => s.guildId !== guildId)
