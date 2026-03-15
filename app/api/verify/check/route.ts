@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import Anthropic from '@anthropic-ai/sdk'
 
 export async function POST(req: NextRequest) {
   // Auth via bot secret
@@ -53,45 +52,48 @@ export async function POST(req: NextRequest) {
   let govName: string | null = null
   let allianceTag: string | null = null
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  console.log('[verify/check] ANTHROPIC_API_KEY present:', !!apiKey, 'length:', apiKey?.length ?? 0)
-
   try {
-    const anthropic = new Anthropic({ apiKey })
-    const msg = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 256,
-      messages: [{
-        role: 'user',
-        content: [
-          {
-            type: 'image',
-            source: { type: 'base64', media_type: mediaType, data: imageBase64 },
-          },
-          {
-            type: 'text',
-            text: `This is a Rise of Kingdoms governor profile screenshot. The UI may be in any language (English, Turkish, etc.).
+    // Call Google Vision OCR
+    const visionRes = await fetch(
+      `https://vision.googleapis.com/v1/images:annotate?key=${process.env.GOOGLE_VISION_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requests: [{
+            image: { content: imageBase64 },
+            features: [{ type: 'TEXT_DETECTION', maxResults: 1 }],
+          }],
+        }),
+      }
+    )
+    const visionData = await visionRes.json()
+    const fullText: string = visionData.responses?.[0]?.textAnnotations?.[0]?.description ?? ''
 
-Find these values:
-1. Governor ID: the number inside parentheses near the governor name. Format is "(ID: 123456789)" or "(123456789)". Extract ONLY the digits.
-2. Governor name: the player name shown next to the ID.
-3. Alliance tag: the text in square brackets like [W13J] or [A13V] shown next to "Alliance" / "Birlik" / alliance label. Return ONLY the bracketed tag e.g. "[W13J]", or null if no alliance.
+    console.log('[verify/check] OCR text:', fullText.slice(0, 300))
 
-Reply with ONLY a raw JSON object, no markdown, no code blocks:
-{"govId":"digits only","govName":"name","allianceTag":"[TAG] or null"}`,
-          },
-        ],
-      }],
-    })
-    const raw = msg.content[0].type === 'text' ? msg.content[0].text.trim() : ''
-    // Strip markdown code blocks if present
-    const text = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
-    const parsed = JSON.parse(text)
-    govId = parsed.govId?.toString()?.replace(/\D/g, '') || null  // digits only
-    govName = parsed.govName?.trim() || null
-    allianceTag = parsed.allianceTag?.trim() || null
+    if (!fullText) throw new Error('No text detected in image')
+
+    // Extract governor ID — looks for (ID: 123456789) or (123456789)
+    const idMatch = fullText.match(/\((?:ID:\s*)?(\d{6,12})\)/)
+    govId = idMatch?.[1] ?? null
+
+    // Extract alliance tag — [XXXX] pattern
+    const tagMatch = fullText.match(/\[([A-Z0-9]{2,6})\]/)
+    allianceTag = tagMatch ? `[${tagMatch[1]}]` : null
+
+    // Extract governor name — line just before or after the ID
+    const lines = fullText.split('\n').map(l => l.trim()).filter(Boolean)
+    const idLineIdx = lines.findIndex(l => /\((?:ID:\s*)?\d{6,12}\)/.test(l))
+    if (idLineIdx !== -1) {
+      // Name is often on the same line or the line before
+      const idLine = lines[idLineIdx]
+      const nameFromLine = idLine.replace(/\((?:ID:\s*)?\d{6,12}\)/, '').trim()
+      govName = nameFromLine || lines[idLineIdx - 1] || null
+    }
+
   } catch (err) {
-    console.error('[verify/check] Claude/parse error:', err)
+    console.error('[verify/check] OCR error:', err)
     await logAndReturn(server.id, guildId, discordUserId, discordUsername, 'parse_failed')
     return NextResponse.json({ result: 'parse_failed', reason: String(err) })
   }
