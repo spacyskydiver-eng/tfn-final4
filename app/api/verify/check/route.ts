@@ -53,8 +53,11 @@ export async function POST(req: NextRequest) {
   let govName: string | null = null
   let allianceTag: string | null = null
 
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  console.log('[verify/check] ANTHROPIC_API_KEY present:', !!apiKey, 'length:', apiKey?.length ?? 0)
+
   try {
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const anthropic = new Anthropic({ apiKey })
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 256,
