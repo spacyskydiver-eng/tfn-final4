@@ -67,14 +67,24 @@ export async function POST(req: NextRequest) {
           },
           {
             type: 'text',
-            text: 'This is a Rise of Kingdoms governor profile screenshot. Extract these fields and reply with ONLY a JSON object (no markdown, no explanation): { "govId": "numeric governor ID shown in parentheses e.g. 123456789", "govName": "governor name", "allianceTag": "alliance tag in square brackets e.g. [T13O] or null if no alliance" }',
+            text: `This is a Rise of Kingdoms governor profile screenshot. The UI may be in any language (English, Turkish, etc.).
+
+Find these values:
+1. Governor ID: the number inside parentheses near the governor name. Format is "(ID: 123456789)" or "(123456789)". Extract ONLY the digits.
+2. Governor name: the player name shown next to the ID.
+3. Alliance tag: the text in square brackets like [W13J] or [A13V] shown next to "Alliance" / "Birlik" / alliance label. Return ONLY the bracketed tag e.g. "[W13J]", or null if no alliance.
+
+Reply with ONLY a raw JSON object, no markdown, no code blocks:
+{"govId":"digits only","govName":"name","allianceTag":"[TAG] or null"}`,
           },
         ],
       }],
     })
-    const text = msg.content[0].type === 'text' ? msg.content[0].text.trim() : ''
+    const raw = msg.content[0].type === 'text' ? msg.content[0].text.trim() : ''
+    // Strip markdown code blocks if present
+    const text = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
     const parsed = JSON.parse(text)
-    govId = parsed.govId?.toString()?.trim() || null
+    govId = parsed.govId?.toString()?.replace(/\D/g, '') || null  // digits only
     govName = parsed.govName?.trim() || null
     allianceTag = parsed.allianceTag?.trim() || null
   } catch {
