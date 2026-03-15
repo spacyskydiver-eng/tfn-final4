@@ -82,14 +82,30 @@ export async function POST(req: NextRequest) {
     const tagMatch = fullText.match(/\[([A-Z0-9]{2,6})\]/)
     allianceTag = tagMatch ? `[${tagMatch[1]}]` : null
 
-    // Extract governor name — line just before or after the ID
+    // Extract governor name — on the line immediately after the ID line
+    // e.g. "(ID: 207018781)\n13×Taws" or "Governor (ID: 209376582)\n13×HouKen"
     const lines = fullText.split('\n').map(l => l.trim()).filter(Boolean)
     const idLineIdx = lines.findIndex(l => /\((?:ID:\s*)?\d{6,12}\)/.test(l))
     if (idLineIdx !== -1) {
-      // Name is often on the same line or the line before
+      // Try name on same line first (after removing the ID part)
       const idLine = lines[idLineIdx]
-      const nameFromLine = idLine.replace(/\((?:ID:\s*)?\d{6,12}\)/, '').trim()
-      govName = nameFromLine || lines[idLineIdx - 1] || null
+      const nameFromLine = idLine
+        .replace(/\((?:ID:\s*)?\d{6,12}\)/, '')
+        .replace(/^(Governor|Vali|Gouverneur|总督|총독)\s*/i, '')
+        .trim()
+      if (nameFromLine && !/^\d/.test(nameFromLine)) {
+        govName = nameFromLine
+      } else {
+        // Name is on the next line — skip lines that look like labels or numbers
+        for (let i = idLineIdx + 1; i < Math.min(idLineIdx + 4, lines.length); i++) {
+          const candidate = lines[i]
+          // Skip if it looks like a label (Civilization, Alliance, etc.) or pure numbers/slashes
+          if (/^[\d\/\.,]+$/.test(candidate)) continue
+          if (/^(Civilization|Medeniyet|Alliance|Birlik|Power|Güç|Kill|Leş|Governor|Vali)/i.test(candidate)) continue
+          govName = candidate
+          break
+        }
+      }
     }
 
   } catch (err) {
