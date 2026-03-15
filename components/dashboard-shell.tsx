@@ -125,6 +125,7 @@ function MouseTrailOverlay() {
 export function DashboardShell() {
   const [activeTab, setActiveTab] = useState("home");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
   const { settings, currentColor } = useTheme();
 
@@ -134,6 +135,11 @@ export function DashboardShell() {
     const params = new URLSearchParams(window.location.search)
     if (params.get('request')) setActiveTab('staff-portal')
   }, []);
+
+  function handleTabChange(tab: string) {
+    setActiveTab(tab);
+    setMobileNavOpen(false); // close drawer on navigation
+  }
 
   function addToCart(item: Omit<CartItem, 'cartId'>) {
     setCart(prev => [...prev, { ...item, cartId: `${item.toolId}-${Date.now()}` }])
@@ -173,6 +179,18 @@ export function DashboardShell() {
   const glowSize   = settings.cursorGlowSize   ?? 220;
   const glowAlpha  = ((settings.cursorGlowOpacity ?? 35) / 100).toFixed(2);
 
+  // Tab label for mobile top bar
+  const tabLabels: Record<string, string> = {
+    home: "Home", calendar: "Calendar", kvk: "KvK Tracker",
+    commander: "Commander Prep", guides: "Guides", "general-tools": "General Tools",
+    accounts: "Accounts", calculator: "Calculator", "progression-plans": "Progression Plans",
+    bundles: "Bundles", spending: "Spending Tracker", "territory-planner": "Territory Planner",
+    settings: "Settings", "bot-tools-home": "Bot Store", "title-giving": "Title Giving",
+    "fort-tracking": "Fort Tracking", "player-finder": "Player Finder",
+    "alliance-mob": "Alliance Mobilization", "discord-verify": "Discord Verification",
+    "kvk-scanner": "KvK Scanner", "staff-portal": "Staff Portal",
+  };
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <AnimatedBackground />
@@ -202,23 +220,68 @@ export function DashboardShell() {
           />
         </div>
       )}
+
+      {/* ── Mobile backdrop ── */}
+      {mobileNavOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/60 md:hidden"
+          onClick={() => setMobileNavOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       <AppSidebar
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={handleTabChange}
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
         cartCount={cart.length}
-        onCartClick={() => setActiveTab('bot-tools-home')}
+        onCartClick={() => { handleTabChange('bot-tools-home'); }}
+        mobileOpen={mobileNavOpen}
+        onMobileClose={() => setMobileNavOpen(false)}
       />
+
+      {/* Main content: full width on mobile, offset by sidebar on desktop */}
       <div
         className={cn(
-          "relative z-10 flex-1 transition-all duration-300 ease-in-out",
-          sidebarCollapsed ? "ml-[72px]" : "ml-[260px]"
+          "relative z-10 flex flex-col flex-1 transition-all duration-300 ease-in-out",
+          "ml-0",
+          sidebarCollapsed ? "md:ml-[72px]" : "md:ml-[260px]"
         )}
       >
+        {/* ── Mobile top bar ── */}
+        <div className="flex md:hidden items-center justify-between h-14 px-4 border-b border-border bg-sidebar/80 backdrop-blur-sm shrink-0">
+          <button
+            onClick={() => setMobileNavOpen(true)}
+            className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+            aria-label="Open menu"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <span className="text-sm font-semibold text-foreground">
+            {tabLabels[activeTab] ?? "RoK Toolkit"}
+          </span>
+          <button
+            onClick={() => handleTabChange('bot-tools-home')}
+            className="relative flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+            aria-label="Cart"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+            {cart.length > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">
+                {cart.length}
+              </span>
+            )}
+          </button>
+        </div>
+
         <ContentPanel
           activeTab={activeTab}
-          onTabChange={setActiveTab}
+          onTabChange={handleTabChange}
           cart={cart}
           onAddToCart={addToCart}
           onRemoveFromCart={removeFromCart}

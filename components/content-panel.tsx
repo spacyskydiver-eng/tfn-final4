@@ -177,20 +177,20 @@ export function ContentPanel({
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <header className="flex items-center gap-4 border-b border-border px-8 py-6">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15 text-primary">
+      <header className="flex items-center gap-3 border-b border-border px-4 py-4 md:px-8 md:py-6">
+        <div className="flex h-9 w-9 md:h-10 md:w-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
           <Icon className="h-5 w-5" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          <h1 className="text-xl md:text-2xl font-bold tracking-tight text-foreground">
             {meta.label}
           </h1>
-          <p className="text-sm text-muted-foreground">{meta.description}</p>
+          <p className="text-xs md:text-sm text-muted-foreground">{meta.description}</p>
         </div>
       </header>
 
       {/* Tab content */}
-      <main className="flex-1 overflow-y-auto p-8">
+      <main className="flex-1 overflow-y-auto p-4 md:p-8">
         {BOT_TOOL_IDS.has(activeTab) ? (
           <BotToolContent toolId={activeTab} onNavigate={onTabChange} />
         ) : activeTab === "bot-tools-home" ? (

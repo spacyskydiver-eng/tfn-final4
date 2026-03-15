@@ -96,6 +96,8 @@ interface AppSidebarProps {
   onToggleCollapse: () => void;
   cartCount?: number;
   onCartClick?: () => void;
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
 }
 
 const mainNavItems = [
@@ -133,6 +135,8 @@ export function AppSidebar({
   onToggleCollapse,
   cartCount = 0,
   onCartClick,
+  mobileOpen = false,
+  onMobileClose,
 }: AppSidebarProps) {
   const { user } = useAuth();
   const [botsOpen, setBotsOpen] = useState(true);
@@ -142,7 +146,12 @@ export function AppSidebar({
     <aside
       className={cn(
         "fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-border bg-sidebar transition-all duration-300 ease-in-out",
-        collapsed ? "w-[72px]" : "w-[260px]"
+        // Desktop: always visible, width based on collapsed state
+        "md:translate-x-0",
+        collapsed ? "md:w-[72px]" : "md:w-[260px]",
+        // Mobile: slide in/out as overlay, always full width (260px)
+        "w-[260px]",
+        mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
       )}
     >
       {/* Logo area */}
@@ -157,9 +166,10 @@ export function AppSidebar({
             </span>
           )}
         </div>
+        {/* Desktop: collapse toggle */}
         <button
           onClick={onToggleCollapse}
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          className="hidden md:flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {collapsed ? (
@@ -167,6 +177,14 @@ export function AppSidebar({
           ) : (
             <ChevronLeft className="h-4 w-4" />
           )}
+        </button>
+        {/* Mobile: close button */}
+        <button
+          onClick={onMobileClose}
+          className="flex md:hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          aria-label="Close menu"
+        >
+          <ChevronLeft className="h-4 w-4" />
         </button>
       </div>
 
