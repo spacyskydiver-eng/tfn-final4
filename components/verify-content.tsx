@@ -342,6 +342,9 @@ export function VerifyContent() {
   const [addForm, setAddForm] = useState({ guildId: '', guildName: '' })
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const fetchServers = useCallback(async () => {
     setLoading(true)
@@ -383,14 +386,20 @@ export function VerifyContent() {
   }
 
   async function deleteServer(guildId: string) {
-    if (!confirm('Delete this server and all its rules and logs? This cannot be undone.')) return
+    setDeleting(true); setDeleteError(null)
     try {
       const res = await fetch(`/api/verify/servers/${guildId}`, { method: 'DELETE' })
-      if (!res.ok) throw new Error('Delete failed')
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error ?? `Server returned ${res.status}`)
       const remaining = servers.filter(s => s.guildId !== guildId)
       setServers(remaining)
       setSelectedId(remaining.length > 0 ? remaining[0].guildId : null)
-    } catch { /* ignore */ }
+      setConfirmDelete(false)
+    } catch (e: unknown) {
+      setDeleteError(e instanceof Error ? e.message : 'Delete failed')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   if (!user) {
@@ -481,9 +490,9 @@ export function VerifyContent() {
                 {s.guildName}
               </button>
             ))}
-            {selected && (
+            {selected && !confirmDelete && (
               <button
-                onClick={() => deleteServer(selected.guildId)}
+                onClick={() => { setConfirmDelete(true); setDeleteError(null) }}
                 className="ml-auto flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/15 transition-colors"
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -491,6 +500,29 @@ export function VerifyContent() {
               </button>
             )}
           </div>
+
+          {/* Inline delete confirmation */}
+          {selected && confirmDelete && (
+            <div className="rounded-xl border border-red-500/25 bg-red-500/5 p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <p className="text-sm text-foreground flex-1">
+                Delete <span className="font-semibold">{selected.guildName}</span>? This removes all rules and logs and cannot be undone.
+              </p>
+              <div className="flex items-center gap-2 shrink-0">
+                <button onClick={() => { setConfirmDelete(false); setDeleteError(null) }}
+                  className="rounded-lg border border-border/50 px-3 py-1.5 text-xs text-muted-foreground hover:bg-secondary transition-colors"
+                >
+                  Cancel
+                </button>
+                <button onClick={() => deleteServer(selected.guildId)} disabled={deleting}
+                  className="flex items-center gap-1.5 rounded-lg bg-red-500/15 border border-red-500/30 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/25 transition-colors disabled:opacity-50"
+                >
+                  {deleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                  Confirm Delete
+                </button>
+              </div>
+              {deleteError && <p className="text-xs text-red-400 w-full">{deleteError}</p>}
+            </div>
+          )}
 
           {selected && (
             <>
