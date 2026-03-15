@@ -277,7 +277,7 @@ model VerificationServer {
   guildName      String
   channelId      String?  // verification channel ID to watch
   staffRoleId    String?  // role to ping on failure
-  freeLimit      Int      @default(250)  // monthly free verifications; -1 = unlimited
+  freeLimit      Int      @default(150)  // free verification limit per server; -1 = unlimited
   usedCount      Int      @default(0)
   addedById      String   // DB user cuid who registered it
   active         Boolean  @default(true)

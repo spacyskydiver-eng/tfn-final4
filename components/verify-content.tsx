@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Trash2, Loader2, Shield, Settings, List, Copy, Check, ExternalLink, RefreshCw } from 'lucide-react'
+import { Plus, Trash2, Loader2, Shield, Settings, Users, Copy, Check, ExternalLink, RefreshCw, CheckCircle2, XCircle, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth-context'
 
@@ -14,12 +14,14 @@ interface VerificationRule {
 
 interface VerificationLog {
   id: string
+  discordUserId: string
   discordUsername: string
   govId: string | null
   govName: string | null
   allianceTag: string | null
   result: string
   roleName: string | null
+  roleAssigned: string | null
   createdAt: string
 }
 
@@ -33,14 +35,6 @@ interface VerificationServer {
   usedCount: number
   active: boolean
   rules: VerificationRule[]
-}
-
-const RESULT_META: Record<string, { label: string; color: string }> = {
-  success:         { label: 'Verified',       color: 'text-green-400'  },
-  failed_alliance: { label: 'Bad Alliance',   color: 'text-red-400'    },
-  already_used:    { label: 'Already Used',   color: 'text-amber-400'  },
-  parse_failed:    { label: 'Parse Failed',   color: 'text-orange-400' },
-  over_limit:      { label: 'Over Limit',     color: 'text-muted-foreground' },
 }
 
 // ─── Tab: Setup ───────────────────────────────────────────────────────────────
@@ -71,15 +65,14 @@ function SetupTab({ server, onUpdated }: { server: VerificationServer; onUpdated
     finally { setSaving(false) }
   }
 
-  function copyId() {
-    navigator.clipboard.writeText(server.guildId)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-  }
+  const used = server.usedCount
+  const limit = server.freeLimit
+  const pct = limit === -1 ? 0 : Math.min((used / limit) * 100, 100)
+  const remaining = limit === -1 ? null : limit - used
 
   return (
     <div className="space-y-5">
-      {/* Invite bot card */}
+      {/* Invite bot */}
       <div className="rounded-xl border border-primary/20 bg-primary/5 p-5">
         <p className="text-sm font-semibold text-foreground mb-1">Step 1 — Invite the TFN Bot</p>
         <p className="text-xs text-muted-foreground mb-3">The bot needs to be in your Discord server to watch for verification images.</p>
@@ -91,7 +84,7 @@ function SetupTab({ server, onUpdated }: { server: VerificationServer; onUpdated
         </a>
       </div>
 
-      {/* Server ID */}
+      {/* Config */}
       <div className="rounded-xl border border-border/50 bg-card/60 p-5 space-y-4">
         <p className="text-sm font-semibold text-foreground">Server Configuration</p>
 
@@ -99,7 +92,8 @@ function SetupTab({ server, onUpdated }: { server: VerificationServer; onUpdated
           <label className="text-xs font-medium text-muted-foreground">Server ID</label>
           <div className="flex items-center gap-2">
             <code className="flex-1 rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm font-mono text-foreground">{server.guildId}</code>
-            <button onClick={copyId} className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-xs text-muted-foreground hover:bg-secondary transition-colors">
+            <button onClick={() => { navigator.clipboard.writeText(server.guildId); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
+              className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-xs text-muted-foreground hover:bg-secondary transition-colors">
               {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
             </button>
           </div>
@@ -108,8 +102,7 @@ function SetupTab({ server, onUpdated }: { server: VerificationServer; onUpdated
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-muted-foreground">Server Name</label>
           <input value={form.guildName} onChange={e => setForm(f => ({ ...f, guildName: e.target.value }))}
-            className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50"
-          />
+            className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50" />
         </div>
 
         <div className="space-y-1.5">
@@ -117,16 +110,14 @@ function SetupTab({ server, onUpdated }: { server: VerificationServer; onUpdated
           <p className="text-[11px] text-muted-foreground/70">Enable Developer Mode in Discord → right-click the channel → Copy Channel ID</p>
           <input value={form.channelId} onChange={e => setForm(f => ({ ...f, channelId: e.target.value }))}
             placeholder="e.g. 1234567890123456789"
-            className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50"
-          />
+            className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50" />
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Staff Role ID (pinged on failed verifications)</label>
+          <label className="text-xs font-medium text-muted-foreground">Staff Role ID <span className="font-normal">(pinged on failed verifications)</span></label>
           <input value={form.staffRoleId} onChange={e => setForm(f => ({ ...f, staffRoleId: e.target.value }))}
             placeholder="e.g. 1234567890123456789"
-            className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50"
-          />
+            className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50" />
         </div>
 
         <div className="flex items-center gap-3">
@@ -139,22 +130,35 @@ function SetupTab({ server, onUpdated }: { server: VerificationServer; onUpdated
       </div>
 
       {/* Usage */}
-      <div className="rounded-xl border border-border/50 bg-card/60 p-5">
-        <p className="text-sm font-semibold text-foreground mb-2">Usage</p>
+      <div className="rounded-xl border border-border/50 bg-card/60 p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-foreground">Verification Usage</p>
+          {limit !== -1 && (
+            <span className={cn('text-xs font-medium px-2 py-0.5 rounded-full',
+              pct >= 100 ? 'bg-red-500/15 text-red-400' :
+              pct >= 80  ? 'bg-amber-500/15 text-amber-400' :
+                           'bg-green-500/15 text-green-400'
+            )}>
+              {pct >= 100 ? 'Limit reached' : `${remaining} remaining`}
+            </span>
+          )}
+        </div>
+
         <div className="flex items-center gap-3">
-          <div className="flex-1 h-2 rounded-full bg-muted/30 overflow-hidden">
-            <div
-              className="h-full rounded-full bg-primary transition-all"
-              style={{ width: server.freeLimit === -1 ? '0%' : `${Math.min((server.usedCount / server.freeLimit) * 100, 100)}%` }}
-            />
+          <div className="flex-1 h-2.5 rounded-full bg-muted/30 overflow-hidden">
+            <div className={cn('h-full rounded-full transition-all', pct >= 100 ? 'bg-red-400' : pct >= 80 ? 'bg-amber-400' : 'bg-primary')}
+              style={{ width: limit === -1 ? '0%' : `${pct}%` }} />
           </div>
-          <span className="text-xs text-muted-foreground whitespace-nowrap">
-            {server.freeLimit === -1 ? `${server.usedCount} used (unlimited)` : `${server.usedCount} / ${server.freeLimit} free`}
+          <span className="text-xs text-muted-foreground whitespace-nowrap font-mono">
+            {limit === -1 ? `${used} used (unlimited)` : `${used} / ${limit}`}
           </span>
         </div>
-        {server.freeLimit !== -1 && server.usedCount >= server.freeLimit && (
-          <p className="text-xs text-amber-400 mt-2">Free limit reached. Contact TFN to add more verifications.</p>
-        )}
+
+        <p className="text-[11px] text-muted-foreground">
+          {limit === -1
+            ? 'Unlimited verifications on this server.'
+            : `First ${limit} verifications are free. Contact TFN staff to increase your limit.`}
+        </p>
       </div>
     </div>
   )
@@ -196,18 +200,21 @@ function RulesTab({ server }: { server: VerificationServer; onUpdated: (s: Verif
   return (
     <div className="space-y-5">
       <div className="rounded-xl border border-border/50 bg-card/60 p-5 space-y-4">
-        <p className="text-sm font-semibold text-foreground">Alliance Verification Rules</p>
-        <p className="text-xs text-muted-foreground">Map alliance tags to Discord roles. When a player&apos;s governor profile shows a matching alliance tag, they&apos;ll be assigned the corresponding role.</p>
+        <div>
+          <p className="text-sm font-semibold text-foreground">Alliance Verification Rules</p>
+          <p className="text-xs text-muted-foreground mt-0.5">When a player posts their governor profile screenshot, the bot checks their alliance tag against these rules and assigns the matching Discord role.</p>
+        </div>
 
-        {/* Existing rules */}
         {rules.length > 0 ? (
           <div className="space-y-2">
             {rules.map(rule => (
               <div key={rule.id} className="flex items-center gap-3 rounded-lg border border-border/50 bg-muted/10 px-4 py-3">
                 <div className="flex-1 min-w-0">
-                  <span className="text-sm font-mono font-semibold text-primary">{rule.allianceTag}</span>
-                  {rule.label && <span className="ml-2 text-xs text-muted-foreground">({rule.label})</span>}
-                  <p className="text-[11px] text-muted-foreground font-mono mt-0.5">→ Role: {rule.roleId}</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-mono font-semibold text-primary">{rule.allianceTag}</span>
+                    {rule.label && <span className="text-xs text-muted-foreground">— {rule.label}</span>}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground font-mono mt-0.5">Assigns role ID: {rule.roleId}</p>
                 </div>
                 <button onClick={() => deleteRule(rule.id)} className="text-muted-foreground hover:text-red-400 transition-colors">
                   <Trash2 className="h-4 w-4" />
@@ -216,38 +223,33 @@ function RulesTab({ server }: { server: VerificationServer; onUpdated: (s: Verif
             ))}
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground">No rules yet. Add one below.</p>
+          <p className="text-xs text-muted-foreground py-2">No rules yet — add one below to start verifying members.</p>
         )}
 
-        {/* Add rule form */}
         <div className="border-t border-border/50 pt-4 space-y-3">
           <p className="text-xs font-semibold text-foreground">Add Rule</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <div className="space-y-1">
               <label className="text-[11px] text-muted-foreground">Alliance Tag</label>
               <input value={form.allianceTag} onChange={e => setForm(f => ({ ...f, allianceTag: e.target.value }))}
-                placeholder="[T13O]"
-                className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50"
-              />
+                placeholder="[W13J]"
+                className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50" />
             </div>
             <div className="space-y-1">
               <label className="text-[11px] text-muted-foreground">Discord Role ID</label>
               <input value={form.roleId} onChange={e => setForm(f => ({ ...f, roleId: e.target.value }))}
                 placeholder="1234567890..."
-                className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50"
-              />
+                className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50" />
             </div>
             <div className="space-y-1">
               <label className="text-[11px] text-muted-foreground">Label (optional)</label>
               <input value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))}
-                placeholder="Twilight of Order"
-                className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50"
-              />
+                placeholder="Wolves of Judgment"
+                className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50" />
             </div>
           </div>
           <button onClick={addRule} disabled={saving || !form.allianceTag.trim() || !form.roleId.trim()}
-            className="flex items-center gap-2 rounded-lg bg-primary/15 border border-primary/25 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/25 transition-colors disabled:opacity-40"
-          >
+            className="flex items-center gap-2 rounded-lg bg-primary/15 border border-primary/25 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/25 transition-colors disabled:opacity-40">
             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
             Add Rule
           </button>
@@ -258,11 +260,12 @@ function RulesTab({ server }: { server: VerificationServer; onUpdated: (s: Verif
   )
 }
 
-// ─── Tab: Logs ────────────────────────────────────────────────────────────────
+// ─── Tab: Members ─────────────────────────────────────────────────────────────
 
-function LogsTab({ server }: { server: VerificationServer }) {
+function MembersTab({ server }: { server: VerificationServer }) {
   const [logs, setLogs] = useState<VerificationLog[]>([])
   const [loading, setLoading] = useState(true)
+  const [showAll, setShowAll] = useState(false)
 
   const fetchLogs = useCallback(async () => {
     setLoading(true)
@@ -275,47 +278,88 @@ function LogsTab({ server }: { server: VerificationServer }) {
 
   useEffect(() => { fetchLogs() }, [fetchLogs])
 
+  const verified = logs.filter(l => l.result === 'success')
+  const failed   = logs.filter(l => l.result !== 'success')
+  const displayed = showAll ? logs : verified
+
   return (
     <div className="space-y-4">
+      {/* Header row */}
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{logs.length} verification attempts</p>
-        <button onClick={fetchLogs} disabled={loading} className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-card/60 px-3 py-1.5 text-xs text-muted-foreground hover:bg-secondary transition-colors disabled:opacity-40">
+        <div className="flex items-center gap-2">
+          <button onClick={() => setShowAll(false)}
+            className={cn('rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+              !showAll ? 'bg-primary/15 border-primary/30 text-primary' : 'border-border/50 text-muted-foreground hover:bg-secondary'
+            )}>
+            <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5" /> Verified ({verified.length})</span>
+          </button>
+          <button onClick={() => setShowAll(true)}
+            className={cn('rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+              showAll ? 'bg-primary/15 border-primary/30 text-primary' : 'border-border/50 text-muted-foreground hover:bg-secondary'
+            )}>
+            <span className="flex items-center gap-1.5"><AlertCircle className="h-3.5 w-3.5" /> All Activity ({logs.length})</span>
+          </button>
+        </div>
+        <button onClick={fetchLogs} disabled={loading}
+          className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-card/60 px-3 py-1.5 text-xs text-muted-foreground hover:bg-secondary transition-colors disabled:opacity-40">
           {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
           Refresh
         </button>
       </div>
+
       {loading ? (
-        <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
-      ) : logs.length === 0 ? (
-        <div className="flex flex-col items-center py-12 text-center rounded-xl border border-border/50 bg-card/60">
-          <List className="h-8 w-8 text-muted-foreground/30 mb-2" />
-          <p className="text-sm text-muted-foreground">No verifications yet</p>
+        <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+      ) : displayed.length === 0 ? (
+        <div className="flex flex-col items-center py-14 text-center rounded-xl border border-border/50 bg-card/60">
+          <Users className="h-8 w-8 text-muted-foreground/30 mb-2" />
+          <p className="text-sm text-muted-foreground">{showAll ? 'No activity yet' : 'No verified members yet'}</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">Members will appear here after posting their governor profile in the verification channel</p>
         </div>
       ) : (
         <div className="rounded-xl border border-border/50 bg-card/60 overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border/50 text-xs uppercase tracking-wider text-muted-foreground">
-                <th className="py-2 pl-4 text-left">Discord User</th>
-                <th className="py-2 text-left">Gov ID</th>
-                <th className="py-2 text-left">Alliance</th>
-                <th className="py-2 text-left">Result</th>
-                <th className="py-2 pr-4 text-right">Date</th>
+              <tr className="border-b border-border/50 bg-muted/10">
+                <th className="py-2.5 pl-4 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Discord</th>
+                <th className="py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Governor</th>
+                <th className="py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden sm:table-cell">Alliance</th>
+                {showAll && <th className="py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status</th>}
+                <th className="py-2.5 pr-4 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden md:table-cell">Date</th>
               </tr>
             </thead>
             <tbody>
-              {logs.map(log => {
-                const meta = RESULT_META[log.result] ?? { label: log.result, color: 'text-muted-foreground' }
-                return (
-                  <tr key={log.id} className="border-b border-border/30 last:border-0">
-                    <td className="py-2.5 pl-4 text-foreground">{log.discordUsername}</td>
-                    <td className="py-2.5 font-mono text-xs text-muted-foreground">{log.govId ?? '—'}</td>
-                    <td className="py-2.5 text-xs">{log.allianceTag ?? '—'}</td>
-                    <td className={cn('py-2.5 text-xs font-medium', meta.color)}>{meta.label}</td>
-                    <td className="py-2.5 pr-4 text-right text-xs text-muted-foreground">{new Date(log.createdAt).toLocaleDateString()}</td>
-                  </tr>
-                )
-              })}
+              {displayed.map(log => (
+                <tr key={log.id} className="border-b border-border/30 last:border-0 hover:bg-muted/5 transition-colors">
+                  <td className="py-3 pl-4">
+                    <div className="font-medium text-foreground text-sm">{log.discordUsername}</div>
+                    <div className="text-[11px] text-muted-foreground font-mono">{log.discordUserId}</div>
+                  </td>
+                  <td className="py-3">
+                    <div className="text-sm text-foreground">{log.govName ?? '—'}</div>
+                    {log.govId && <div className="text-[11px] text-muted-foreground font-mono">ID: {log.govId}</div>}
+                  </td>
+                  <td className="py-3 hidden sm:table-cell">
+                    {log.allianceTag
+                      ? <span className="font-mono text-xs font-semibold text-primary">{log.allianceTag}</span>
+                      : <span className="text-xs text-muted-foreground">—</span>}
+                    {log.roleName && <div className="text-[11px] text-muted-foreground mt-0.5">{log.roleName}</div>}
+                  </td>
+                  {showAll && (
+                    <td className="py-3">
+                      {log.result === 'success'
+                        ? <span className="flex items-center gap-1 text-xs text-green-400"><CheckCircle2 className="h-3.5 w-3.5" /> Verified</span>
+                        : log.result === 'failed_alliance'
+                        ? <span className="flex items-center gap-1 text-xs text-red-400"><XCircle className="h-3.5 w-3.5" /> Bad Alliance</span>
+                        : log.result === 'already_used'
+                        ? <span className="flex items-center gap-1 text-xs text-amber-400"><AlertCircle className="h-3.5 w-3.5" /> Already Used</span>
+                        : <span className="text-xs text-muted-foreground">{log.result}</span>}
+                    </td>
+                  )}
+                  <td className="py-3 pr-4 text-right text-xs text-muted-foreground hidden md:table-cell">
+                    {new Date(log.createdAt).toLocaleDateString()}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -327,14 +371,14 @@ function LogsTab({ server }: { server: VerificationServer }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 const VERIFY_TABS = [
-  { id: 'setup', label: 'Setup', icon: Settings },
-  { id: 'rules', label: 'Rules', icon: Shield },
-  { id: 'logs',  label: 'Logs',  icon: List   },
+  { id: 'setup',   label: 'Setup',   icon: Settings },
+  { id: 'rules',   label: 'Rules',   icon: Shield   },
+  { id: 'members', label: 'Members', icon: Users    },
 ] as const
 
 export function VerifyContent() {
   const { user } = useAuth()
-  const [tab, setTab] = useState<'setup' | 'rules' | 'logs'>('setup')
+  const [tab, setTab] = useState<'setup' | 'rules' | 'members'>('setup')
   const [servers, setServers] = useState<VerificationServer[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -413,7 +457,7 @@ export function VerifyContent() {
           <Shield className="h-8 w-8 text-primary" />
         </div>
         <h2 className="text-lg font-semibold text-foreground mb-2">Discord Verification</h2>
-        <p className="text-sm text-muted-foreground mb-6">Sign in with Discord to configure the TFN verification bot for your server. It&apos;s free.</p>
+        <p className="text-sm text-muted-foreground mb-6">Sign in with Discord to configure the TFN verification bot for your server. Free up to 150 verifications.</p>
       </div>
     )
   }
@@ -424,7 +468,7 @@ export function VerifyContent() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-base font-semibold text-foreground">Discord Verification</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Auto-verify players by scanning governor profile screenshots. Free up to 250 verifications/month.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Auto-verify players by scanning governor profile screenshots. Free up to 150 verifications per server.</p>
         </div>
         <button onClick={() => setShowAdd(v => !v)} className="flex items-center gap-2 rounded-xl border border-border/50 bg-card/60 px-4 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
           <Plus className="h-4 w-4" />
@@ -436,26 +480,24 @@ export function VerifyContent() {
       {showAdd && (
         <div className="rounded-xl border border-primary/25 bg-primary/5 p-5 space-y-3">
           <p className="text-sm font-semibold text-foreground">Register a Discord Server</p>
+          <p className="text-xs text-muted-foreground">Right-click your server in Discord (with Developer Mode on) → Copy Server ID</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Server ID</label>
               <input value={addForm.guildId} onChange={e => setAddForm(f => ({ ...f, guildId: e.target.value }))}
-                placeholder="Right-click server → Copy ID"
-                className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50"
-              />
+                placeholder="e.g. 1034524321680457801"
+                className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50" />
             </div>
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Server Name</label>
               <input value={addForm.guildName} onChange={e => setAddForm(f => ({ ...f, guildName: e.target.value }))}
                 placeholder="My Kingdom Server"
-                className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50"
-              />
+                className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50" />
             </div>
           </div>
           <div className="flex items-center gap-3">
             <button onClick={addServer} disabled={adding || !addForm.guildId.trim() || !addForm.guildName.trim()}
-              className="flex items-center gap-2 rounded-lg bg-primary/15 border border-primary/25 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/25 disabled:opacity-40"
-            >
+              className="flex items-center gap-2 rounded-lg bg-primary/15 border border-primary/25 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/25 disabled:opacity-40">
               {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
               Register Server
             </button>
@@ -470,7 +512,8 @@ export function VerifyContent() {
       {!loading && servers.length === 0 && !showAdd && (
         <div className="flex flex-col items-center py-16 text-center rounded-xl border border-border/50 bg-card/60">
           <Shield className="h-10 w-10 text-muted-foreground/30 mb-3" />
-          <p className="text-sm text-muted-foreground mb-4">No servers registered yet</p>
+          <p className="text-sm font-medium text-foreground mb-1">No servers registered yet</p>
+          <p className="text-xs text-muted-foreground mb-4">Add your Discord server to start auto-verifying members</p>
           <button onClick={() => setShowAdd(true)} className="flex items-center gap-2 rounded-xl bg-primary/15 border border-primary/25 px-4 py-2.5 text-sm font-medium text-primary hover:bg-primary/25">
             <Plus className="h-4 w-4" />
             Add Your Server
@@ -480,27 +523,22 @@ export function VerifyContent() {
 
       {!loading && servers.length > 0 && (
         <>
-          {/* Server selector */}
+          {/* Server selector + delete */}
           <div className="flex flex-wrap gap-2 items-center">
             {servers.length > 1 && servers.map(s => (
               <button key={s.guildId} onClick={() => setSelectedId(s.guildId)}
-                className={cn(
-                  'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+                className={cn('rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
                   selectedId === s.guildId
                     ? 'bg-primary/15 border-primary/30 text-primary'
                     : 'border-border/50 text-muted-foreground hover:bg-secondary hover:text-foreground'
-                )}
-              >
+                )}>
                 {s.guildName}
               </button>
             ))}
             {selected && !confirmDelete && (
-              <button
-                onClick={() => { setConfirmDelete(true); setDeleteError(null) }}
-                className="ml-auto flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/15 transition-colors"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Delete Server
+              <button onClick={() => { setConfirmDelete(true); setDeleteError(null) }}
+                className="ml-auto flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/15 transition-colors">
+                <Trash2 className="h-3.5 w-3.5" /> Delete Server
               </button>
             )}
           </div>
@@ -509,17 +547,13 @@ export function VerifyContent() {
           {selected && confirmDelete && (
             <div className="rounded-xl border border-red-500/25 bg-red-500/5 p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
               <p className="text-sm text-foreground flex-1">
-                Delete <span className="font-semibold">{selected.guildName}</span>? This removes all rules and logs and cannot be undone.
+                Delete <span className="font-semibold">{selected.guildName}</span>? This removes all rules and verified member history.
               </p>
               <div className="flex items-center gap-2 shrink-0">
                 <button onClick={() => { setConfirmDelete(false); setDeleteError(null) }}
-                  className="rounded-lg border border-border/50 px-3 py-1.5 text-xs text-muted-foreground hover:bg-secondary transition-colors"
-                >
-                  Cancel
-                </button>
+                  className="rounded-lg border border-border/50 px-3 py-1.5 text-xs text-muted-foreground hover:bg-secondary transition-colors">Cancel</button>
                 <button onClick={() => deleteServer(selected.guildId)} disabled={deleting}
-                  className="flex items-center gap-1.5 rounded-lg bg-red-500/15 border border-red-500/30 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/25 transition-colors disabled:opacity-50"
-                >
+                  className="flex items-center gap-1.5 rounded-lg bg-red-500/15 border border-red-500/30 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/25 transition-colors disabled:opacity-50">
                   {deleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
                   Confirm Delete
                 </button>
@@ -534,20 +568,23 @@ export function VerifyContent() {
               <div className="flex items-center gap-1 rounded-xl border border-border/50 bg-card/40 p-1 w-fit">
                 {VERIFY_TABS.map(t => (
                   <button key={t.id} onClick={() => setTab(t.id)}
-                    className={cn(
-                      'flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+                    className={cn('flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors',
                       tab === t.id ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-                    )}
-                  >
+                    )}>
                     <t.icon className="h-4 w-4" />
                     {t.label}
+                    {t.id === 'members' && selected.usedCount > 0 && (
+                      <span className="ml-1 rounded-full bg-primary/20 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                        {selected.usedCount}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
 
-              {tab === 'setup' && <SetupTab server={selected} onUpdated={handleUpdated} />}
-              {tab === 'rules' && <RulesTab server={selected} onUpdated={handleUpdated} />}
-              {tab === 'logs'  && <LogsTab server={selected} />}
+              {tab === 'setup'   && <SetupTab server={selected} onUpdated={handleUpdated} />}
+              {tab === 'rules'   && <RulesTab server={selected} onUpdated={handleUpdated} />}
+              {tab === 'members' && <MembersTab server={selected} />}
             </>
           )}
         </>
