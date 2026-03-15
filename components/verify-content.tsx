@@ -382,6 +382,17 @@ export function VerifyContent() {
     setServers(s => s.map(x => x.guildId === updated.guildId ? updated : x))
   }
 
+  async function deleteServer(guildId: string) {
+    if (!confirm('Delete this server and all its rules and logs? This cannot be undone.')) return
+    try {
+      const res = await fetch(`/api/verify/servers/${guildId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Delete failed')
+      const remaining = servers.filter(s => s.guildId !== guildId)
+      setServers(remaining)
+      setSelectedId(remaining.length > 0 ? remaining[0].guildId : null)
+    } catch { /* ignore */ }
+  }
+
   if (!user) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center max-w-md mx-auto">
@@ -456,23 +467,30 @@ export function VerifyContent() {
 
       {!loading && servers.length > 0 && (
         <>
-          {/* Server selector (if multiple) */}
-          {servers.length > 1 && (
-            <div className="flex flex-wrap gap-2">
-              {servers.map(s => (
-                <button key={s.guildId} onClick={() => setSelectedId(s.guildId)}
-                  className={cn(
-                    'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
-                    selectedId === s.guildId
-                      ? 'bg-primary/15 border-primary/30 text-primary'
-                      : 'border-border/50 text-muted-foreground hover:bg-secondary hover:text-foreground'
-                  )}
-                >
-                  {s.guildName}
-                </button>
-              ))}
-            </div>
-          )}
+          {/* Server selector */}
+          <div className="flex flex-wrap gap-2 items-center">
+            {servers.length > 1 && servers.map(s => (
+              <button key={s.guildId} onClick={() => setSelectedId(s.guildId)}
+                className={cn(
+                  'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors',
+                  selectedId === s.guildId
+                    ? 'bg-primary/15 border-primary/30 text-primary'
+                    : 'border-border/50 text-muted-foreground hover:bg-secondary hover:text-foreground'
+                )}
+              >
+                {s.guildName}
+              </button>
+            ))}
+            {selected && (
+              <button
+                onClick={() => deleteServer(selected.guildId)}
+                className="ml-auto flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5 text-xs font-medium text-red-400 hover:bg-red-500/15 transition-colors"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete Server
+              </button>
+            )}
+          </div>
 
           {selected && (
             <>

@@ -35,6 +35,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ guil
   return NextResponse.json({ server, logs: recentLogs })
 }
 
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ guildId: string }> }) {
+  const session = await getSession()
+  if (!session?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const user = await prisma.user.findUnique({ where: { id: session.id } })
+  if (!user) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const { guildId } = await params
+  const server = await prisma.verificationServer.findUnique({ where: { guildId } })
+  if (!server) return NextResponse.json({ error: 'Server not found' }, { status: 404 })
+  if (!user.isAdmin && server.addedById !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  await prisma.verificationServer.delete({ where: { guildId } })
+  return NextResponse.json({ ok: true })
+}
+
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ guildId: string }> }) {
   const session = await getSession()
   if (!session?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
