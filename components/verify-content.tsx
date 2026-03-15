@@ -390,7 +390,7 @@ export function VerifyContent() {
     try {
       const res = await fetch(`/api/verify/servers/${guildId}`, { method: 'DELETE' })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data.error ?? `Server returned ${res.status}`)
+      if (!res.ok) throw new Error(JSON.stringify(data) ?? `Server returned ${res.status}`)
       const remaining = servers.filter(s => s.guildId !== guildId)
       setServers(remaining)
       setSelectedId(remaining.length > 0 ? remaining[0].guildId : null)

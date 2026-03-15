@@ -35,24 +35,33 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ guil
   return NextResponse.json({ server, logs: recentLogs })
 }
 
-export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ guildId: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ guildId: string }> }) {
   try {
     const session = await getSession()
     if (!session?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const user = await prisma.user.findUnique({ where: { id: session.id } })
-    if (!user) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+    if (!user) return NextResponse.json({ error: 'User not found in DB', sessionId: session.id }, { status: 404 })
+
     const { guildId } = await params
-    const server = await prisma.verificationServer.findUnique({ where: { guildId } })
-    if (!server) return NextResponse.json({ error: 'Server not found' }, { status: 404 })
-    if (!user.isAdmin && server.addedById !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    // Explicitly delete related records first to avoid FK constraint issues
+    const allServers = await prisma.verificationServer.findMany({ select: { guildId: true, id: true } })
+    const server = allServers.find(s => s.guildId === guildId) ?? null
+
+    if (!server) {
+      return NextResponse.json({ error: 'Server not found', guildId, allGuildIds: allServers.map(s => s.guildId) }, { status: 404 })
+    }
+
+    const fullServer = await prisma.verificationServer.findUnique({ where: { id: server.id } })
+    if (!fullServer) return NextResponse.json({ error: 'Server lookup by id failed' }, { status: 404 })
+    if (!user.isAdmin && fullServer.addedById !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
     await prisma.verificationLog.deleteMany({ where: { serverId: server.id } })
     await prisma.verificationRule.deleteMany({ where: { serverId: server.id } })
     await prisma.verificationServer.delete({ where: { id: server.id } })
     return NextResponse.json({ ok: true })
   } catch (err) {
     console.error('[DELETE /api/verify/servers]', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: String(err) }, { status: 500 })
   }
 }
 
