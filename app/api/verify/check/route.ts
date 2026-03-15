@@ -87,9 +87,10 @@ Reply with ONLY a raw JSON object, no markdown, no code blocks:
     govId = parsed.govId?.toString()?.replace(/\D/g, '') || null  // digits only
     govName = parsed.govName?.trim() || null
     allianceTag = parsed.allianceTag?.trim() || null
-  } catch {
+  } catch (err) {
+    console.error('[verify/check] Claude/parse error:', err)
     await logAndReturn(server.id, guildId, discordUserId, discordUsername, 'parse_failed')
-    return NextResponse.json({ result: 'parse_failed', reason: 'Could not read the governor profile. Make sure the screenshot shows the full profile screen.' })
+    return NextResponse.json({ result: 'parse_failed', reason: String(err) })
   }
 
   if (!govId) {
