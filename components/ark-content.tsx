@@ -113,12 +113,12 @@ const ROLE_COLORS: Record<string, string> = {
 }
 
 const QUESTION_TYPES = [
-  { type: 'text', label: 'Text' },
-  { type: 'textarea', label: 'Long Text' },
-  { type: 'number', label: 'Number' },
-  { type: 'select', label: 'Single Select' },
-  { type: 'timeslots', label: 'Time Slots' },
-  { type: 'commanders', label: 'Commander Input' },
+  { type: 'text',       label: 'Short Answer',     hint: 'Single line of text' },
+  { type: 'textarea',   label: 'Paragraph',         hint: 'Multiple lines of text' },
+  { type: 'number',     label: 'Number',            hint: 'Numeric value only' },
+  { type: 'select',     label: 'Multiple Choice',   hint: 'Pick one option' },
+  { type: 'timeslots',  label: 'Checkboxes',        hint: 'Pick multiple time slots' },
+  { type: 'commanders', label: 'Commander Input',   hint: 'Commander names & skill levels' },
 ]
 
 const APP_URL = typeof window !== 'undefined' ? window.location.origin : ''
@@ -279,16 +279,44 @@ function CommandCenter({ event, onRefresh, appUrl }: { event: ArkEvent; onRefres
   )
 }
 
+// ─── FormBuilder helpers ──────────────────────────────────────────────────────
+
+// Human-readable question type labels
+const Q_TYPE_LABELS: Record<string, string> = {
+  text:       'Short text',
+  textarea:   'Long text',
+  number:     'Number',
+  select:     'Single choice',
+  timeslots:  'Time slots (checkboxes)',
+  commanders: 'Commander list',
+  botfield:   'Game data',
+}
+
+// Description shown under each bot-managed field so leadership understands it
+const BOT_FIELD_DESCRIPTIONS: Record<string, string> = {
+  gov_name:  'Auto-filled: player\'s in-game governor name (from bot roster)',
+  gov_id:    'Auto-filled: player\'s numeric governor ID (from bot roster)',
+  power:     'Auto-filled: player\'s current power score (from bot roster)',
+  discord:   'Auto-filled: whether the player is verified in your Discord server',
+}
+
+function slugify(label: string): string {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40)
+}
+
 // ─── FormBuilder ──────────────────────────────────────────────────────────────
 
 function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => void }) {
   const [form, setForm] = useState<ArkForm | null>(event.form ?? null)
   const [loading, setLoading] = useState(false)
   const [addingQ, setAddingQ] = useState(false)
-  const [newQ, setNewQ] = useState({ type: 'text', key: '', label: '', placeholder: '', required: false })
-  const [editingTitle, setEditingTitle] = useState(false)
+  const [newQ, setNewQ] = useState({ type: 'text', label: '', placeholder: '', required: false })
+  const [editingTitleForm, setEditingTitleForm] = useState(false)
   const [titleDraft, setTitleDraft] = useState(form?.title ?? '')
   const [descDraft, setDescDraft] = useState(form?.description ?? '')
+  // Which question is currently being edited inline
+  const [editingQId, setEditingQId] = useState<string | null>(null)
+  const [editDraft, setEditDraft] = useState<{ label: string; placeholder: string; required: boolean } | null>(null)
 
   async function createForm() {
     setLoading(true)
@@ -312,22 +340,43 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
       body: JSON.stringify({ title: titleDraft, description: descDraft }),
     })
     setForm(f => f ? { ...f, title: titleDraft, description: descDraft } : f)
-    setEditingTitle(false)
+    setEditingTitleForm(false)
     onRefresh()
   }
 
+  function startEditQ(q: ArkQuestion) {
+    setEditingQId(q.id)
+    setEditDraft({ label: q.label, placeholder: q.placeholder ?? '', required: q.required })
+  }
+
+  async function saveQ(qid: string) {
+    if (!form || !editDraft) return
+    await fetch(`/api/ark/forms/${form.id}/questions/${qid}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editDraft),
+    })
+    setForm(f => f ? {
+      ...f,
+      questions: f.questions.map(q => q.id === qid ? { ...q, ...editDraft } : q),
+    } : f)
+    setEditingQId(null)
+    setEditDraft(null)
+  }
+
   async function addQuestion() {
-    if (!form || !newQ.key || !newQ.label) return
+    if (!form || !newQ.label) return
     setLoading(true)
     try {
+      const key = slugify(newQ.label) || `question_${Date.now()}`
       const res = await fetch(`/api/ark/forms/${form.id}/questions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newQ),
+        body: JSON.stringify({ ...newQ, key }),
       })
       const data = await res.json()
       setForm(f => f ? { ...f, questions: [...f.questions, data.question] } : f)
-      setNewQ({ type: 'text', key: '', label: '', placeholder: '', required: false })
+      setNewQ({ type: 'text', label: '', placeholder: '', required: false })
       setAddingQ(false)
     } finally { setLoading(false) }
   }
@@ -347,7 +396,6 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
     const swapIdx = dir === 'up' ? idx - 1 : idx + 1
     const q1 = form.questions[idx]
     const q2 = form.questions[swapIdx]
-    // Update both orders
     await Promise.all([
       fetch(`/api/ark/forms/${form.id}/questions/${q1.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -358,7 +406,6 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
         body: JSON.stringify({ order: q1.order }),
       }),
     ])
-    // Swap locally
     const newQs = [...form.questions]
     newQs[idx] = { ...q1, order: q2.order }
     newQs[swapIdx] = { ...q2, order: q1.order }
@@ -371,7 +418,7 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
       <div className="flex flex-col items-center py-16 text-center rounded-2xl border border-border/50 bg-card/60">
         <ClipboardList className="h-12 w-12 text-muted-foreground/30 mb-4" />
         <p className="text-foreground font-semibold mb-1">No form yet</p>
-        <p className="text-sm text-muted-foreground mb-5">Create a registration form for this Ark event. It comes with a default template.</p>
+        <p className="text-sm text-muted-foreground mb-5">Create a registration form — comes with a ready-to-use default template.</p>
         <button onClick={createForm} disabled={loading}
           className="flex items-center gap-2 rounded-xl bg-primary/15 border border-primary/25 px-5 py-2.5 text-sm font-medium text-primary hover:bg-primary/25 transition disabled:opacity-40">
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -382,120 +429,195 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
   }
 
   return (
-    <div className="space-y-4">
-      {/* Form header */}
+    <div className="space-y-5">
+      {/* Form title / description */}
       <div className="rounded-2xl border border-border/50 bg-card/60 p-5">
-        {editingTitle ? (
+        {editingTitleForm ? (
           <div className="space-y-3">
-            <input value={titleDraft} onChange={e => setTitleDraft(e.target.value)}
-              className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50" />
-            <textarea value={descDraft} onChange={e => setDescDraft(e.target.value)}
-              placeholder="Description (optional)" rows={2}
-              className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground resize-none focus:outline-none focus:border-primary/50" />
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Form title</label>
+              <input value={titleDraft} onChange={e => setTitleDraft(e.target.value)}
+                className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Description shown to players (optional)</label>
+              <textarea value={descDraft} onChange={e => setDescDraft(e.target.value)}
+                placeholder="e.g. Please fill this out before Saturday. All fields are required." rows={2}
+                className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground resize-none focus:outline-none focus:border-primary/50" />
+            </div>
             <div className="flex gap-2">
               <button onClick={saveTitle} className="rounded-lg bg-primary/15 border border-primary/25 px-4 py-1.5 text-xs text-primary hover:bg-primary/25">Save</button>
-              <button onClick={() => setEditingTitle(false)} className="text-xs text-muted-foreground hover:text-foreground">Cancel</button>
+              <button onClick={() => setEditingTitleForm(false)} className="text-xs text-muted-foreground hover:text-foreground">Cancel</button>
             </div>
           </div>
         ) : (
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="font-bold text-foreground">{form.title}</h3>
-              {form.description && <p className="text-sm text-muted-foreground mt-0.5">{form.description}</p>}
+              <p className="text-sm text-muted-foreground mt-0.5">{form.description || <span className="italic opacity-50">No description</span>}</p>
             </div>
-            <button onClick={() => { setTitleDraft(form.title); setDescDraft(form.description ?? ''); setEditingTitle(true) }}
-              className="shrink-0 text-muted-foreground hover:text-foreground transition">
-              <Pencil className="h-4 w-4" />
+            <button onClick={() => { setTitleDraft(form.title); setDescDraft(form.description ?? ''); setEditingTitleForm(true) }}
+              className="shrink-0 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition border border-border/50 rounded-lg px-2.5 py-1.5">
+              <Pencil className="h-3.5 w-3.5" /> Edit title
             </button>
           </div>
         )}
       </div>
 
+      {/* Bot data notice */}
+      <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 flex gap-3">
+        <Zap className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-medium text-foreground">Game data fields</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Some questions (marked <span className="text-primary font-medium">Game data</span>) will be filled in automatically from your bot&apos;s roster once the Ark bot is set up. Players won&apos;t need to type these — they just select their name and the data appears. You can still rename these questions.
+          </p>
+        </div>
+      </div>
+
       {/* Questions list */}
       <div className="space-y-2">
-        {form.questions.map((q, idx) => (
-          <div key={q.id} className={cn("rounded-xl border bg-card/40 px-4 py-3",
-            q.botManaged ? "border-blue-400/20" : "border-border/50")}>
-            <div className="flex items-center gap-2">
-              <GripVertical className="h-4 w-4 text-muted-foreground/30 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-medium text-foreground">{q.label}</span>
-                  <span className="text-[10px] rounded-full border border-border/40 px-2 py-0.5 text-muted-foreground">{q.type}</span>
-                  {q.required && <span className="text-[10px] text-red-400">required</span>}
-                  {q.botManaged && <span className="text-[10px] text-blue-400 flex items-center gap-0.5"><Zap className="h-2.5 w-2.5" />auto</span>}
-                </div>
-                <span className="text-xs text-muted-foreground font-mono">{q.key}</span>
-              </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <button onClick={() => moveQuestion(q.id, 'up')} disabled={idx === 0}
-                  className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground disabled:opacity-20 transition">
-                  <ChevronUp className="h-3.5 w-3.5" />
-                </button>
-                <button onClick={() => moveQuestion(q.id, 'down')} disabled={idx === form.questions.length - 1}
-                  className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground disabled:opacity-20 transition">
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </button>
-                {!q.botManaged && (
-                  <button onClick={() => deleteQuestion(q.id)}
-                    className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-red-400 transition">
-                    <Trash2 className="h-3.5 w-3.5" />
+        {form.questions.map((q, idx) => {
+          const isEditing = editingQId === q.id
+          const typeLabel = Q_TYPE_LABELS[q.type] ?? q.type
+          const botDesc = q.botManaged ? (BOT_FIELD_DESCRIPTIONS[q.key] ?? 'Auto-filled from game bot data') : null
+
+          return (
+            <div key={q.id} className={cn(
+              "rounded-xl border bg-card/40 overflow-hidden",
+              q.botManaged ? "border-primary/20" : "border-border/50"
+            )}>
+              {/* Question row */}
+              <div className="flex items-center gap-2 px-4 py-3">
+                {/* Reorder */}
+                <div className="flex flex-col gap-0.5 shrink-0">
+                  <button onClick={() => moveQuestion(q.id, 'up')} disabled={idx === 0}
+                    className="h-5 w-5 flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-20 transition">
+                    <ChevronUp className="h-3.5 w-3.5" />
                   </button>
-                )}
+                  <button onClick={() => moveQuestion(q.id, 'down')} disabled={idx === form.questions.length - 1}
+                    className="h-5 w-5 flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-20 transition">
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-semibold text-foreground">{q.label}</span>
+                    <span className="text-[10px] rounded-full bg-muted/30 px-2 py-0.5 text-muted-foreground">{typeLabel}</span>
+                    {q.required && <span className="text-[10px] text-amber-400 font-medium">required</span>}
+                    {q.botManaged && (
+                      <span className="text-[10px] rounded-full bg-primary/15 text-primary px-2 py-0.5 font-medium">Game data</span>
+                    )}
+                  </div>
+                  {botDesc && !isEditing && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{botDesc}</p>
+                  )}
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-1 shrink-0">
+                  {!isEditing && (
+                    <button onClick={() => startEditQ(q)}
+                      className="h-7 w-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition">
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {!q.botManaged && !isEditing && (
+                    <button onClick={() => deleteQuestion(q.id)}
+                      className="h-7 w-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-red-400 hover:bg-red-400/10 transition">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {/* Inline edit panel */}
+              {isEditing && editDraft && (
+                <div className="border-t border-border/30 bg-muted/5 px-4 py-4 space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Question text (what players see)</label>
+                    <input value={editDraft.label} onChange={e => setEditDraft(d => d ? { ...d, label: e.target.value } : d)}
+                      className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50" />
+                  </div>
+                  {!q.botManaged && (
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Hint text inside the field (optional)</label>
+                      <input value={editDraft.placeholder} onChange={e => setEditDraft(d => d ? { ...d, placeholder: e.target.value } : d)}
+                        placeholder="e.g. Enter a number, e.g. 1.8"
+                        className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50" />
+                    </div>
+                  )}
+                  {!q.botManaged && (
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={editDraft.required} onChange={e => setEditDraft(d => d ? { ...d, required: e.target.checked } : d)} />
+                      <span className="text-sm text-foreground">This question is required</span>
+                    </label>
+                  )}
+                  <div className="flex gap-2">
+                    <button onClick={() => saveQ(q.id)}
+                      className="flex items-center gap-1.5 rounded-lg bg-primary/15 border border-primary/25 px-4 py-1.5 text-xs text-primary hover:bg-primary/25">
+                      <Check className="h-3 w-3" /> Save
+                    </button>
+                    <button onClick={() => { setEditingQId(null); setEditDraft(null) }}
+                      className="text-xs text-muted-foreground hover:text-foreground">Cancel</button>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       {/* Add question */}
       {addingQ ? (
-        <div className="rounded-2xl border border-primary/25 bg-primary/5 p-5 space-y-3">
-          <p className="text-sm font-semibold text-foreground">Add Question</p>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Type</label>
-              <select value={newQ.type} onChange={e => setNewQ(q => ({ ...q, type: e.target.value }))}
-                className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground focus:outline-none">
-                {QUESTION_TYPES.map(t => <option key={t.type} value={t.type}>{t.label}</option>)}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Key (internal ID)</label>
-              <input value={newQ.key} onChange={e => setNewQ(q => ({ ...q, key: e.target.value.replace(/\s+/g, '_').toLowerCase() }))}
-                placeholder="e.g. notes"
-                className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:border-primary/50" />
+        <div className="rounded-2xl border border-primary/25 bg-primary/5 p-5 space-y-4">
+          <p className="text-sm font-semibold text-foreground">Add a question</p>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Question type</label>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {QUESTION_TYPES.map(t => (
+                <button key={t.type} onClick={() => setNewQ(q => ({ ...q, type: t.type }))}
+                  className={cn("rounded-xl border px-3 py-2.5 text-left transition",
+                    newQ.type === t.type
+                      ? "border-primary/40 bg-primary/10 text-primary"
+                      : "border-border/50 bg-card/40 text-muted-foreground hover:border-border hover:text-foreground")}>
+                  <div className="text-xs font-semibold">{t.label}</div>
+                  <div className="text-[10px] mt-0.5 opacity-60">{t.hint}</div>
+                </button>
+              ))}
             </div>
           </div>
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Label (shown to players)</label>
+            <label className="text-xs font-medium text-muted-foreground">Question text (what players will see)</label>
             <input value={newQ.label} onChange={e => setNewQ(q => ({ ...q, label: e.target.value }))}
-              placeholder="e.g. Additional notes"
+              placeholder="e.g. Any additional notes for leadership?"
               className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50" />
           </div>
           <div className="space-y-1">
-            <label className="text-xs text-muted-foreground">Placeholder (optional)</label>
+            <label className="text-xs font-medium text-muted-foreground">Hint text inside the field (optional)</label>
             <input value={newQ.placeholder} onChange={e => setNewQ(q => ({ ...q, placeholder: e.target.value }))}
+              placeholder="e.g. Keep it short"
               className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50" />
           </div>
           <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={newQ.required} onChange={e => setNewQ(q => ({ ...q, required: e.target.checked }))}
-              className="rounded" />
-            <span className="text-sm text-foreground">Required</span>
+            <input type="checkbox" checked={newQ.required} onChange={e => setNewQ(q => ({ ...q, required: e.target.checked }))} />
+            <span className="text-sm text-foreground">This question is required</span>
           </label>
           <div className="flex gap-2">
-            <button onClick={addQuestion} disabled={loading || !newQ.key || !newQ.label}
-              className="flex items-center gap-2 rounded-lg bg-primary/15 border border-primary/25 px-4 py-2 text-sm text-primary hover:bg-primary/25 disabled:opacity-40">
+            <button onClick={addQuestion} disabled={loading || !newQ.label.trim()}
+              className="flex items-center gap-2 rounded-lg bg-primary/15 border border-primary/25 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/25 disabled:opacity-40">
               {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-              Add
+              Add question
             </button>
             <button onClick={() => setAddingQ(false)} className="text-sm text-muted-foreground hover:text-foreground">Cancel</button>
           </div>
         </div>
       ) : (
         <button onClick={() => setAddingQ(true)}
-          className="w-full flex items-center justify-center gap-2 rounded-xl border border-dashed border-border py-3 text-sm text-muted-foreground hover:border-primary/40 hover:text-primary transition">
-          <Plus className="h-4 w-4" /> Add Question
+          className="w-full flex items-center justify-center gap-2 rounded-xl border border-dashed border-border py-3.5 text-sm text-muted-foreground hover:border-primary/40 hover:text-primary transition">
+          <Plus className="h-4 w-4" /> Add a question
         </button>
       )}
     </div>
