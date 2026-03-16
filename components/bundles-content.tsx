@@ -787,7 +787,22 @@ function BundleTable({
                 ))}
                 <td />{editMode && <td />}
               </tr>
-              {bundle.rows.map((row, idx) => {
+              {(() => {
+                // Pre-compute rowspan groups for customTotal rows
+                const rowSpans: Record<string, number> = {}
+                let groupFirstId: string | null = null
+                bundle.rows.forEach(r => {
+                  if (r.customTotal !== undefined && r.customTotal !== '') {
+                    groupFirstId = r.id
+                    rowSpans[r.id] = 1
+                  } else if (r.customTotal === '' && groupFirstId !== null) {
+                    rowSpans[groupFirstId]++
+                    rowSpans[r.id] = 0
+                  } else {
+                    groupFirstId = null
+                  }
+                })
+                return bundle.rows.map((row, idx) => {
                 const mode = row.iconMode ?? "icon"
                 return (
                 <tr key={row.id} className="border-t border-white/10" style={{ background: idx % 2 === 0 ? colors.rowEven : colors.rowOdd }}>
@@ -916,9 +931,14 @@ function BundleTable({
                     </td>
                     )
                   })}
-                  <td className="px-4 py-3 text-right whitespace-nowrap">
-                    <span className="font-bold italic text-white text-sm">{rowTotalFmt(row, bundle.columns)}</span>
-                  </td>
+                  {rowSpans[row.id] === 0 ? null : (
+                    <td
+                      className="px-4 py-3 text-right whitespace-nowrap align-middle"
+                      rowSpan={rowSpans[row.id] ?? 1}
+                    >
+                      <span className="font-bold italic text-white text-sm">{rowTotalFmt(row, bundle.columns)}</span>
+                    </td>
+                  )}
                   {editMode && (
                     <td className="pr-2 text-center">
                       <button onClick={() => deleteRow(row.id)} className="text-red-400/60 hover:text-red-400 transition"><Trash2 className="h-3.5 w-3.5" /></button>
@@ -926,7 +946,8 @@ function BundleTable({
                   )}
                 </tr>
                 )
-              })}
+              })
+              })()}
             </tbody>
           )}
           {!collapsed && editMode && (
