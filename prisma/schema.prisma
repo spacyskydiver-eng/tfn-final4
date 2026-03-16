@@ -324,3 +324,13 @@ model VerificationLog {
   @@index([discordUserId, serverId])
   @@map("verification_logs")
 }
+
+// ─── SiteConfig ────────────────────────────────────────────────────────────────
+// Generic key/value store for admin-managed site-wide settings (e.g. bundle data).
+model SiteConfig {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("site_config")
+}

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useMemo, useRef, useState } from "react"
+import React, { useMemo, useRef, useState, useEffect, useCallback } from "react"
 import Image from "next/image"
 import {
   Plus, Trash2, Pencil, Check, ChevronDown,
@@ -119,6 +119,8 @@ export const ALL_ICONS = [
   { id: "alliance_bronze",     label: "Alliance Bronze",     src: "/images/bundle/Alliance_Bronze_Chest.webp" },
   { id: "common_mat",          label: "Common Mat",          src: "/images/bundle/common_mat_chest.png" },
   { id: "uncommon_mat",        label: "Uncommon Mat",        src: "/images/bundle/uncommon_mat_chest.png" },
+  { id: "rare_mat",            label: "Rare Mat",            src: "/images/bundle/rare_mat_chest.png" },
+  { id: "rare_mat_icon",       label: "Rare Mat (icon)",     src: "/images/bundle/rare_mat.png" },
   { id: "epic_mat",            label: "Epic Mat",            src: "/images/bundle/epic_mat_chest.png" },
   { id: "legendary_mat",       label: "Legendary Mat",       src: "/images/bundle/legendary_mat_chest.png" },
   { id: "epic_form",           label: "Epic Formation",      src: "/images/bundle/epic_formation_chest.png" },
@@ -138,6 +140,7 @@ export const ALL_ICONS = [
   { id: "speed_universal",     label: "Universal Speed",     src: "/images/bundle/universal_speed.png" },
   { id: "food",                label: "Food",                src: "/images/bundle/food.png" },
   { id: "wood",                label: "Wood",                src: "/images/bundle/wood.png" },
+  { id: "stone",               label: "Stone",               src: "/images/bundle/stone.png" },
   { id: "gold_key",            label: "Gold Key",            src: "/images/bundle/gold_key.png" },
   { id: "silver_key",          label: "Silver Key",          src: "/images/bundle/silver_key.png" },
   { id: "brand_new_star",      label: "Brand New Star",      src: "/images/bundle/brand_new_star.png" },
@@ -383,7 +386,7 @@ function IconPickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md" onInteractOutside={(e) => e.preventDefault()} aria-describedby={undefined}>
         <DialogHeader><DialogTitle>Choose Icon</DialogTitle></DialogHeader>
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
@@ -500,64 +503,120 @@ function RefreshBadge({ bundle, lastPurchaseDates }: { bundle: Bundle; lastPurch
 // ─── Bundle Table (Tables view) ───────────────────────────────────────────────
 
 function BundleTable({
-  bundle, editMode, categories, shopCategories, lastPurchaseDates, onUpdate, onDelete,
+  bundle, editMode, categories, shopCategories, lastPurchaseDates, iconSize, onUpdate, onDelete,
 }: {
   bundle: Bundle
   editMode: boolean
   categories: string[]
   shopCategories: string[]
   lastPurchaseDates: Record<string, string>
+  iconSize: number
   onUpdate: (b: Bundle) => void
   onDelete: () => void
 }) {
+  type PickerTarget =
+    | { type: "col"; colId: string }
+    | { type: "row"; rowId: string }
+    | { type: "cell"; rowId: string; colId: string }
+
   const { currentColor } = useTheme()
   const [collapsed, setCollapsed] = useState(false)
-  const [picker, setPicker] = useState<{ current: string; cb: (src: string, label: string) => void } | null>(null)
+
+  // Picker state: separate open/current (React state for rendering) from target (ref so it
+  // survives the dialog closing mid-flight when a native file-picker steals window focus).
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerCurrent, setPickerCurrent] = useState("")
+  const pickerTargetRef = useRef<PickerTarget | null>(null)
+
+  function openPicker(current: string, target: PickerTarget) {
+    console.log('[picker] openPicker called', target)
+    pickerTargetRef.current = target
+    setPickerCurrent(current)
+    setPickerOpen(true)
+  }
+
+  // Always-fresh refs — handler reads these at call time, no stale closures
+  const bundleRef = useRef(bundle)
+  bundleRef.current = bundle
+  const onUpdateRef = useRef(onUpdate)
+  onUpdateRef.current = onUpdate
+
+  function handlePickerSelect(src: string, label: string) {
+    console.log('[picker] handlePickerSelect called', { src: src.slice(0, 60), label, target: pickerTargetRef.current })
+    const target = pickerTargetRef.current
+    if (!target) { console.warn('[picker] target is null — update skipped'); return }
+    const b = bundleRef.current
+    if (target.type === "col") {
+      onUpdateRef.current({ ...b, columns: b.columns.map(c => c.id === target.colId ? { ...c, icon: src, name: label } : c) })
+    } else if (target.type === "row") {
+      onUpdateRef.current({ ...b, rows: b.rows.map(r => r.id === target.rowId ? { ...r, icon: src, label, iconMode: "icon" as RowIconMode } : r) })
+    } else {
+      onUpdateRef.current({ ...b, rows: b.rows.map(r => {
+        if (r.id !== target.rowId) return r
+        const ci = { ...(r.cellIcons ?? {}) }
+        if (src) ci[target.colId] = src; else delete ci[target.colId]
+        return { ...r, cellIcons: ci }
+      })})
+    }
+    pickerTargetRef.current = null
+    setPickerOpen(false)
+  }
 
   const colors = themeColors(currentColor.hue)
   const totalCols = bundle.columns.length + 2 + (editMode ? 1 : 0)
 
   function setColIcon(id: string, icon: string, name: string) {
-    onUpdate({ ...bundle, columns: bundle.columns.map(c => c.id === id ? { ...c, icon, name } : c) })
+    const b = bundleRef.current
+    onUpdateRef.current({ ...b, columns: b.columns.map(c => c.id === id ? { ...c, icon, name } : c) })
   }
   function setColName(id: string, name: string) {
-    onUpdate({ ...bundle, columns: bundle.columns.map(c => c.id === id ? { ...c, name } : c) })
+    const b = bundleRef.current
+    onUpdateRef.current({ ...b, columns: b.columns.map(c => c.id === id ? { ...c, name } : c) })
   }
   function setColPrice(id: string, price: number) {
-    onUpdate({ ...bundle, columns: bundle.columns.map(c => c.id === id ? { ...c, price } : c) })
+    const b = bundleRef.current
+    onUpdateRef.current({ ...b, columns: b.columns.map(c => c.id === id ? { ...c, price } : c) })
   }
   function setColMax(id: string, maxPurchase: number) {
-    onUpdate({ ...bundle, columns: bundle.columns.map(c => c.id === id ? { ...c, maxPurchase } : c) })
+    const b = bundleRef.current
+    onUpdateRef.current({ ...b, columns: b.columns.map(c => c.id === id ? { ...c, maxPurchase } : c) })
   }
   function deleteCol(id: string) {
-    const columns = bundle.columns.filter(c => c.id !== id)
-    const rows = bundle.rows.map(r => {
+    const b = bundleRef.current
+    const columns = b.columns.filter(c => c.id !== id)
+    const rows = b.rows.map(r => {
       const v = { ...r.values }; delete v[id]
       const ci = { ...(r.cellIcons ?? {}) }; delete ci[id]
       return { ...r, values: v, cellIcons: ci }
     })
-    onUpdate({ ...bundle, columns, rows })
+    onUpdateRef.current({ ...b, columns, rows })
   }
   function addColumn() {
+    const b = bundleRef.current
     const id = `col_${Date.now()}`
-    const columns = [...bundle.columns, { id, icon: "/images/bundle/stone_chest.png", name: "Stone Chest", price: 0, maxPurchase: 1, showIcon: true }]
-    const rows = bundle.rows.map(r => ({ ...r, values: { ...r.values, [id]: 0 } }))
-    onUpdate({ ...bundle, columns, rows })
+    const columns = [...b.columns, { id, icon: "/images/bundle/stone_chest.png", name: "Stone Chest", price: 0, maxPurchase: 1, showIcon: true }]
+    const rows = b.rows.map(r => ({ ...r, values: { ...r.values, [id]: 0 } }))
+    onUpdateRef.current({ ...b, columns, rows })
   }
   function setRowIcon(id: string, icon: string, label: string) {
-    onUpdate({ ...bundle, rows: bundle.rows.map(r => r.id === id ? { ...r, icon, label } : r) })
+    const b = bundleRef.current
+    onUpdateRef.current({ ...b, rows: b.rows.map(r => r.id === id ? { ...r, icon, label } : r) })
   }
   function setRowLabel(id: string, label: string) {
-    onUpdate({ ...bundle, rows: bundle.rows.map(r => r.id === id ? { ...r, label } : r) })
+    const b = bundleRef.current
+    onUpdateRef.current({ ...b, rows: b.rows.map(r => r.id === id ? { ...r, label } : r) })
   }
   function setRowType(id: string, rowType: RowType) {
-    onUpdate({ ...bundle, rows: bundle.rows.map(r => r.id === id ? { ...r, rowType } : r) })
+    const b = bundleRef.current
+    onUpdateRef.current({ ...b, rows: b.rows.map(r => r.id === id ? { ...r, rowType } : r) })
   }
   function setCell(rowId: string, colId: string, value: number) {
-    onUpdate({ ...bundle, rows: bundle.rows.map(r => r.id === rowId ? { ...r, values: { ...r.values, [colId]: value } } : r) })
+    const b = bundleRef.current
+    onUpdateRef.current({ ...b, rows: b.rows.map(r => r.id === rowId ? { ...r, values: { ...r.values, [colId]: value } } : r) })
   }
   function setCellIcon(rowId: string, colId: string, icon: string) {
-    onUpdate({ ...bundle, rows: bundle.rows.map(r => {
+    const b = bundleRef.current
+    onUpdateRef.current({ ...b, rows: b.rows.map(r => {
       if (r.id !== rowId) return r
       const ci = { ...(r.cellIcons ?? {}) }
       if (icon) ci[colId] = icon
@@ -566,18 +625,20 @@ function BundleTable({
     })})
   }
   function deleteRow(id: string) {
-    onUpdate({ ...bundle, rows: bundle.rows.filter(r => r.id !== id) })
+    const b = bundleRef.current
+    onUpdateRef.current({ ...b, rows: b.rows.filter(r => r.id !== id) })
   }
   function addRow() {
+    const b = bundleRef.current
     const id = `row_${Date.now()}`
     const values: Record<string, number> = {}
-    bundle.columns.forEach(c => (values[c.id] = 0))
-    onUpdate({ ...bundle, rows: [...bundle.rows, { id, icon: "/images/bundle/gem.png", label: "Gem", values, rowType: "number", iconMode: "icon", cellIcons: {} }] })
+    b.columns.forEach(c => (values[c.id] = 0))
+    onUpdateRef.current({ ...b, rows: [...b.rows, { id, icon: "/images/bundle/gem.png", label: "New Row", values, rowType: "number", iconMode: "icon", cellIcons: {} }] })
   }
 
   return (
     <>
-      {picker && <IconPickerDialog open current={picker.current} onSelect={picker.cb} onClose={() => setPicker(null)} />}
+      <IconPickerDialog open={pickerOpen} current={pickerCurrent} onSelect={handlePickerSelect} onClose={() => setPickerOpen(false)} />
       <div className="overflow-x-auto rounded-xl border border-white/10 shadow-lg shadow-black/40">
         <table className="w-full text-sm border-collapse">
           <thead>
@@ -660,7 +721,7 @@ function BundleTable({
             </tr>
             {!collapsed && (
               <tr style={{ background: colors.iconRow }}>
-                <th className="w-20 px-3 py-2" />
+                <th className="w-44 px-3 py-3" />
                 {bundle.columns.map(col => (
                   <th key={col.id} className="px-3 py-2 text-center">
                     <div className="flex flex-col items-center gap-1">
@@ -676,13 +737,13 @@ function BundleTable({
                       )}
                       {/* Icon (only when showIcon is true or undefined) */}
                       {(col.showIcon ?? true) ? (
-                        <button disabled={!editMode} onClick={() => editMode && setPicker({ current: col.icon, cb: (src, name) => setColIcon(col.id, src, name) })} className={cn("rounded-lg p-0.5 transition", editMode && "hover:ring-2 hover:ring-primary/60 cursor-pointer")}>
-                          <Image src={col.icon} alt={col.name} width={56} height={56} className="h-14 w-14 object-contain" />
+                        <button onClick={() => editMode && openPicker(col.icon, { type: "col", colId: col.id })} className={cn("rounded-lg p-0.5 transition", editMode && "hover:ring-2 hover:ring-primary/60 cursor-pointer")}>
+                          <Image src={col.icon} alt={col.name} width={iconSize} height={iconSize} className="object-contain" style={{ width: iconSize, height: iconSize }} />
                         </button>
                       ) : (
                         /* No icon: show placeholder in edit mode so user can restore it */
                         editMode && (
-                          <button onClick={() => setPicker({ current: col.icon, cb: (src, name) => setColIcon(col.id, src, name) })} className="h-14 w-14 rounded-lg border border-dashed border-white/20 flex items-center justify-center text-white/20 hover:border-primary/40 hover:text-primary/40 transition text-[10px] leading-tight">
+                          <button onClick={() => openPicker(col.icon, { type: "col", colId: col.id })} style={{ width: iconSize, height: iconSize }} className="rounded-lg border border-dashed border-white/20 flex items-center justify-center text-white/20 hover:border-primary/40 hover:text-primary/40 transition text-[10px] leading-tight">
                             +icon
                           </button>
                         )
@@ -690,7 +751,7 @@ function BundleTable({
                       {editMode ? (
                         <Input value={col.name} onChange={e => setColName(col.id, e.target.value)} className="h-6 w-28 text-center text-[11px] bg-white/10 border-white/20 text-white mt-0.5" />
                       ) : (
-                        <span className="text-[11px] text-white/60 text-center max-w-[80px] leading-tight line-clamp-2">{col.name}</span>
+                        <span className="text-xs text-white/60 text-center max-w-[96px] leading-tight line-clamp-2">{col.name}</span>
                       )}
                       {editMode && <button onClick={() => deleteCol(col.id)} className="text-red-400/60 hover:text-red-400 transition mt-0.5"><Trash2 className="h-3 w-3" /></button>}
                     </div>
@@ -726,17 +787,32 @@ function BundleTable({
                 const mode = row.iconMode ?? "icon"
                 return (
                 <tr key={row.id} className="border-t border-white/10" style={{ background: idx % 2 === 0 ? colors.rowEven : colors.rowOdd }}>
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-3">
                     <div className="flex items-center gap-2">
-                      {/* Row icon — only in "icon" mode (or edit mode where user can switch) */}
+                      {/* Row icon — only in "icon" mode */}
                       {mode === "icon" && (
-                        <button disabled={!editMode} onClick={() => editMode && setPicker({ current: row.icon, cb: (src, label) => setRowIcon(row.id, src, label) })} className={cn("rounded-lg p-0.5 flex-shrink-0 transition", editMode && "hover:ring-2 hover:ring-primary/60 cursor-pointer")}>
-                          <Image src={row.icon} alt={row.label} width={40} height={40} className="h-10 w-10 object-contain" />
-                        </button>
+                        <div className="relative flex-shrink-0">
+                          {editMode ? (
+                            <>
+                              <button onClick={() => openPicker(row.icon, { type: "row", rowId: row.id })} className="rounded-lg p-0.5 block hover:ring-2 hover:ring-primary/60 cursor-pointer transition">
+                                <Image src={row.icon} alt={row.label} width={iconSize} height={iconSize} className="object-contain" style={{ width: iconSize, height: iconSize }} />
+                              </button>
+                              <button
+                                onClick={() => onUpdateRef.current({ ...bundleRef.current, rows: bundleRef.current.rows.map(r => r.id === row.id ? { ...r, iconMode: "text" as RowIconMode } : r) })}
+                                title="Remove icon"
+                                className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-red-500/80 hover:bg-red-500 text-white flex items-center justify-center"
+                              >
+                                <X className="h-2.5 w-2.5" />
+                              </button>
+                            </>
+                          ) : (
+                            <Image src={row.icon} alt={row.label} width={iconSize} height={iconSize} className="object-contain" style={{ width: iconSize, height: iconSize }} />
+                          )}
+                        </div>
                       )}
-                      {/* In edit mode, show icon picker button even in non-icon modes */}
+                      {/* In edit mode (non-icon modes): +icon button to add icon back */}
                       {editMode && mode !== "icon" && (
-                        <button onClick={() => setPicker({ current: row.icon, cb: (src, label) => setRowIcon(row.id, src, label) })} className="h-10 w-10 rounded-lg border border-dashed border-white/20 flex items-center justify-center text-white/20 hover:border-primary/40 hover:text-primary/40 transition flex-shrink-0 text-[9px]">
+                        <button onClick={() => openPicker(row.icon, { type: "row", rowId: row.id })} style={{ width: iconSize, height: iconSize }} className="rounded-lg border border-dashed border-white/20 flex items-center justify-center text-white/20 hover:border-primary/40 hover:text-primary/40 transition flex-shrink-0 text-[9px]">
                           +icon
                         </button>
                       )}
@@ -766,30 +842,31 @@ function BundleTable({
                           </div>
                         </div>
                       ) : mode !== "none" ? (
-                        <span className="text-[11px] text-white/70 max-w-[72px] leading-tight line-clamp-2">{row.label}</span>
+                        <span className="text-sm text-white/70 leading-tight">{row.label}</span>
                       ) : null}
                     </div>
                   </td>
                   {bundle.columns.map(col => {
                     const cellIcon = row.cellIcons?.[col.id] ?? ""
                     return (
-                    <td key={`${row.id}-${col.id}`} className="px-2 py-2 text-center text-white/80">
+                    <td key={`${row.id}-${col.id}`} className="px-3 py-3 text-center text-white/80 text-sm">
                       {editMode ? (
                         <div className="flex flex-col items-center gap-1.5 min-w-[72px]">
                           {/* Per-cell icon picker */}
                           <div className="relative">
                             <button
-                              onClick={() => setPicker({ current: cellIcon, cb: (src) => setCellIcon(row.id, col.id, src) })}
+                              onClick={() => openPicker(cellIcon, { type: "cell", rowId: row.id, colId: col.id })}
                               title="Set icon for this cell"
                               className={cn(
                                 "rounded-md transition",
                                 cellIcon
                                   ? "p-0.5 hover:ring-2 hover:ring-primary/60 cursor-pointer"
-                                  : "h-8 w-8 border border-dashed border-white/20 flex items-center justify-center text-[9px] text-white/25 hover:border-primary/40 hover:text-primary/40"
+                                  : "border border-dashed border-white/20 flex items-center justify-center text-[9px] text-white/25 hover:border-primary/40 hover:text-primary/40"
                               )}
+                              style={!cellIcon ? { width: iconSize, height: iconSize } : undefined}
                             >
                               {cellIcon
-                                ? <Image src={cellIcon} alt="" width={32} height={32} className="h-8 w-8 object-contain" />
+                                ? <Image src={cellIcon} alt="" width={iconSize} height={iconSize} className="object-contain" style={{ width: iconSize, height: iconSize }} />
                                 : "+icon"
                               }
                             </button>
@@ -811,17 +888,24 @@ function BundleTable({
                           />
                         </div>
                       ) : cellIcon ? (
-                        <div className="flex flex-col items-center gap-0.5">
-                          <Image src={cellIcon} alt="" width={36} height={36} className="h-9 w-9 object-contain" />
-                          <span className="text-xs font-bold tabular-nums">×{fmt(row.values[col.id] ?? 0)}</span>
+                        <div className="flex flex-col items-center gap-1">
+                          <Image src={cellIcon} alt="" width={iconSize} height={iconSize} className="object-contain" style={{ width: iconSize, height: iconSize }} />
+                          <span className="text-sm font-bold tabular-nums">×{fmt(row.values[col.id] ?? 0)}</span>
+                        </div>
+                      ) : mode === "icon" && (row.values[col.id] ?? 0) > 0 ? (
+                        <div className="flex flex-col items-center gap-1">
+                          <Image src={row.icon} alt={row.label} width={iconSize} height={iconSize} className="object-contain opacity-85" style={{ width: iconSize, height: iconSize }} />
+                          <span className="text-sm font-bold tabular-nums">×{fmt(row.values[col.id] ?? 0)}</span>
                         </div>
                       ) : (
-                        <span>{fmt(row.values[col.id] ?? 0)}</span>
+                        <span className={(row.values[col.id] ?? 0) === 0 ? "text-white/20 text-sm" : "text-base font-bold tabular-nums"}>{fmt(row.values[col.id] ?? 0)}</span>
                       )}
                     </td>
                     )
                   })}
-                  <td className="px-4 py-2.5 text-right font-bold italic text-white whitespace-nowrap">{rowTotalFmt(row, bundle.columns)}</td>
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <span className="font-bold italic text-white text-sm">{rowTotalFmt(row, bundle.columns)}</span>
+                  </td>
                   {editMode && (
                     <td className="pr-2 text-center">
                       <button onClick={() => deleteRow(row.id)} className="text-red-400/60 hover:text-red-400 transition"><Trash2 className="h-3.5 w-3.5" /></button>
@@ -871,12 +955,12 @@ function BundleCard({ bundle, lastPurchaseDates }: { bundle: Bundle; lastPurchas
       <div className="px-3 py-1.5 border-b border-white/5" style={{ background: colors.iconRow }}>
         <RefreshBadge bundle={bundle} lastPurchaseDates={lastPurchaseDates} />
       </div>
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-white/10" style={{ background: colors.iconRow }}>
+      <div className="flex items-center gap-2 px-3 py-3 border-b border-white/10" style={{ background: colors.iconRow }}>
         {bundle.columns.map(col => (
           <div key={col.id} className="flex flex-col items-center gap-0.5 flex-1 min-w-0">
             {(col.showIcon ?? true)
-              ? <Image src={col.icon} alt={col.name} width={36} height={36} className="h-9 w-9 object-contain" />
-              : <div className="h-9 flex items-end"><span className="text-[10px] text-white/60 font-medium text-center">{col.name}</span></div>
+              ? <Image src={col.icon} alt={col.name} width={48} height={48} className="h-12 w-12 object-contain" />
+              : <div className="h-12 flex items-end"><span className="text-[10px] text-white/60 font-medium text-center">{col.name}</span></div>
             }
             {(col.showIcon ?? true) && <span className="text-[9px] text-white/50 text-center leading-tight truncate w-full">{col.name}</span>}
             <span className="text-[10px] text-white/70 font-medium">${col.price}</span>
@@ -888,8 +972,8 @@ function BundleCard({ bundle, lastPurchaseDates }: { bundle: Bundle; lastPurchas
         {bundle.rows.map((row, idx) => {
           const mode = row.iconMode ?? "icon"
           return (
-          <div key={row.id} className="flex items-center gap-2.5 px-3 py-1.5" style={{ background: idx % 2 === 0 ? colors.rowEven : colors.rowOdd }}>
-            {mode === "icon" && <Image src={row.icon} alt={row.label} width={28} height={28} className="h-7 w-7 object-contain flex-shrink-0" />}
+          <div key={row.id} className="flex items-center gap-2.5 px-3 py-2" style={{ background: idx % 2 === 0 ? colors.rowEven : colors.rowOdd }}>
+            {mode === "icon" && <Image src={row.icon} alt={row.label} width={36} height={36} className="h-9 w-9 object-contain flex-shrink-0" />}
             {mode !== "none" && <span className="text-xs text-white/70 flex-1 min-w-0 truncate">{row.label}</span>}
             {mode === "none" && <span className="flex-1" />}
             <span className="text-xs font-bold text-white whitespace-nowrap">{rowTotalFmt(row, bundle.columns)}</span>
@@ -915,9 +999,9 @@ function CompareView({ bundles, categories }: { bundles: Bundle[]; categories: s
   const selected = bundles.filter(b => selectedIds.includes(b.id))
 
   const allItems = useMemo(() => {
-    const seen = new Map<string, { icon: string; label: string; rowType: RowType }>()
+    const seen = new Map<string, { icon: string; label: string; rowType: RowType; iconMode: RowIconMode }>()
     selected.forEach(b => b.rows.forEach(r => {
-      if (!seen.has(r.label)) seen.set(r.label, { icon: r.icon, label: r.label, rowType: r.rowType })
+      if (!seen.has(r.label)) seen.set(r.label, { icon: r.icon, label: r.label, rowType: r.rowType, iconMode: r.iconMode ?? "icon" })
     }))
     return Array.from(seen.values())
   }, [selected])
@@ -977,7 +1061,7 @@ function CompareView({ bundles, categories }: { bundles: Bundle[]; categories: s
                   <tr key={item.label} className="border-t border-white/10" style={{ background: idx % 2 === 0 ? colors.rowEven : colors.rowOdd }}>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-2">
-                        {(item.iconMode ?? "icon") === "icon" && <Image src={item.icon} alt={item.label} width={28} height={28} className="h-7 w-7 object-contain flex-shrink-0" />}
+                        {(item.iconMode ?? "icon") === "icon" && <Image src={item.icon} alt={item.label} width={36} height={36} className="h-9 w-9 object-contain flex-shrink-0" />}
                         {(item.iconMode ?? "icon") !== "none" && <span className="text-xs text-white/70 leading-tight">{item.label}</span>}
                         {(item.iconMode ?? "icon") === "none" && <span className="text-xs text-white/40 italic leading-tight">—</span>}
                       </div>
@@ -1196,9 +1280,9 @@ function PlanView({ bundles, categories }: { bundles: Bundle[]; categories: stri
   const selected = visibleBundles.filter(b => selectedIds.includes(b.id))
 
   const allItems = useMemo(() => {
-    const seen = new Map<string, { icon: string; label: string; rowType: RowType }>()
+    const seen = new Map<string, { icon: string; label: string; rowType: RowType; iconMode: RowIconMode }>()
     selected.forEach(b => b.rows.forEach(r => {
-      if (!seen.has(r.label)) seen.set(r.label, { icon: r.icon, label: r.label, rowType: r.rowType })
+      if (!seen.has(r.label)) seen.set(r.label, { icon: r.icon, label: r.label, rowType: r.rowType, iconMode: r.iconMode ?? "icon" })
     }))
     return Array.from(seen.values())
   }, [selected])
@@ -1380,7 +1464,7 @@ function PlanView({ bundles, categories }: { bundles: Bundle[]; categories: stri
                         <tr key={item.label} className="border-t border-white/10" style={{ background: idx % 2 === 0 ? colors.rowEven : colors.rowOdd }}>
                           <td className="px-3 py-2.5">
                             <div className="flex items-center gap-2">
-                              {(item.iconMode ?? "icon") === "icon" && <Image src={item.icon} alt={item.label} width={28} height={28} className="h-7 w-7 object-contain flex-shrink-0" />}
+                              {(item.iconMode ?? "icon") === "icon" && <Image src={item.icon} alt={item.label} width={36} height={36} className="h-9 w-9 object-contain flex-shrink-0" />}
                               {(item.iconMode ?? "icon") !== "none" && <span className="text-xs text-white/70 leading-tight">{item.label}</span>}
                               {(item.iconMode ?? "icon") === "none" && <span className="text-xs text-white/40 italic leading-tight">—</span>}
                             </div>
@@ -1423,7 +1507,7 @@ function PlanView({ bundles, categories }: { bundles: Bundle[]; categories: stri
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
               {combined.map(item => (
                 <div key={item.label} className="rounded-xl border border-white/10 flex flex-col items-center gap-1.5 px-3 py-3 text-center shadow" style={{ background: colors.card }}>
-                  {(item.iconMode ?? "icon") === "icon" && <Image src={item.icon} alt={item.label} width={48} height={48} className="h-12 w-12 object-contain" />}
+                  {(item.iconMode ?? "icon") === "icon" && <Image src={item.icon} alt={item.label} width={56} height={56} className="h-14 w-14 object-contain" />}
                   {(item.iconMode ?? "icon") !== "none" && <span className="text-[11px] text-white/60 leading-tight">{item.label}</span>}
                   {(item.iconMode ?? "icon") === "none" && <span className="text-[11px] text-white/30 leading-tight italic">—</span>}
                   <span className="text-sm font-bold text-white tabular-nums">{formatTotal(item.rowType, item.total)}</span>
@@ -1496,7 +1580,7 @@ function BundleShopCard({
 
   if (!col) {
     return (
-      <div className="relative flex flex-col rounded-2xl border border-white/10 overflow-hidden" style={{ background: colors.card, minWidth: 180 }}>
+      <div className="relative flex flex-col rounded-2xl border border-white/10 overflow-hidden" style={{ background: colors.card, minWidth: 220 }}>
         <div className="px-4 py-3" style={{ background: colors.headerGrad }}>
           <p className="font-bold text-white text-sm truncate">{bundle.name}</p>
         </div>
@@ -1539,7 +1623,7 @@ function BundleShopCard({
       "relative flex flex-col rounded-2xl border overflow-hidden transition-all duration-200 select-none",
       allPurchased ? "border-emerald-500/50 shadow-lg shadow-emerald-900/20" :
                      "border-white/10 hover:border-white/20"
-    )} style={{ minWidth: 180, maxWidth: 220 }}>
+    )} style={{ minWidth: 220, maxWidth: 280 }}>
 
       {/* Header */}
       <div className="px-4 pt-4 pb-2 flex flex-col gap-1" style={{ background: colors.headerGrad }}>
@@ -1561,25 +1645,25 @@ function BundleShopCard({
       </div>
 
       {/* Tier icon */}
-      <div className="flex justify-center items-center py-4" style={{ background: colors.iconRow }}>
+      <div className="flex justify-center items-center py-6" style={{ background: colors.iconRow }}>
         <Image
           src={col.icon} alt={col.name}
-          width={80} height={80}
+          width={112} height={112}
           className="object-contain drop-shadow-lg"
-          style={{ height: 80, width: 80 }}
+          style={{ height: 112, width: 112 }}
         />
       </div>
 
       {/* Items list */}
-      <div className="flex-1 px-3 py-3 space-y-1.5" style={{ background: colors.rowEven }}>
+      <div className="flex-1 px-4 py-3 space-y-2" style={{ background: colors.rowEven }}>
         {items.slice(0, 8).map(item => (
           <div key={item.label} className="flex items-center gap-1.5">
             {item.iconMode !== "text" && item.iconMode !== "none" && (
-              <Image src={item.icon} alt={item.label} width={18} height={18} className="object-contain flex-shrink-0" style={{ height: 18, width: 18 }} />
+              <Image src={item.icon} alt={item.label} width={36} height={36} className="object-contain flex-shrink-0" style={{ height: 36, width: 36 }} />
             )}
-            {item.iconMode !== "none" && <span className="text-[11px] text-white/65 flex-1 leading-tight truncate">{item.label}</span>}
+            {item.iconMode !== "none" && <span className="text-xs text-white/65 flex-1 leading-tight truncate">{item.label}</span>}
             {item.iconMode === "none" && <span className="flex-1" />}
-            <span className="text-[11px] font-bold tabular-nums text-white/85 ml-1 flex-shrink-0">{fmtRaw(item.total, item.rowType)}</span>
+            <span className="text-xs font-bold tabular-nums text-white/85 ml-1 flex-shrink-0">{fmtRaw(item.total, item.rowType)}</span>
           </div>
         ))}
         {items.length > 8 && <p className="text-[10px] text-white/30 text-center pt-0.5">+{items.length - 8} more…</p>}
@@ -2130,6 +2214,32 @@ function ViewBtn({ active, onClick, icon: Icon, label }: {
   )
 }
 
+// ─── Per-icon Size Control ────────────────────────────────────────────────────
+
+function IconSizeControl({ size, globalSize, onChange }: {
+  size: number | undefined
+  globalSize: number
+  onChange: (size: number | undefined) => void
+}) {
+  const current = size ?? globalSize
+  return (
+    <div className="flex items-center gap-0.5 mt-0.5">
+      <button
+        onClick={() => onChange(Math.max(16, current - 8))}
+        className="h-4 w-4 rounded flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition text-base leading-none"
+      >−</button>
+      <span className="text-[9px] text-white/40 w-7 text-center tabular-nums">{current}px</span>
+      <button
+        onClick={() => onChange(Math.min(128, current + 8))}
+        className="h-4 w-4 rounded flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 transition text-base leading-none"
+      >+</button>
+      {size !== undefined && (
+        <button onClick={() => onChange(undefined)} title="Reset to global size" className="text-[9px] text-white/25 hover:text-white/60 transition ml-0.5">↺</button>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function BundlesContent() {
@@ -2142,11 +2252,46 @@ export function BundlesContent() {
   const [catDialogOpen, setCatDialogOpen] = useState(false)
   const [search, setSearch] = useState("")
   const [lastPurchaseDates, setLastPurchaseDates] = useState<Record<string, string>>(() => loadLastPurchaseDates())
+  const [iconSize, setIconSize] = useState<number>(() => {
+    try { return Number(localStorage.getItem('bundles-icon-size')) || 56 } catch { return 56 }
+  })
+  function changeIconSize(delta: number) {
+    setIconSize(prev => {
+      const next = Math.min(96, Math.max(24, prev + delta))
+      try { localStorage.setItem('bundles-icon-size', String(next)) } catch { /* ignore */ }
+      return next
+    })
+  }
 
   const { user } = useAuth()
   const isAdmin = user?.isAdmin === true
 
-  // Save to localStorage whenever state changes
+  // Refs to control API sync behaviour
+  const skipNextSyncRef = useRef(false)  // set when loading from API so we don't echo it back
+  const isFirstMountRef = useRef(true)   // skip the very first useEffect run
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // On mount: fetch bundle state from API (overrides localStorage cache)
+  useEffect(() => {
+    fetch('/api/bundles')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data && typeof data === 'object' && 'bundles' in data) {
+          const parsed = data as Partial<AppState>
+          const loaded: AppState = {
+            categories: parsed.categories ?? [...DEFAULT_CATEGORIES],
+            shopCategories: parsed.shopCategories ?? [...DEFAULT_SHOP_CATEGORIES],
+            bundles: (parsed.bundles ?? []).map(b => migrateBundle(b as Partial<Bundle>)),
+          }
+          skipNextSyncRef.current = true
+          setAppState(loaded)
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded)) } catch { /* ignore */ }
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  // Save to localStorage whenever state changes (offline fallback)
   const isFirstRender = useRef(true)
   if (isFirstRender.current) {
     isFirstRender.current = false
@@ -2155,6 +2300,22 @@ export function BundlesContent() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(appState))
     } catch { /* ignore */ }
   }
+
+  // Debounced sync to API on admin state changes (useEffect keeps side-effects out of updaters)
+  useEffect(() => {
+    if (isFirstMountRef.current) { isFirstMountRef.current = false; return }
+    if (skipNextSyncRef.current) { skipNextSyncRef.current = false; return }
+    if (!isAdmin) return
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      fetch('/api/bundles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(appState),
+      }).catch(() => {})
+    }, 800)
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
+  }, [appState, isAdmin])
 
   function updateBundle(id: string, updated: Bundle) {
     setAppState(prev => ({ ...prev, bundles: prev.bundles.map(b => b.id === id ? updated : b) }))
@@ -2178,7 +2339,7 @@ export function BundlesContent() {
         shopCategory: (prev.shopCategories ?? DEFAULT_SHOP_CATEGORIES)[0] ?? "Super-Value Bundle",
         refreshType: "daily", rollingDays: 30, monthlyDay: 1,
         columns: cols,
-        rows: [{ id: "row1", icon: "/images/bundle/gem.png", label: "Gem", values: { t1: 0, t2: 0, t3: 0, t4: 0, t5: 0 }, rowType: "number", iconMode: "icon" as RowIconMode }],
+        rows: [{ id: "row1", icon: "/images/bundle/gem.png", label: "New Row", values: { t1: 0, t2: 0, t3: 0, t4: 0, t5: 0 }, rowType: "number", iconMode: "icon" as RowIconMode }],
       }]
     }))
   }
@@ -2216,6 +2377,15 @@ export function BundlesContent() {
               <ViewBtn active={viewMode === "cards"}   onClick={() => setViewMode("cards")}   icon={LayoutGrid}        label="Cards"   />
               <ViewBtn active={viewMode === "compare"} onClick={() => setViewMode("compare")} icon={GitCompare}        label="Compare" />
               <ViewBtn active={viewMode === "plan"}    onClick={() => setViewMode("plan")}    icon={SlidersHorizontal} label="Plan"    />
+            </div>
+          )}
+
+          {/* Icon size control — tables view */}
+          {layoutMode === "standard" && viewMode === "tables" && (
+            <div className="flex items-center gap-1.5 border border-border rounded-lg px-2 py-1">
+              <button onClick={() => changeIconSize(-8)} disabled={iconSize <= 24} className="h-6 w-6 flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition text-lg leading-none">−</button>
+              <span className="text-xs text-muted-foreground w-8 text-center tabular-nums">{iconSize}px</span>
+              <button onClick={() => changeIconSize(8)} disabled={iconSize >= 96} className="h-6 w-6 flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition text-lg leading-none">+</button>
             </div>
           )}
 
@@ -2265,7 +2435,7 @@ export function BundlesContent() {
       {layoutMode === "standard" && viewMode === "tables" && (
         <div className="space-y-8">
           {filteredBundles.map(bundle => (
-            <BundleTable key={bundle.id} bundle={bundle} editMode={isAdmin && editMode} categories={appState.categories} shopCategories={appState.shopCategories ?? DEFAULT_SHOP_CATEGORIES} lastPurchaseDates={lastPurchaseDates} onUpdate={updated => updateBundle(bundle.id, updated)} onDelete={() => deleteBundle(bundle.id)} />
+            <BundleTable key={bundle.id} bundle={bundle} editMode={isAdmin && editMode} categories={appState.categories} shopCategories={appState.shopCategories ?? DEFAULT_SHOP_CATEGORIES} lastPurchaseDates={lastPurchaseDates} iconSize={iconSize} onUpdate={updated => updateBundle(bundle.id, updated)} onDelete={() => deleteBundle(bundle.id)} />
           ))}
           {filteredBundles.length === 0 && (
             <div className="flex flex-col items-center justify-center py-20 gap-4 rounded-xl border border-dashed border-border text-muted-foreground">
