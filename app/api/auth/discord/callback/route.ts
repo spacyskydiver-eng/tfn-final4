@@ -83,6 +83,7 @@ export async function GET(request: NextRequest) {
     username: dbUser.username,
     avatar: dbUser.avatar,
     isAdmin: dbUser.isAdmin,
+    isLeadership: dbUser.isLeadership,
   }
 
   // Store session in a secure HTTP-only cookie

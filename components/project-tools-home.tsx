@@ -42,7 +42,7 @@ const STEPS = [
     num: 5,
     icon: Globe,
     title: "Sign Into the TFN Website with Discord",
-    body: "You must be signed in to this website with the same Discord account you used in your application. Click "Sign in with Discord" in the sidebar if you haven't already.",
+    body: "You must be signed in to this website with the same Discord account you used in your application. Click 'Sign in with Discord' in the sidebar if you haven't already.",
   },
   {
     num: 6,

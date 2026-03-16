@@ -7,6 +7,7 @@ export type User = {
   username: string
   avatar: string | null
   isAdmin: boolean
+  isLeadership: boolean
 }
 
 type AuthContextType = {
