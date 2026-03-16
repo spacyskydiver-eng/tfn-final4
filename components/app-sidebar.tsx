@@ -34,6 +34,7 @@ import {
   ShoppingCart,
   LayoutDashboard,
   ClipboardList,
+  Sword,
 } from "lucide-react";
 
 function UserFooter({ collapsed }: { collapsed: boolean }) {
@@ -104,6 +105,7 @@ const mainNavItems = [
   { id: "home",               label: "Home",              icon: Home },
   { id: "calendar",           label: "Calendar",          icon: CalendarDays },
   { id: "kvk",                label: "KvK Tracker",       icon: CrosshairIcon },
+  { id: "ark",                label: "Ark of Osiris",     icon: Sword },
   { id: "commander",          label: "Commander Prep",    icon: Crown },
   { id: "guides",             label: "Guides",            icon: BookOpen },
   { id: "general-tools",      label: "General Tools",     icon: Wrench },

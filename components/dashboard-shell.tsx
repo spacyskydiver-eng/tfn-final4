@@ -182,6 +182,7 @@ export function DashboardShell() {
   // Tab label for mobile top bar
   const tabLabels: Record<string, string> = {
     home: "Home", calendar: "Calendar", kvk: "KvK Tracker",
+    ark: "Ark of Osiris",
     commander: "Commander Prep", guides: "Guides", "general-tools": "General Tools",
     accounts: "Accounts", calculator: "Calculator", "progression-plans": "Progression Plans",
     bundles: "Bundles", spending: "Spending Tracker", "territory-planner": "Territory Planner",

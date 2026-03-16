@@ -23,6 +23,7 @@ import {
   MessageSquare,
   LayoutDashboard,
   Shield,
+  Sword,
 } from "lucide-react";
 
 import { AccountsContent } from "@/components/accounts-content";
@@ -43,6 +44,7 @@ import { BotToolContent } from "@/components/bot-tool-content";
 import { BotToolsHome, type CartItem } from "@/components/bot-tools-home";
 import { StaffPortal } from "@/components/staff-portal";
 import { VerifyContent } from "@/components/verify-content";
+import { ArkContent } from "@/components/ark-content";
 
 const tabMeta: Record<string, { label: string; description: string; icon: React.ElementType }> = {
   home: {
@@ -59,6 +61,11 @@ const tabMeta: Record<string, { label: string; description: string; icon: React.
     label: "KvK Tracker",
     description: "Plan KvK runs, calculate honor points, and track timelines",
     icon: CrosshairIcon,
+  },
+  ark: {
+    label: "Ark of Osiris",
+    description: "Command center for Ark registration, teams, and strategy",
+    icon: Sword,
   },
   commander: {
     label: "Commander Prep",
@@ -219,6 +226,8 @@ export function ContentPanel({
           <CalendarContent />
         ) : activeTab === "kvk" ? (
           <KvkContent />
+        ) : activeTab === "ark" ? (
+          <ArkContent />
         ) : activeTab === "commander" ? (
           <CommanderContent />
         ) : activeTab === "territory-planner" ? (

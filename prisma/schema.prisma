@@ -26,6 +26,8 @@ model User {
   commanderSubmissions CommanderSubmission[]
   kvkSetups  KvkSetup[]
   orders     Order[]
+  arkEvents ArkEvent[] @relation("UserArkEvents")
+  arkForms  ArkForm[]  @relation("UserArkForms")
 }
 
 // ─── ApiToken ─────────────────────────────────────────────────────────────────
@@ -333,4 +335,151 @@ model SiteConfig {
   updatedAt DateTime @updatedAt
 
   @@map("site_config")
+}
+
+// ─── Ark of Osiris ────────────────────────────────────────────────────────────
+
+// Alliance roster synced from bot — govId is the unique key
+model ArkPlayer {
+  id              String   @id @default(cuid())
+  govId           String   @unique
+  govName         String
+  allianceTag     String?
+  power           BigInt?
+  discordId       String?
+  discordVerified Boolean  @default(false)
+  arkExperience   Boolean  @default(false)
+  troopT4         BigInt?
+  troopT5         BigInt?
+  rallyCapacity   BigInt?
+  extraData       Json?
+  botUpdatedAt    DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  responses   ArkResponse[]
+  assignments ArkAssignment[]
+
+  @@index([allianceTag])
+  @@map("ark_players")
+}
+
+model ArkEvent {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  scheduledAt DateTime?
+  status      String    @default("planning")
+  createdById String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  createdBy User      @relation("UserArkEvents", fields: [createdById], references: [id])
+  form      ArkForm?
+  teams     ArkTeam[]
+
+  @@index([status])
+  @@map("ark_events")
+}
+
+model ArkForm {
+  id          String   @id @default(cuid())
+  eventId     String?  @unique
+  shortCode   String   @unique
+  title       String
+  description String?
+  isOpen      Boolean  @default(true)
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  event     ArkEvent?         @relation(fields: [eventId], references: [id])
+  createdBy User              @relation("UserArkForms", fields: [createdById], references: [id])
+  questions ArkFormQuestion[]
+  responses ArkResponse[]
+
+  @@map("ark_forms")
+}
+
+model ArkFormQuestion {
+  id          String  @id @default(cuid())
+  formId      String
+  order       Int
+  type        String
+  key         String
+  label       String
+  placeholder String?
+  required    Boolean @default(false)
+  botManaged  Boolean @default(false)
+  options     Json?
+  translations Json?
+
+  form    ArkForm     @relation(fields: [formId], references: [id], onDelete: Cascade)
+  answers ArkAnswer[]
+
+  @@index([formId, order])
+  @@map("ark_form_questions")
+}
+
+model ArkResponse {
+  id              String   @id @default(cuid())
+  formId          String
+  govId           String
+  govName         String
+  power           BigInt?
+  discordVerified Boolean  @default(false)
+  submittedAt     DateTime @default(now())
+
+  form       ArkForm         @relation(fields: [formId], references: [id])
+  player     ArkPlayer?      @relation(fields: [govId], references: [govId])
+  answers    ArkAnswer[]
+  assignment ArkAssignment?
+
+  @@unique([formId, govId])
+  @@index([formId])
+  @@map("ark_responses")
+}
+
+model ArkAnswer {
+  id         String @id @default(cuid())
+  responseId String
+  questionId String
+  value      Json
+
+  response ArkResponse     @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  question ArkFormQuestion @relation(fields: [questionId], references: [id])
+
+  @@unique([responseId, questionId])
+  @@map("ark_answers")
+}
+
+model ArkTeam {
+  id      String @id @default(cuid())
+  eventId String
+  name    String
+  color   String @default("#6366f1")
+  order   Int
+
+  event       ArkEvent        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  assignments ArkAssignment[]
+
+  @@index([eventId])
+  @@map("ark_teams")
+}
+
+model ArkAssignment {
+  id           String   @id @default(cuid())
+  responseId   String   @unique
+  govId        String
+  teamId       String?
+  role         String   @default("member")
+  assignedAt   DateTime @default(now())
+  assignedById String?
+
+  response ArkResponse @relation(fields: [responseId], references: [id])
+  player   ArkPlayer?  @relation(fields: [govId], references: [govId])
+  teamRef  ArkTeam?    @relation(fields: [teamId], references: [id])
+
+  @@index([teamId])
+  @@map("ark_assignments")
 }

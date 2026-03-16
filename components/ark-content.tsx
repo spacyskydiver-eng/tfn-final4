@@ -1,0 +1,1096 @@
+'use client'
+
+import { useState, useEffect, useCallback, useRef } from 'react'
+import {
+  Plus, Loader2, Copy, Check, ExternalLink, ChevronLeft,
+  Users, Shield, Zap, ClipboardList, BarChart3, Sword,
+  Pencil, Trash2, ChevronUp, ChevronDown, RefreshCw,
+  Calendar, Clock, X, AlertCircle, CheckCircle2,
+  LayoutGrid, BookOpen, Target, Map, Settings,
+  ArrowRight, Link2, ToggleLeft, ToggleRight, GripVertical,
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { useAuth } from '@/lib/auth-context'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type ArkQuestion = {
+  id: string
+  order: number
+  type: string
+  key: string
+  label: string
+  placeholder?: string | null
+  required: boolean
+  botManaged: boolean
+  options?: { value: string; label: string }[] | null
+}
+
+type ArkForm = {
+  id: string
+  shortCode: string
+  title: string
+  description?: string | null
+  isOpen: boolean
+  questions: ArkQuestion[]
+  _count?: { responses: number }
+}
+
+type ArkTeam = {
+  id: string
+  name: string
+  color: string
+  order: number
+  _count?: { assignments: number }
+  assignments?: ArkAssignment[]
+}
+
+type ArkAnswer = {
+  question: { key: string; label: string; type: string }
+  value: unknown
+}
+
+type ArkResponse = {
+  id: string
+  govId: string
+  govName: string
+  power?: bigint | null
+  discordVerified: boolean
+  submittedAt: string
+  answers: ArkAnswer[]
+  assignment?: {
+    teamId?: string | null
+    role: string
+    teamRef?: { id: string; name: string; color: string } | null
+  } | null
+}
+
+type ArkEvent = {
+  id: string
+  name: string
+  description?: string | null
+  scheduledAt?: string | null
+  status: string
+  form?: ArkForm | null
+  teams?: ArkTeam[]
+}
+
+type ArkAssignment = {
+  id: string
+  role: string
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function fmtPower(p: unknown): string {
+  const n = Number(p)
+  if (!n) return '—'
+  return `${(n / 1_000_000).toFixed(1)}M`
+}
+
+function getAnswer(answers: ArkAnswer[], key: string): string {
+  const a = answers.find(x => x.question.key === key)
+  if (!a) return '—'
+  if (Array.isArray(a.value)) return (a.value as string[]).join(', ')
+  return String(a.value)
+}
+
+function getAvailability(answers: ArkAnswer[]): { sat: string[]; sun: string[] } {
+  const a = answers.find(x => x.question.key === 'availability')
+  const vals: string[] = Array.isArray(a?.value) ? (a!.value as string[]) : []
+  return {
+    sat: vals.filter(v => v.startsWith('sat_')).map(v => v.replace('sat_', '').replace('_', ':').toUpperCase() + ' UTC'),
+    sun: vals.filter(v => v.startsWith('sun_')).map(v => v.replace('sun_', '').replace('_', ':').toUpperCase() + ' UTC'),
+  }
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  member: 'Member', backup: 'Backup', carrier: 'Carrier', leader: 'Leader', reserve: 'Reserve',
+}
+
+const ROLE_COLORS: Record<string, string> = {
+  member: 'text-white/60', backup: 'text-amber-400', carrier: 'text-violet-400', leader: 'text-yellow-400', reserve: 'text-gray-400',
+}
+
+const QUESTION_TYPES = [
+  { type: 'text', label: 'Text' },
+  { type: 'textarea', label: 'Long Text' },
+  { type: 'number', label: 'Number' },
+  { type: 'select', label: 'Single Select' },
+  { type: 'timeslots', label: 'Time Slots' },
+  { type: 'commanders', label: 'Commander Input' },
+]
+
+const APP_URL = typeof window !== 'undefined' ? window.location.origin : ''
+
+// ─── EventCard ────────────────────────────────────────────────────────────────
+
+function EventCard({ event, onSelect, onDelete }: {
+  event: ArkEvent & { form?: ArkForm | null }
+  onSelect: () => void
+  onDelete: () => void
+}) {
+  const statusColor = event.status === 'active' ? 'text-green-400 bg-green-400/10 border-green-400/20'
+    : event.status === 'completed' ? 'text-gray-400 bg-gray-400/10 border-gray-400/20'
+    : 'text-amber-400 bg-amber-400/10 border-amber-400/20'
+
+  return (
+    <div className="rounded-2xl border border-border/50 bg-card/60 backdrop-blur-sm p-5 hover:border-primary/30 transition-all">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div>
+          <h3 className="font-bold text-foreground text-base">{event.name}</h3>
+          {event.description && <p className="text-xs text-muted-foreground mt-0.5">{event.description}</p>}
+        </div>
+        <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-semibold border shrink-0", statusColor)}>
+          {event.status}
+        </span>
+      </div>
+      <div className="flex items-center gap-4 text-xs text-muted-foreground mb-4">
+        {event.scheduledAt && (
+          <span className="flex items-center gap-1"><Calendar className="h-3.5 w-3.5" />{new Date(event.scheduledAt).toLocaleDateString()}</span>
+        )}
+        {event.form && (
+          <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" />{event.form._count?.responses ?? 0} registered</span>
+        )}
+        <span className="flex items-center gap-1"><Target className="h-3.5 w-3.5" />{event.teams?.length ?? 0} teams</span>
+      </div>
+      <div className="flex gap-2">
+        <button onClick={onSelect}
+          className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-primary/15 border border-primary/25 text-primary text-sm font-medium py-2 hover:bg-primary/25 transition">
+          Manage <ArrowRight className="h-3.5 w-3.5" />
+        </button>
+        <button onClick={onDelete}
+          className="flex items-center justify-center rounded-xl border border-red-400/20 bg-red-400/5 text-red-400 px-3 py-2 hover:bg-red-400/15 transition">
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── CommandCenter (Overview tab) ─────────────────────────────────────────────
+
+function CommandCenter({ event, onRefresh, appUrl }: { event: ArkEvent; onRefresh: () => void; appUrl: string }) {
+  const [copied, setCopied] = useState(false)
+  const formUrl = event.form ? `${appUrl}/ark/${event.form.shortCode}` : null
+  const totalRegistered = event.form?._count?.responses ?? 0
+  const totalAssigned = event.teams?.reduce((s, t) => s + (t._count?.assignments ?? 0), 0) ?? 0
+  const unassigned = totalRegistered - totalAssigned
+
+  async function toggleForm() {
+    if (!event.form) return
+    await fetch(`/api/ark/forms/${event.form.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isOpen: !event.form.isOpen }),
+    })
+    onRefresh()
+  }
+
+  async function updateStatus(status: string) {
+    await fetch(`/api/ark/events/${event.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    })
+    onRefresh()
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: 'Registered', value: totalRegistered, icon: Users, color: 'text-violet-400', bg: 'bg-violet-400/10' },
+          { label: 'Assigned', value: totalAssigned, icon: CheckCircle2, color: 'text-green-400', bg: 'bg-green-400/10' },
+          { label: 'Unassigned', value: unassigned, icon: AlertCircle, color: 'text-amber-400', bg: 'bg-amber-400/10' },
+        ].map(s => (
+          <div key={s.label} className="rounded-2xl border border-border/50 bg-card/60 p-4 text-center">
+            <div className={cn("flex h-9 w-9 mx-auto mb-2 items-center justify-center rounded-xl", s.bg)}>
+              <s.icon className={cn("h-4 w-4", s.color)} />
+            </div>
+            <div className="text-2xl font-bold text-foreground">{s.value}</div>
+            <div className="text-xs text-muted-foreground mt-0.5">{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Form URL */}
+      {formUrl && (
+        <div className="rounded-2xl border border-border/50 bg-card/60 p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-foreground">Registration Form</p>
+            <button onClick={toggleForm}
+              className={cn("flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium border transition",
+                event.form?.isOpen
+                  ? "border-green-400/30 bg-green-400/10 text-green-400 hover:bg-green-400/20"
+                  : "border-red-400/30 bg-red-400/10 text-red-400 hover:bg-red-400/20")}>
+              {event.form?.isOpen ? <><ToggleRight className="h-3.5 w-3.5" /> Open</> : <><ToggleLeft className="h-3.5 w-3.5" /> Closed</>}
+            </button>
+          </div>
+          <div className="flex items-center gap-2 rounded-xl border border-border/40 bg-muted/10 px-3 py-2.5">
+            <Link2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span className="flex-1 text-xs font-mono text-muted-foreground truncate">{formUrl}</span>
+            <button onClick={() => { navigator.clipboard.writeText(formUrl); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
+              className="shrink-0 text-muted-foreground hover:text-foreground transition">
+              {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
+            </button>
+            <a href={formUrl} target="_blank" rel="noopener noreferrer"
+              className="shrink-0 text-muted-foreground hover:text-foreground transition">
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          </div>
+          <p className="text-[11px] text-muted-foreground">Share this link in your alliance chat. Players can fill it out from their in-game browser.</p>
+        </div>
+      )}
+
+      {/* Event status */}
+      <div className="rounded-2xl border border-border/50 bg-card/60 p-5 space-y-3">
+        <p className="text-sm font-semibold text-foreground">Event Status</p>
+        <div className="flex flex-wrap gap-2">
+          {['planning', 'active', 'completed'].map(s => (
+            <button key={s} onClick={() => updateStatus(s)}
+              className={cn("rounded-lg border px-4 py-2 text-xs font-semibold capitalize transition",
+                event.status === s
+                  ? "bg-primary/20 border-primary/40 text-primary"
+                  : "border-border/50 text-muted-foreground hover:bg-secondary hover:text-foreground")}>
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Teams summary */}
+      {(event.teams?.length ?? 0) > 0 && (
+        <div className="rounded-2xl border border-border/50 bg-card/60 p-5 space-y-3">
+          <p className="text-sm font-semibold text-foreground">Teams</p>
+          <div className="space-y-2">
+            {event.teams!.map(team => (
+              <div key={team.id} className="flex items-center gap-3 rounded-xl border border-border/30 bg-muted/5 px-3 py-2.5">
+                <div className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: team.color }} />
+                <span className="text-sm font-medium text-foreground flex-1">{team.name}</span>
+                <span className="text-xs text-muted-foreground">{team._count?.assignments ?? 0} players</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── FormBuilder ──────────────────────────────────────────────────────────────
+
+function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => void }) {
+  const [form, setForm] = useState<ArkForm | null>(event.form ?? null)
+  const [loading, setLoading] = useState(false)
+  const [addingQ, setAddingQ] = useState(false)
+  const [newQ, setNewQ] = useState({ type: 'text', key: '', label: '', placeholder: '', required: false })
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleDraft, setTitleDraft] = useState(form?.title ?? '')
+  const [descDraft, setDescDraft] = useState(form?.description ?? '')
+
+  async function createForm() {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/ark/forms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: event.id, title: `${event.name} — Ark Registration` }),
+      })
+      const data = await res.json()
+      setForm(data.form)
+      onRefresh()
+    } finally { setLoading(false) }
+  }
+
+  async function saveTitle() {
+    if (!form) return
+    await fetch(`/api/ark/forms/${form.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: titleDraft, description: descDraft }),
+    })
+    setForm(f => f ? { ...f, title: titleDraft, description: descDraft } : f)
+    setEditingTitle(false)
+    onRefresh()
+  }
+
+  async function addQuestion() {
+    if (!form || !newQ.key || !newQ.label) return
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/ark/forms/${form.id}/questions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newQ),
+      })
+      const data = await res.json()
+      setForm(f => f ? { ...f, questions: [...f.questions, data.question] } : f)
+      setNewQ({ type: 'text', key: '', label: '', placeholder: '', required: false })
+      setAddingQ(false)
+    } finally { setLoading(false) }
+  }
+
+  async function deleteQuestion(qid: string) {
+    if (!form) return
+    await fetch(`/api/ark/forms/${form.id}/questions/${qid}`, { method: 'DELETE' })
+    setForm(f => f ? { ...f, questions: f.questions.filter(q => q.id !== qid) } : f)
+  }
+
+  async function moveQuestion(qid: string, dir: 'up' | 'down') {
+    if (!form) return
+    const idx = form.questions.findIndex(q => q.id === qid)
+    if (idx === -1) return
+    if (dir === 'up' && idx === 0) return
+    if (dir === 'down' && idx === form.questions.length - 1) return
+    const swapIdx = dir === 'up' ? idx - 1 : idx + 1
+    const q1 = form.questions[idx]
+    const q2 = form.questions[swapIdx]
+    // Update both orders
+    await Promise.all([
+      fetch(`/api/ark/forms/${form.id}/questions/${q1.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order: q2.order }),
+      }),
+      fetch(`/api/ark/forms/${form.id}/questions/${q2.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order: q1.order }),
+      }),
+    ])
+    // Swap locally
+    const newQs = [...form.questions]
+    newQs[idx] = { ...q1, order: q2.order }
+    newQs[swapIdx] = { ...q2, order: q1.order }
+    newQs.sort((a, b) => a.order - b.order)
+    setForm(f => f ? { ...f, questions: newQs } : f)
+  }
+
+  if (!form) {
+    return (
+      <div className="flex flex-col items-center py-16 text-center rounded-2xl border border-border/50 bg-card/60">
+        <ClipboardList className="h-12 w-12 text-muted-foreground/30 mb-4" />
+        <p className="text-foreground font-semibold mb-1">No form yet</p>
+        <p className="text-sm text-muted-foreground mb-5">Create a registration form for this Ark event. It comes with a default template.</p>
+        <button onClick={createForm} disabled={loading}
+          className="flex items-center gap-2 rounded-xl bg-primary/15 border border-primary/25 px-5 py-2.5 text-sm font-medium text-primary hover:bg-primary/25 transition disabled:opacity-40">
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+          Create Registration Form
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Form header */}
+      <div className="rounded-2xl border border-border/50 bg-card/60 p-5">
+        {editingTitle ? (
+          <div className="space-y-3">
+            <input value={titleDraft} onChange={e => setTitleDraft(e.target.value)}
+              className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50" />
+            <textarea value={descDraft} onChange={e => setDescDraft(e.target.value)}
+              placeholder="Description (optional)" rows={2}
+              className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground resize-none focus:outline-none focus:border-primary/50" />
+            <div className="flex gap-2">
+              <button onClick={saveTitle} className="rounded-lg bg-primary/15 border border-primary/25 px-4 py-1.5 text-xs text-primary hover:bg-primary/25">Save</button>
+              <button onClick={() => setEditingTitle(false)} className="text-xs text-muted-foreground hover:text-foreground">Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="font-bold text-foreground">{form.title}</h3>
+              {form.description && <p className="text-sm text-muted-foreground mt-0.5">{form.description}</p>}
+            </div>
+            <button onClick={() => { setTitleDraft(form.title); setDescDraft(form.description ?? ''); setEditingTitle(true) }}
+              className="shrink-0 text-muted-foreground hover:text-foreground transition">
+              <Pencil className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Questions list */}
+      <div className="space-y-2">
+        {form.questions.map((q, idx) => (
+          <div key={q.id} className={cn("rounded-xl border bg-card/40 px-4 py-3",
+            q.botManaged ? "border-blue-400/20" : "border-border/50")}>
+            <div className="flex items-center gap-2">
+              <GripVertical className="h-4 w-4 text-muted-foreground/30 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-medium text-foreground">{q.label}</span>
+                  <span className="text-[10px] rounded-full border border-border/40 px-2 py-0.5 text-muted-foreground">{q.type}</span>
+                  {q.required && <span className="text-[10px] text-red-400">required</span>}
+                  {q.botManaged && <span className="text-[10px] text-blue-400 flex items-center gap-0.5"><Zap className="h-2.5 w-2.5" />auto</span>}
+                </div>
+                <span className="text-xs text-muted-foreground font-mono">{q.key}</span>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button onClick={() => moveQuestion(q.id, 'up')} disabled={idx === 0}
+                  className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground disabled:opacity-20 transition">
+                  <ChevronUp className="h-3.5 w-3.5" />
+                </button>
+                <button onClick={() => moveQuestion(q.id, 'down')} disabled={idx === form.questions.length - 1}
+                  className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground disabled:opacity-20 transition">
+                  <ChevronDown className="h-3.5 w-3.5" />
+                </button>
+                {!q.botManaged && (
+                  <button onClick={() => deleteQuestion(q.id)}
+                    className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-red-400 transition">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Add question */}
+      {addingQ ? (
+        <div className="rounded-2xl border border-primary/25 bg-primary/5 p-5 space-y-3">
+          <p className="text-sm font-semibold text-foreground">Add Question</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Type</label>
+              <select value={newQ.type} onChange={e => setNewQ(q => ({ ...q, type: e.target.value }))}
+                className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground focus:outline-none">
+                {QUESTION_TYPES.map(t => <option key={t.type} value={t.type}>{t.label}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Key (internal ID)</label>
+              <input value={newQ.key} onChange={e => setNewQ(q => ({ ...q, key: e.target.value.replace(/\s+/g, '_').toLowerCase() }))}
+                placeholder="e.g. notes"
+                className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm font-mono text-foreground focus:outline-none focus:border-primary/50" />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Label (shown to players)</label>
+            <input value={newQ.label} onChange={e => setNewQ(q => ({ ...q, label: e.target.value }))}
+              placeholder="e.g. Additional notes"
+              className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Placeholder (optional)</label>
+            <input value={newQ.placeholder} onChange={e => setNewQ(q => ({ ...q, placeholder: e.target.value }))}
+              className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50" />
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={newQ.required} onChange={e => setNewQ(q => ({ ...q, required: e.target.checked }))}
+              className="rounded" />
+            <span className="text-sm text-foreground">Required</span>
+          </label>
+          <div className="flex gap-2">
+            <button onClick={addQuestion} disabled={loading || !newQ.key || !newQ.label}
+              className="flex items-center gap-2 rounded-lg bg-primary/15 border border-primary/25 px-4 py-2 text-sm text-primary hover:bg-primary/25 disabled:opacity-40">
+              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+              Add
+            </button>
+            <button onClick={() => setAddingQ(false)} className="text-sm text-muted-foreground hover:text-foreground">Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setAddingQ(true)}
+          className="w-full flex items-center justify-center gap-2 rounded-xl border border-dashed border-border py-3 text-sm text-muted-foreground hover:border-primary/40 hover:text-primary transition">
+          <Plus className="h-4 w-4" /> Add Question
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ─── ResponseCard ─────────────────────────────────────────────────────────────
+
+function ResponseCard({ response, teams, onAssign }: {
+  response: ArkResponse
+  teams: ArkTeam[]
+  onAssign: (responseId: string, teamId: string | null, role: string) => void
+}) {
+  const [assigning, setAssigning] = useState(false)
+  const avail = getAvailability(response.answers)
+  const commanders = getAnswer(response.answers, 'commanders')
+  const rally = getAnswer(response.answers, 'rally_cap')
+  const arkExp = getAnswer(response.answers, 'ark_exp')
+  const assignedTeam = response.assignment?.teamRef
+
+  async function assign(teamId: string | null, role = 'member') {
+    setAssigning(true)
+    await onAssign(response.id, teamId, role)
+    setAssigning(false)
+  }
+
+  return (
+    <div className={cn("rounded-2xl border bg-card/60 backdrop-blur-sm p-4 space-y-3 transition-all",
+      assignedTeam ? "border-green-400/20" : "border-border/50")}>
+      {/* Header */}
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary font-bold text-sm">
+          {response.govName.charAt(0).toUpperCase()}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-bold text-foreground text-sm">{response.govName}</span>
+            {response.discordVerified && <Shield className="h-3.5 w-3.5 text-green-400" />}
+            {arkExp === 'yes' && <span className="text-[10px] rounded-full bg-violet-400/15 text-violet-400 px-2 py-0.5">Ark vet</span>}
+          </div>
+          <div className="text-xs text-muted-foreground font-mono">
+            ID: {response.govId}{response.power ? ` · ${fmtPower(response.power)}` : ''}
+          </div>
+        </div>
+        {assignedTeam && (
+          <div className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold shrink-0"
+            style={{ backgroundColor: assignedTeam.color + '20', color: assignedTeam.color, border: `1px solid ${assignedTeam.color}40` }}>
+            {assignedTeam.name}
+          </div>
+        )}
+      </div>
+
+      {/* Stats row */}
+      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+        {rally !== '—' && <span className="flex items-center gap-1"><Zap className="h-3 w-3" />Rally: {rally}M</span>}
+      </div>
+
+      {/* Commanders */}
+      {commanders !== '—' && (
+        <div className="rounded-xl border border-border/30 bg-muted/5 px-3 py-2.5">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Commanders</p>
+          <pre className="text-xs text-foreground/80 font-mono whitespace-pre-wrap">{commanders}</pre>
+        </div>
+      )}
+
+      {/* Availability */}
+      {(avail.sat.length > 0 || avail.sun.length > 0) && (
+        <div className="grid grid-cols-2 gap-2">
+          {avail.sat.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Saturday</p>
+              <div className="flex flex-wrap gap-1">
+                {avail.sat.map(s => <span key={s} className="text-[10px] rounded-full border border-violet-400/30 bg-violet-400/10 text-violet-300 px-2 py-0.5">{s}</span>)}
+              </div>
+            </div>
+          )}
+          {avail.sun.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Sunday</p>
+              <div className="flex flex-wrap gap-1">
+                {avail.sun.map(s => <span key={s} className="text-[10px] rounded-full border border-blue-400/30 bg-blue-400/10 text-blue-300 px-2 py-0.5">{s}</span>)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Assignment buttons */}
+      <div className="flex flex-wrap gap-1.5 pt-1 border-t border-border/30">
+        {teams.map(team => (
+          <button key={team.id} onClick={() => assign(team.id)}
+            disabled={assigning}
+            className="flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition"
+            style={{
+              borderColor: assignedTeam?.id === team.id ? team.color + '60' : undefined,
+              backgroundColor: assignedTeam?.id === team.id ? team.color + '20' : undefined,
+              color: assignedTeam?.id === team.id ? team.color : undefined,
+            }}
+            data-assigned={assignedTeam?.id === team.id}>
+            {assignedTeam?.id === team.id ? <Check className="h-3 w-3" /> : <Plus className="h-3 w-3" />}
+            {team.name}
+          </button>
+        ))}
+        <button onClick={() => assign(null, 'backup')} disabled={assigning}
+          className={cn("flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-medium transition",
+            response.assignment?.role === 'backup' && !assignedTeam
+              ? "border-amber-400/40 bg-amber-400/10 text-amber-400"
+              : "border-border/40 text-muted-foreground hover:border-border hover:text-foreground")}>
+          Backup
+        </button>
+        {response.assignment && (
+          <button onClick={() => assign(null)} disabled={assigning}
+            className="flex items-center gap-1 rounded-lg border border-red-400/20 bg-red-400/5 px-2.5 py-1 text-[11px] font-medium text-red-400 hover:bg-red-400/10 transition">
+            <X className="h-3 w-3" /> Clear
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Responses tab ────────────────────────────────────────────────────────────
+
+function ResponsesPanel({ event, teams }: { event: ArkEvent; teams: ArkTeam[] }) {
+  const [responses, setResponses] = useState<ArkResponse[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState<'all' | 'unassigned' | string>('all')
+
+  const fetchResponses = useCallback(async () => {
+    if (!event.form) return
+    setLoading(true)
+    try {
+      const res = await fetch(`/api/ark/forms/${event.form.id}/responses`)
+      const data = await res.json()
+      setResponses(data.responses ?? [])
+    } finally { setLoading(false) }
+  }, [event.form])
+
+  useEffect(() => { fetchResponses() }, [fetchResponses])
+
+  async function handleAssign(responseId: string, teamId: string | null, role: string) {
+    await fetch(`/api/ark/responses/${responseId}/assign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ teamId, role }),
+    })
+    fetchResponses()
+  }
+
+  const filtered = responses.filter(r => {
+    if (filter === 'unassigned') return !r.assignment?.teamId && r.assignment?.role !== 'backup'
+    if (filter === 'backup') return r.assignment?.role === 'backup' && !r.assignment?.teamId
+    if (filter === 'all') return true
+    return r.assignment?.teamRef?.id === filter
+  })
+
+  if (!event.form) {
+    return (
+      <div className="text-center py-14 text-muted-foreground">
+        <ClipboardList className="h-10 w-10 mx-auto mb-3 opacity-30" />
+        <p>Create a form first to collect responses</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex gap-1 flex-wrap">
+          {[
+            { value: 'all', label: `All (${responses.length})` },
+            { value: 'unassigned', label: `Unassigned` },
+            { value: 'backup', label: 'Backup' },
+            ...teams.map(t => ({ value: t.id, label: t.name })),
+          ].map(f => (
+            <button key={f.value} onClick={() => setFilter(f.value)}
+              className={cn("rounded-lg border px-3 py-1.5 text-xs font-medium transition",
+                filter === f.value
+                  ? "bg-primary/15 border-primary/30 text-primary"
+                  : "border-border/50 text-muted-foreground hover:bg-secondary hover:text-foreground")}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <button onClick={fetchResponses} disabled={loading}
+          className="ml-auto flex items-center gap-1.5 rounded-lg border border-border/50 px-3 py-1.5 text-xs text-muted-foreground hover:bg-secondary transition disabled:opacity-40">
+          {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+          Refresh
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-14 rounded-2xl border border-border/50 bg-card/60">
+          <Users className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+          <p className="text-muted-foreground text-sm">{responses.length === 0 ? 'No responses yet' : 'No responses in this filter'}</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          {filtered.map(r => (
+            <ResponseCard key={r.id} response={r} teams={teams} onAssign={handleAssign} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Teams panel ──────────────────────────────────────────────────────────────
+
+function TeamsPanel({ event, onRefresh }: { event: ArkEvent; onRefresh: () => void }) {
+  const [teams, setTeams] = useState<ArkTeam[]>(event.teams ?? [])
+  const [responses, setResponses] = useState<ArkResponse[]>([])
+  const [loading, setLoading] = useState(false)
+  const [creatingTeam, setCreatingTeam] = useState(false)
+  const [newTeamName, setNewTeamName] = useState('')
+  const [newTeamColor, setNewTeamColor] = useState('#6366f1')
+  const [botSyncMsg, setBotSyncMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!event.form) return
+    fetch(`/api/ark/forms/${event.form.id}/responses`)
+      .then(r => r.json())
+      .then(d => setResponses(d.responses ?? []))
+      .catch(() => {})
+  }, [event.form])
+
+  async function createTeam() {
+    setLoading(true)
+    const res = await fetch(`/api/ark/events/${event.id}/teams`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newTeamName || `Team ${teams.length + 1}`, color: newTeamColor }),
+    })
+    const data = await res.json()
+    setTeams(t => [...t, { ...data.team, assignments: [] }])
+    setNewTeamName('')
+    setCreatingTeam(false)
+    setLoading(false)
+    onRefresh()
+  }
+
+  async function deleteTeam(id: string) {
+    await fetch(`/api/ark/teams/${id}`, { method: 'DELETE' })
+    setTeams(t => t.filter(x => x.id !== id))
+    onRefresh()
+  }
+
+  // Generate bot sync payload
+  function generateBotPayload() {
+    const payload: Record<string, unknown[]> = {}
+    for (const r of responses) {
+      if (r.assignment?.teamRef) {
+        const teamName = r.assignment.teamRef.name
+        if (!payload[teamName]) payload[teamName] = []
+        payload[teamName].push({ govId: r.govId, govName: r.govName, role: r.assignment.role })
+      }
+    }
+    const text = JSON.stringify(payload, null, 2)
+    navigator.clipboard.writeText(text)
+    setBotSyncMsg('Team assignments copied to clipboard!')
+    setTimeout(() => setBotSyncMsg(null), 3000)
+  }
+
+  const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#14b8a6']
+
+  return (
+    <div className="space-y-4">
+      {/* Header actions */}
+      <div className="flex flex-wrap items-center gap-2">
+        <button onClick={() => setCreatingTeam(true)}
+          className="flex items-center gap-2 rounded-xl bg-primary/15 border border-primary/25 text-primary text-sm font-medium px-4 py-2 hover:bg-primary/25 transition">
+          <Plus className="h-4 w-4" /> Add Team
+        </button>
+        <button onClick={generateBotPayload}
+          className="flex items-center gap-2 rounded-xl border border-border/50 bg-card/60 text-muted-foreground text-sm px-4 py-2 hover:bg-secondary hover:text-foreground transition">
+          <Copy className="h-4 w-4" /> Copy for Bot
+        </button>
+        {botSyncMsg && <span className="text-xs text-green-400">{botSyncMsg}</span>}
+      </div>
+
+      {/* Create team form */}
+      {creatingTeam && (
+        <div className="rounded-2xl border border-primary/25 bg-primary/5 p-5 space-y-3">
+          <p className="text-sm font-semibold text-foreground">New Team</p>
+          <input value={newTeamName} onChange={e => setNewTeamName(e.target.value)}
+            placeholder="Team name (e.g. Team 1)"
+            className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50" />
+          <div className="space-y-1.5">
+            <p className="text-xs text-muted-foreground">Color</p>
+            <div className="flex gap-2 flex-wrap">
+              {COLORS.map(c => (
+                <button key={c} onClick={() => setNewTeamColor(c)}
+                  className={cn("h-7 w-7 rounded-full border-2 transition", newTeamColor === c ? "border-white" : "border-transparent")}
+                  style={{ backgroundColor: c }} />
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={createTeam} disabled={loading}
+              className="flex items-center gap-2 rounded-lg bg-primary/15 border border-primary/25 px-4 py-2 text-sm text-primary hover:bg-primary/25 disabled:opacity-40">
+              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+              Create
+            </button>
+            <button onClick={() => setCreatingTeam(false)} className="text-sm text-muted-foreground hover:text-foreground">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {teams.length === 0 && !creatingTeam && (
+        <div className="text-center py-14 rounded-2xl border border-border/50 bg-card/60">
+          <Target className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+          <p className="text-muted-foreground text-sm mb-1">No teams yet</p>
+          <p className="text-xs text-muted-foreground/60">Create teams then assign players from the Responses tab</p>
+        </div>
+      )}
+
+      {/* Teams grid */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {teams.map(team => {
+          const teamResponses = responses.filter(r => r.assignment?.teamRef?.id === team.id)
+          return (
+            <div key={team.id} className="rounded-2xl border border-border/50 bg-card/60 overflow-hidden">
+              <div className="flex items-center gap-3 px-4 py-3 border-b border-border/30"
+                style={{ borderLeftColor: team.color, borderLeftWidth: 3 }}>
+                <div className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: team.color }} />
+                <span className="font-bold text-foreground flex-1">{team.name}</span>
+                <span className="text-xs text-muted-foreground">{teamResponses.length} players</span>
+                <button onClick={() => deleteTeam(team.id)}
+                  className="text-muted-foreground hover:text-red-400 transition">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <div className="p-3 space-y-1.5 min-h-[80px]">
+                {teamResponses.length === 0 ? (
+                  <p className="text-xs text-muted-foreground/50 text-center py-3">No players assigned</p>
+                ) : (
+                  teamResponses.map(r => (
+                    <div key={r.id} className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 bg-muted/10 hover:bg-muted/20 transition">
+                      <div className="h-5 w-5 shrink-0 rounded-full bg-muted/30 flex items-center justify-center text-[10px] font-bold text-foreground">
+                        {r.govName.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-xs text-foreground font-medium flex-1 truncate">{r.govName}</span>
+                      <span className={cn("text-[10px]", ROLE_COLORS[r.assignment?.role ?? 'member'])}>
+                        {ROLE_LABELS[r.assignment?.role ?? 'member']}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ─── Map Planner (placeholder) ────────────────────────────────────────────────
+
+function MapPlanner() {
+  return (
+    <div className="rounded-2xl border border-border/50 bg-card/60 p-8 text-center space-y-4">
+      <div className="flex h-16 w-16 mx-auto items-center justify-center rounded-2xl bg-primary/10">
+        <Map className="h-8 w-8 text-primary" />
+      </div>
+      <h3 className="text-lg font-bold text-foreground">Strategy Map Planner</h3>
+      <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+        An interactive Ark of Osiris map is coming. You&apos;ll be able to draw arrows, place team markers,
+        plan obelisk routes, and export strategy images — replacing Discord screenshot planning.
+      </p>
+      <div className="inline-flex rounded-full border border-border/50 bg-muted/10 px-4 py-1.5 text-xs text-muted-foreground">
+        Coming in next release
+      </div>
+    </div>
+  )
+}
+
+// ─── Event Detail ─────────────────────────────────────────────────────────────
+
+type EventTab = 'overview' | 'form' | 'responses' | 'teams' | 'map'
+
+const EVENT_TABS: { id: EventTab; label: string; icon: React.ElementType }[] = [
+  { id: 'overview', label: 'Overview', icon: LayoutGrid },
+  { id: 'form', label: 'Form Builder', icon: ClipboardList },
+  { id: 'responses', label: 'Responses', icon: Users },
+  { id: 'teams', label: 'Teams', icon: Target },
+  { id: 'map', label: 'Map', icon: Map },
+]
+
+function EventDetail({ event: initialEvent, onBack, appUrl }: {
+  event: ArkEvent
+  onBack: () => void
+  appUrl: string
+}) {
+  const [event, setEvent] = useState(initialEvent)
+  const [tab, setTab] = useState<EventTab>('overview')
+
+  const refresh = useCallback(async () => {
+    const res = await fetch(`/api/ark/events/${event.id}`)
+    const data = await res.json()
+    if (res.ok) setEvent(data.event)
+  }, [event.id])
+
+  useEffect(() => { refresh() }, [refresh])
+
+  const teams = event.teams ?? []
+
+  return (
+    <div className="space-y-5">
+      {/* Back + title */}
+      <div className="flex items-center gap-3">
+        <button onClick={onBack}
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition">
+          <ChevronLeft className="h-4 w-4" /> Events
+        </button>
+        <span className="text-muted-foreground/40">/</span>
+        <span className="text-sm font-semibold text-foreground">{event.name}</span>
+      </div>
+
+      {/* Tab nav */}
+      <div className="flex gap-1 overflow-x-auto pb-0.5 scrollbar-hide">
+        {EVENT_TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={cn("flex-shrink-0 flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition",
+              tab === t.id
+                ? "bg-primary/15 text-primary border border-primary/25"
+                : "text-muted-foreground hover:bg-secondary hover:text-foreground border border-transparent")}>
+            <t.icon className="h-4 w-4" />
+            <span className="hidden sm:block">{t.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      {tab === 'overview' && <CommandCenter event={event} onRefresh={refresh} appUrl={appUrl} />}
+      {tab === 'form' && <FormBuilder event={event} onRefresh={refresh} />}
+      {tab === 'responses' && <ResponsesPanel event={event} teams={teams} />}
+      {tab === 'teams' && <TeamsPanel event={event} onRefresh={refresh} />}
+      {tab === 'map' && <MapPlanner />}
+    </div>
+  )
+}
+
+// ─── Main ArkContent ──────────────────────────────────────────────────────────
+
+export function ArkContent() {
+  const { user } = useAuth()
+  const [events, setEvents] = useState<ArkEvent[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedEvent, setSelectedEvent] = useState<ArkEvent | null>(null)
+  const [creatingEvent, setCreatingEvent] = useState(false)
+  const [newEvent, setNewEvent] = useState({ name: '', description: '', scheduledAt: '' })
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [appUrl, setAppUrl] = useState('')
+
+  useEffect(() => {
+    setAppUrl(window.location.origin)
+  }, [])
+
+  const fetchEvents = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/ark/events')
+      const data = await res.json()
+      setEvents(data.events ?? [])
+    } finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { fetchEvents() }, [fetchEvents])
+
+  async function createEvent() {
+    if (!newEvent.name.trim()) return
+    setCreating(true)
+    setCreateError(null)
+    try {
+      const res = await fetch('/api/ark/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newEvent),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setEvents(e => [data.event, ...e])
+      setSelectedEvent(data.event)
+      setCreatingEvent(false)
+      setNewEvent({ name: '', description: '', scheduledAt: '' })
+    } catch (e: unknown) {
+      setCreateError(e instanceof Error ? e.message : 'Failed')
+    } finally { setCreating(false) }
+  }
+
+  async function deleteEvent(id: string) {
+    await fetch(`/api/ark/events/${id}`, { method: 'DELETE' })
+    setEvents(e => e.filter(x => x.id !== id))
+  }
+
+  // If viewing a specific event
+  if (selectedEvent) {
+    return (
+      <EventDetail
+        event={selectedEvent}
+        onBack={() => { setSelectedEvent(null); fetchEvents() }}
+        appUrl={appUrl}
+      />
+    )
+  }
+
+  return (
+    <div className="space-y-6 max-w-5xl">
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold text-foreground">Ark of Osiris</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Command center for Ark registration, team building, and strategy planning.
+          </p>
+        </div>
+        {user?.isAdmin && (
+          <button onClick={() => setCreatingEvent(true)}
+            className="flex items-center gap-2 rounded-xl bg-primary/15 border border-primary/25 text-primary text-sm font-medium px-4 py-2 hover:bg-primary/25 transition">
+            <Plus className="h-4 w-4" /> New Ark Event
+          </button>
+        )}
+      </div>
+
+      {/* Create event form */}
+      {creatingEvent && (
+        <div className="rounded-2xl border border-primary/25 bg-primary/5 p-5 space-y-3">
+          <p className="text-sm font-semibold text-foreground">Create Ark Event</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Event Name *</label>
+              <input value={newEvent.name} onChange={e => setNewEvent(n => ({ ...n, name: e.target.value }))}
+                placeholder="e.g. Ark Week 45"
+                className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Match Date (optional)</label>
+              <input type="datetime-local" value={newEvent.scheduledAt} onChange={e => setNewEvent(n => ({ ...n, scheduledAt: e.target.value }))}
+                className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50" />
+            </div>
+          </div>
+          <input value={newEvent.description} onChange={e => setNewEvent(n => ({ ...n, description: e.target.value }))}
+            placeholder="Description (optional)"
+            className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50" />
+          {createError && <p className="text-xs text-red-400">{createError}</p>}
+          <div className="flex items-center gap-3">
+            <button onClick={createEvent} disabled={creating || !newEvent.name.trim()}
+              className="flex items-center gap-2 rounded-lg bg-primary/15 border border-primary/25 px-5 py-2 text-sm font-medium text-primary hover:bg-primary/25 disabled:opacity-40">
+              {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+              Create Event
+            </button>
+            <button onClick={() => setCreatingEvent(false)} className="text-sm text-muted-foreground hover:text-foreground">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Events list */}
+      {loading ? (
+        <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+      ) : events.length === 0 ? (
+        <div className="flex flex-col items-center py-20 text-center rounded-2xl border border-border/50 bg-card/60">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 mb-4">
+            <Sword className="h-8 w-8 text-primary" />
+          </div>
+          <h3 className="text-base font-semibold text-foreground mb-1">No Ark Events Yet</h3>
+          <p className="text-sm text-muted-foreground mb-5 max-w-sm">
+            Create your first Ark event to start building registration forms, collecting player availability, and assigning teams.
+          </p>
+          {user?.isAdmin && (
+            <button onClick={() => setCreatingEvent(true)}
+              className="flex items-center gap-2 rounded-xl bg-primary/15 border border-primary/25 text-primary text-sm font-medium px-5 py-2.5 hover:bg-primary/25 transition">
+              <Plus className="h-4 w-4" /> Create First Event
+            </button>
+          )}
+          {!user && (
+            <p className="text-xs text-muted-foreground">Sign in as an admin to create events.</p>
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {events.map(event => (
+            <EventCard
+              key={event.id}
+              event={event}
+              onSelect={() => setSelectedEvent(event)}
+              onDelete={() => deleteEvent(event.id)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
