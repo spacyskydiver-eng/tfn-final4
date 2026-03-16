@@ -52,6 +52,9 @@ type BundleRow = {
   // Per-cell icon overrides: when set on a cell, that cell shows [icon] × [count]
   // instead of just the raw number. Key is column id.
   cellIcons?: Record<string, string>
+  // When set, overrides the auto-calculated total in the Total column.
+  // Set to "" to show nothing in the total cell.
+  customTotal?: string
 }
 
 export type Bundle = {
@@ -304,6 +307,7 @@ function rowTotal(row: BundleRow, columns: TierColumn[]): number {
 }
 
 function rowTotalFmt(row: BundleRow, columns: TierColumn[]): string {
+  if (row.customTotal !== undefined) return row.customTotal
   const sum = rowTotal(row, columns)
   if (row.rowType === "days") return `${(sum / 1440).toFixed(2)} Days`
   if (row.rowType === "currency") return `$${fmt(sum)}`
@@ -840,6 +844,15 @@ function BundleTable({
                               </SelectContent>
                             </Select>
                           </div>
+                          <Input
+                            value={row.customTotal ?? ""}
+                            onChange={e => {
+                              const val = e.target.value
+                              onUpdateRef.current({ ...bundleRef.current, rows: bundleRef.current.rows.map(r => r.id === row.id ? { ...r, customTotal: val === "" ? undefined : val } : r) })
+                            }}
+                            placeholder="Custom total (override)"
+                            className="h-6 w-full text-[10px] bg-white/10 border-white/20 text-white placeholder:text-white/30"
+                          />
                         </div>
                       ) : mode !== "none" ? (
                         <span className="text-sm text-white/70 leading-tight">{row.label}</span>
