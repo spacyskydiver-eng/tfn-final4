@@ -105,7 +105,6 @@ const mainNavItems = [
   { id: "home",               label: "Home",              icon: Home },
   { id: "calendar",           label: "Calendar",          icon: CalendarDays },
   { id: "kvk",                label: "KvK Tracker",       icon: CrosshairIcon },
-  { id: "ark",                label: "Ark of Osiris",     icon: Sword },
   { id: "commander",          label: "Commander Prep",    icon: Crown },
   { id: "guides",             label: "Guides",            icon: BookOpen },
   { id: "general-tools",      label: "General Tools",     icon: Wrench },
@@ -114,9 +113,16 @@ const mainNavItems = [
   { id: "progression-plans",  label: "Progression Plans", icon: TrendingUp },
   { id: "bundles",            label: "Bundles",           icon: Boxes },
   { id: "spending",           label: "Spending Tracker",  icon: Receipt },
-  { id: "territory-planner",  label: "Territory Planner", icon: Map },
   { id: "settings",           label: "Settings",          icon: Settings },
 ];
+
+const projectToolsNavItems = [
+  { id: "project-tools-home", label: "Overview & Guide",   icon: Crown },
+  { id: "ark",                label: "Ark of Osiris",      icon: Sword },
+  { id: "territory-planner",  label: "Territory Planner",  icon: Map },
+];
+
+const projectToolsTabIds = new Set(projectToolsNavItems.map(p => p.id));
 
 const botNavItems = [
   { id: "bot-tools-home",  label: "Bot Store",              icon: LayoutDashboard },
@@ -142,6 +148,7 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const { user } = useAuth();
   const [botsOpen, setBotsOpen] = useState(true);
+  const [projectToolsOpen, setProjectToolsOpen] = useState(true);
   const [staffOpen, setStaffOpen] = useState(true);
 
   return (
@@ -243,6 +250,58 @@ export function AppSidebar({
           {(botsOpen || collapsed) && (
             <div className={cn("space-y-0.5", !collapsed && "pl-2 mt-0.5")}>
               {botNavItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => onTabChange(item.id)}
+                    className={cn(
+                      "group relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
+                      isActive
+                        ? "bg-primary/15 text-primary shadow-[0_0_20px_-4px_hsl(var(--glow)/0.3)]"
+                        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    )}
+                  >
+                    {isActive && (
+                      <div className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary" />
+                    )}
+                    <Icon className={cn("h-4 w-4 shrink-0 transition-colors duration-200", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
+                    {!collapsed && <span>{item.label}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Project Tools section */}
+        <div className="pt-2">
+          <button
+            onClick={() => setProjectToolsOpen(o => !o)}
+            className={cn(
+              "flex w-full items-center gap-2 rounded-lg px-3 py-2 transition-colors hover:bg-secondary/50",
+              collapsed ? "justify-center" : "justify-between"
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <Sword className={cn("h-4 w-4 shrink-0", projectToolsTabIds.has(activeTab) ? "text-primary" : "text-muted-foreground")} />
+              {!collapsed && (
+                <span className={cn("text-xs font-semibold uppercase tracking-wider", projectToolsTabIds.has(activeTab) ? "text-primary" : "text-muted-foreground")}>
+                  Project Tools
+                </span>
+              )}
+            </div>
+            {!collapsed && (
+              projectToolsOpen
+                ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+                : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+            )}
+          </button>
+
+          {(projectToolsOpen || collapsed) && (
+            <div className={cn("space-y-0.5", !collapsed && "pl-2 mt-0.5")}>
+              {projectToolsNavItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
                 return (

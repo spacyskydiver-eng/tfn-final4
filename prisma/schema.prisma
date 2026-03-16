@@ -29,6 +29,7 @@ model User {
   orders     Order[]
   arkEvents ArkEvent[] @relation("UserArkEvents")
   arkForms  ArkForm[]  @relation("UserArkForms")
+  projectMemberships ProjectMembership[]
 }
 
 // ─── ApiToken ─────────────────────────────────────────────────────────────────
@@ -487,6 +488,23 @@ model ArkAssignment {
 
 // ─── Restart Projects ──────────────────────────────────────────────────────────
 // Projects that have TFN bot installed. Staff manage these in the portal.
+// ─── Project Memberships ───────────────────────────────────────────────────────
+// Tracks which users have leadership/founder access to which projects.
+// Created when staff verifies a leadership application or approves a founder.
+model ProjectMembership {
+  id        String   @id @default(cuid())
+  userId    String
+  projectId String
+  role      String   @default("leadership") // "leadership" | "founder"
+  createdAt DateTime @default(now())
+
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project RestartProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, projectId])
+  @@map("project_memberships")
+}
+
 model RestartProject {
   id               String   @id @default(cuid())
   name             String
@@ -504,6 +522,7 @@ model RestartProject {
   updatedAt        DateTime @updatedAt
 
   applications LeadershipApplication[]
+  memberships  ProjectMembership[]
 
   @@map("restart_projects")
 }

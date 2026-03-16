@@ -45,6 +45,8 @@ import { BotToolsHome, type CartItem } from "@/components/bot-tools-home";
 import { StaffPortal } from "@/components/staff-portal";
 import { VerifyContent } from "@/components/verify-content";
 import { ArkContent } from "@/components/ark-content";
+import { ProjectToolsHome } from "@/components/project-tools-home";
+import { useAuth } from "@/lib/auth-context";
 
 const tabMeta: Record<string, { label: string; description: string; icon: React.ElementType }> = {
   home: {
@@ -157,6 +159,11 @@ const tabMeta: Record<string, { label: string; description: string; icon: React.
     description: "Configure your toolkit preferences",
     icon: Settings,
   },
+  "project-tools-home": {
+    label: "Project Tools",
+    description: "Ark of Osiris and Territory Planner — for registered project leadership",
+    icon: Crown,
+  },
 };
 
 const BOT_TOOL_IDS = new Set(['title-giving', 'fort-tracking', 'player-finder', 'alliance-mob']);
@@ -170,6 +177,28 @@ interface ContentPanelProps {
   onClearCart?: () => void;
 }
 
+function ProjectToolBlur({ onNavigate }: { onNavigate: (tab: string) => void }) {
+  return (
+    <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 rounded-xl bg-background/60 backdrop-blur-md">
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/20 text-primary">
+        <Shield className="h-6 w-6" />
+      </div>
+      <div className="text-center max-w-xs">
+        <p className="text-sm font-semibold text-foreground">Project Leadership Access Required</p>
+        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+          This tool is only available to registered project leadership.
+        </p>
+      </div>
+      <button
+        onClick={() => onNavigate("project-tools-home")}
+        className="rounded-lg bg-primary/15 hover:bg-primary/25 text-primary text-xs font-medium px-4 py-2 transition"
+      >
+        View Access Guide →
+      </button>
+    </div>
+  )
+}
+
 export function ContentPanel({
   activeTab,
   onTabChange,
@@ -180,6 +209,8 @@ export function ContentPanel({
 }: ContentPanelProps) {
   const meta = tabMeta[activeTab] || tabMeta.home;
   const Icon = meta.icon;
+  const { user } = useAuth();
+  const hasProjectAccess = user?.isAdmin || user?.isLeadership;
 
   return (
     <div className="flex h-full flex-col">
@@ -226,12 +257,24 @@ export function ContentPanel({
           <CalendarContent />
         ) : activeTab === "kvk" ? (
           <KvkContent />
+        ) : activeTab === "project-tools-home" ? (
+          <ProjectToolsHome onNavigate={onTabChange ?? (() => {})} />
         ) : activeTab === "ark" ? (
-          <ArkContent />
+          <div className="relative">
+            {!hasProjectAccess && <ProjectToolBlur onNavigate={onTabChange ?? (() => {})} />}
+            <div className={!hasProjectAccess ? "pointer-events-none select-none blur-sm" : ""}>
+              <ArkContent />
+            </div>
+          </div>
         ) : activeTab === "commander" ? (
           <CommanderContent />
         ) : activeTab === "territory-planner" ? (
-          <TerritoryPlannerContent />
+          <div className="relative">
+            {!hasProjectAccess && <ProjectToolBlur onNavigate={onTabChange ?? (() => {})} />}
+            <div className={!hasProjectAccess ? "pointer-events-none select-none blur-sm" : ""}>
+              <TerritoryPlannerContent />
+            </div>
+          </div>
         ) : activeTab === "bundles" ? (
           <BundlesContent />
         ) : activeTab === "spending" ? (

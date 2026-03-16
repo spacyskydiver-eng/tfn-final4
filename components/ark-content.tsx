@@ -1760,19 +1760,6 @@ export function ArkContent() {
 
   return (
     <div className="space-y-6 max-w-5xl">
-      {/* Leadership notice */}
-      <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-200 leading-relaxed">
-        <span className="font-semibold text-yellow-100">Leadership:</span> To use the Ark of Osiris tool and Territory Planner, you must{' '}
-        <a href="https://discord.gg/ruQVkKC6uM" target="_blank" rel="noopener noreferrer" className="underline hover:text-yellow-50">
-          join the TFN Discord server
-        </a>{' '}
-        and{' '}
-        <a href="https://discord.com/oauth2/authorize?client_id=1469309783332098140&scope=bot%20applications.commands&permissions=8" target="_blank" rel="noopener noreferrer" className="underline hover:text-yellow-50">
-          invite the TFN Bot
-        </a>{' '}
-        to your server.
-      </div>
-
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>

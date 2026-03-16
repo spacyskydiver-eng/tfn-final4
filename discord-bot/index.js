@@ -919,7 +919,7 @@ client.on(Events.InteractionCreate, async interaction => {
     const sleeperKingdom = usesSleeper ? (sleepLine.includes('N/A') ? 'N/A' : sleepLine.split(': ')[1]) : null
 
     try {
-      await apiPost('/api/restart-projects', {
+      const { project } = await apiPost('/api/restart-projects', {
         name:             projectName,
         guildId:          guildIdRaw,
         guildName:        guildName,
@@ -931,7 +931,7 @@ client.on(Events.InteractionCreate, async interaction => {
         sleeperKingdom:   sleeperKingdom !== 'N/A' ? sleeperKingdom : null,
       })
 
-      await apiPatch(`/api/leadership/applications/${applicationId}`, { status: 'approved' })
+      await apiPatch(`/api/leadership/applications/${applicationId}`, { status: 'approved', projectId: project.id })
 
       // Disable buttons
       await interaction.message.edit({
@@ -943,6 +943,13 @@ client.on(Events.InteractionCreate, async interaction => {
 
       await interaction.followUp({
         content: `✅ **Project approved** by <@${interaction.user.id}>. Project **${projectName}** has been added to the website.`,
+      }).catch(() => {})
+
+      // Grant website founder access
+      await apiPost('/api/leadership/grant-website', {
+        discordUserId: appData.discordUserId,
+        projectId: project.id,
+        role: 'founder',
       }).catch(() => {})
 
       // Try to notify applicant
@@ -1165,7 +1172,7 @@ client.on(Events.InteractionCreate, async interaction => {
       }
       if (questionKey === 'q4') {
         try {
-          await apiPost('/api/leadership/grant-website', { discordUserId: appData.discordUserId })
+          await apiPost('/api/leadership/grant-website', { discordUserId: appData.discordUserId, projectId: appData.projectId, role: 'leadership' })
           await apiPatch(`/api/leadership/applications/${applicationId}`, { websiteRoleGranted: true })
           await interaction.followUp({ content: `✅ **${qLabel}** verified by <@${interaction.user.id}>. Website leadership access granted to <@${appData.discordUserId}>.` }).catch(() => {})
         } catch (err) {

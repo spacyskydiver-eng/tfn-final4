@@ -11,7 +11,18 @@ export async function POST(req: NextRequest) {
     const user = await prisma.user.findUnique({ where: { discordId: body.discordUserId } })
     if (!user)
       return NextResponse.json({ error: 'User not found — they must log in to the website first' }, { status: 404 })
+
     await prisma.user.update({ where: { discordId: body.discordUserId }, data: { isLeadership: true } })
+
+    // If a projectId is provided, create a ProjectMembership
+    if (body.projectId) {
+      await prisma.projectMembership.upsert({
+        where:  { userId_projectId: { userId: user.id, projectId: body.projectId } },
+        update: { role: body.role ?? 'leadership' },
+        create: { userId: user.id, projectId: body.projectId, role: body.role ?? 'leadership' },
+      })
+    }
+
     return NextResponse.json({ ok: true, userId: user.id })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 })
