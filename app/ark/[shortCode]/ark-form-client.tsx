@@ -16,6 +16,7 @@ type Question = {
   botManaged: boolean
   options?: { value: string; label: string }[] | null
   translations?: Record<string, unknown> | null
+  maxSelect?: number | null
 }
 
 type Form = {
@@ -396,18 +397,28 @@ function QuestionField({
   }
 
   if (q.type === 'select') {
+    const selected = String(value ?? '')
+    function pickOption(v: string) {
+      // Toggle off if already selected; otherwise select
+      onChange(selected === v ? '' : v)
+    }
     return (
       <div>
         <label className="block text-sm font-semibold text-white mb-1.5">
           {q.label} {q.required && <span className="text-red-400">*</span>}
         </label>
-        <div className="relative">
-          <select value={String(value ?? '')} onChange={e => onChange(e.target.value)}
-            className={cn(base, error ? errCls : normal, "appearance-none pr-10 cursor-pointer")}>
-            <option value="">{t(lang, 'selectPlaceholder')}</option>
-            {q.options?.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40 pointer-events-none" />
+        <div className="space-y-2">
+          {(q.options ?? []).map(o => (
+            <button key={o.value} type="button" onClick={() => pickOption(o.value)}
+              className={cn("w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium text-left transition",
+                selected === o.value
+                  ? "border-violet-400/60 bg-violet-500/20 text-violet-200"
+                  : "border-white/15 bg-white/5 text-white/60 hover:border-white/30 hover:text-white")}>
+              <div className={cn("h-4 w-4 shrink-0 rounded-full border transition",
+                selected === o.value ? "bg-violet-500 border-violet-400" : "border-white/30")} />
+              {o.label}
+            </button>
+          ))}
         </div>
         {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
       </div>
@@ -418,8 +429,13 @@ function QuestionField({
     const selected: string[] = Array.isArray(value) ? (value as string[]) : []
     const satOptions = q.options?.filter(o => o.value.startsWith('sat_')) ?? []
     const sunOptions = q.options?.filter(o => o.value.startsWith('sun_')) ?? []
+    const singleSelect = q.maxSelect === 1
     function toggle(v: string) {
-      onChange(selected.includes(v) ? selected.filter(x => x !== v) : [...selected, v])
+      if (singleSelect) {
+        onChange(selected.includes(v) ? [] : [v])
+      } else {
+        onChange(selected.includes(v) ? selected.filter(x => x !== v) : [...selected, v])
+      }
     }
     return (
       <div>
@@ -467,8 +483,13 @@ function QuestionField({
 
   if (q.type === 'checkboxes') {
     const selectedVals: string[] = Array.isArray(value) ? (value as string[]) : []
+    const singleSelect = q.maxSelect === 1
     function toggleCheckbox(v: string) {
-      onChange(selectedVals.includes(v) ? selectedVals.filter(x => x !== v) : [...selectedVals, v])
+      if (singleSelect) {
+        onChange(selectedVals.includes(v) ? [] : [v])
+      } else {
+        onChange(selectedVals.includes(v) ? selectedVals.filter(x => x !== v) : [...selectedVals, v])
+      }
     }
     return (
       <div>

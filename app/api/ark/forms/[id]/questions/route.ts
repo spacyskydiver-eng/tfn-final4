@@ -46,6 +46,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         botManaged: body.botManaged ?? false,
         options: body.options ?? null,
         translations: body.translations ?? null,
+        maxSelect: body.maxSelect ?? null,
       },
     })
     return NextResponse.json({ question }, { status: 201 })

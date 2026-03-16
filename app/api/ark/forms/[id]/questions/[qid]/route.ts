@@ -20,6 +20,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         options: body?.options ?? undefined,
         order: body?.order !== undefined ? body.order : undefined,
         translations: body?.translations ?? undefined,
+        maxSelect: 'maxSelect' in (body ?? {}) ? (body.maxSelect ?? null) : undefined,
       },
     })
     return NextResponse.json({ question })

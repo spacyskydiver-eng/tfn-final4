@@ -25,6 +25,7 @@ type ArkQuestion = {
   required: boolean
   botManaged: boolean
   options?: { value: string; label: string }[] | null
+  maxSelect?: number | null
 }
 
 type ArkForm = {
@@ -686,12 +687,24 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
   const [form, setForm] = useState<ArkForm | null>(event.form ?? null)
   const [loading, setLoading] = useState(false)
   const [addingQ, setAddingQ] = useState(false)
-  const [newQ, setNewQ] = useState<{ type: string; label: string; placeholder: string; required: boolean; options: { value: string; label: string }[] | null }>({ type: 'text', label: '', placeholder: '', required: false, options: null })
+  const [newQ, setNewQ] = useState<{ type: string; label: string; placeholder: string; required: boolean; options: { value: string; label: string }[] | null; maxSelect: number | null }>({ type: 'text', label: '', placeholder: '', required: false, options: null, maxSelect: null })
   const [editingTitleForm, setEditingTitleForm] = useState(false)
   const [titleDraft, setTitleDraft] = useState(form?.title ?? '')
   const [descDraft, setDescDraft] = useState(form?.description ?? '')
   const [editingQId, setEditingQId] = useState<string | null>(null)
-  const [editDraft, setEditDraft] = useState<{ label: string; placeholder: string; required: boolean; options: { value: string; label: string }[] | null } | null>(null)
+  const [editDraft, setEditDraft] = useState<{ label: string; placeholder: string; required: boolean; options: { value: string; label: string }[] | null; maxSelect: number | null } | null>(null)
+
+  // Sync form state when event.form is updated with questions (e.g. after EventDetail refresh)
+  useEffect(() => {
+    if (!event.form) return
+    const incoming = event.form as ArkForm
+    setForm(prev => {
+      const prevQCount = prev?.questions?.length ?? 0
+      const newQCount = incoming.questions?.length ?? 0
+      if (newQCount > prevQCount) return incoming
+      return prev
+    })
+  }, [(event.form as ArkForm)?.questions?.length])
   const [rosterCount, setRosterCount] = useState<number | null>(null)
   const [showImportFromBuilder, setShowImportFromBuilder] = useState(false)
   const [servers, setServers] = useState<{ id: string; guildId: string; guildName: string }[]>([])
@@ -746,7 +759,7 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
     const opts = q.type === 'timeslots' && (q.options == null || (q.options as unknown[]).length === 0)
       ? DEFAULT_TIMESLOTS
       : (q.options ?? null)
-    setEditDraft({ label: q.label, placeholder: q.placeholder ?? '', required: q.required, options: opts })
+    setEditDraft({ label: q.label, placeholder: q.placeholder ?? '', required: q.required, options: opts, maxSelect: q.maxSelect ?? null })
   }
 
   function handleTypeChange(type: string) {
@@ -755,6 +768,7 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
     setNewQ(q => ({
       ...q,
       type,
+      maxSelect: null,
       options: needsOptions
         ? [{ value: 'option_1', label: 'Option 1' }, { value: 'option_2', label: 'Option 2' }]
         : needsTimeslots
@@ -786,7 +800,14 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
     if (!form || !newQ.label.trim()) return
     setLoading(true)
     try {
-      const key = slugifyLocal(newQ.label) || `question_${Date.now()}`
+      // Generate a unique key within this form
+      const baseKey = slugifyLocal(newQ.label) || `question_${Date.now()}`
+      const existingKeys = new Set(form.questions.map(q => q.key))
+      let key = baseKey
+      let suffix = 2
+      while (existingKeys.has(key)) {
+        key = `${baseKey}_${suffix++}`
+      }
       const res = await fetch(`/api/ark/forms/${form.id}/questions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -798,11 +819,12 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
           required: newQ.required,
           botManaged: false,
           options: newQ.options ?? null,
+          maxSelect: newQ.maxSelect ?? null,
         }),
       })
       const data = await res.json()
       setForm(f => f ? { ...f, questions: [...f.questions, data.question] } : f)
-      setNewQ({ type: 'text', label: '', placeholder: '', required: false, options: null })
+      setNewQ({ type: 'text', label: '', placeholder: '', required: false, options: null, maxSelect: null })
       setAddingQ(false)
       onRefresh()
     } finally { setLoading(false) }
@@ -1084,6 +1106,13 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
                       onChange={opts => setEditDraft(d => d ? { ...d, options: opts } : d)}
                     />
                   )}
+                  {(q.type === 'checkboxes' || q.type === 'timeslots' || q.type === 'select') && (
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={editDraft.maxSelect === 1}
+                        onChange={e => setEditDraft(d => d ? { ...d, maxSelect: e.target.checked ? 1 : null } : d)} />
+                      <span className="text-sm text-foreground">Only allow one selection</span>
+                    </label>
+                  )}
                   <div className="flex gap-2">
                     <button onClick={() => saveQ(q.id)}
                       className="flex items-center gap-1.5 rounded-lg bg-primary/15 border border-primary/25 px-4 py-1.5 text-xs text-primary hover:bg-primary/25">
@@ -1142,6 +1171,13 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
               options={newQ.options ?? DEFAULT_TIMESLOTS}
               onChange={opts => setNewQ(q => ({ ...q, options: opts }))}
             />
+          )}
+          {(newQ.type === 'select' || newQ.type === 'checkboxes' || newQ.type === 'timeslots') && (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={newQ.maxSelect === 1}
+                onChange={e => setNewQ(q => ({ ...q, maxSelect: e.target.checked ? 1 : null }))} />
+              <span className="text-sm text-foreground">Only allow one selection</span>
+            </label>
           )}
           <div className="flex gap-2">
             <button onClick={addQuestion} disabled={loading || !newQ.label.trim()}
@@ -1599,11 +1635,12 @@ function EventDetail({ event: initialEvent, onBack, appUrl }: {
 }) {
   const [event, setEvent] = useState(initialEvent)
   const [tab, setTab] = useState<EventTab>('overview')
+  const [ready, setReady] = useState(false)
 
   const refresh = useCallback(async () => {
     const res = await fetch(`/api/ark/events/${event.id}`)
     const data = await res.json()
-    if (res.ok) setEvent(data.event)
+    if (res.ok) { setEvent(data.event); setReady(true) }
   }, [event.id])
 
   useEffect(() => { refresh() }, [refresh])
@@ -1637,11 +1674,17 @@ function EventDetail({ event: initialEvent, onBack, appUrl }: {
       </div>
 
       {/* Tab content */}
-      {tab === 'overview' && <CommandCenter event={event} onRefresh={refresh} appUrl={appUrl} />}
-      {tab === 'form' && <FormBuilder event={event} onRefresh={refresh} />}
-      {tab === 'responses' && <ResponsesPanel event={event} teams={teams} />}
-      {tab === 'teams' && <TeamsPanel event={event} onRefresh={refresh} />}
-      {tab === 'map' && <MapPlanner />}
+      {!ready ? (
+        <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+      ) : (
+        <>
+          {tab === 'overview' && <CommandCenter event={event} onRefresh={refresh} appUrl={appUrl} />}
+          {tab === 'form' && <FormBuilder event={event} onRefresh={refresh} />}
+          {tab === 'responses' && <ResponsesPanel event={event} teams={teams} />}
+          {tab === 'teams' && <TeamsPanel event={event} onRefresh={refresh} />}
+          {tab === 'map' && <MapPlanner />}
+        </>
+      )}
     </div>
   )
 }

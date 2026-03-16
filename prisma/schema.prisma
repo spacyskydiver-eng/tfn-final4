@@ -357,9 +357,6 @@ model ArkPlayer {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  responses   ArkResponse[]
-  assignments ArkAssignment[]
-
   @@index([allianceTag])
   @@map("ark_players")
 }
@@ -417,6 +414,7 @@ model ArkFormQuestion {
   botManaged  Boolean @default(false)
   options     Json?
   translations Json?
+  maxSelect   Int?    // null = unlimited; 1 = single select only
 
   form    ArkForm     @relation(fields: [formId], references: [id], onDelete: Cascade)
   answers ArkAnswer[]
@@ -435,7 +433,6 @@ model ArkResponse {
   submittedAt     DateTime @default(now())
 
   form       ArkForm         @relation(fields: [formId], references: [id])
-  player     ArkPlayer?      @relation(fields: [govId], references: [govId])
   answers    ArkAnswer[]
   assignment ArkAssignment?
 
@@ -481,7 +478,6 @@ model ArkAssignment {
   assignedById String?
 
   response ArkResponse @relation(fields: [responseId], references: [id])
-  player   ArkPlayer?  @relation(fields: [govId], references: [govId])
   teamRef  ArkTeam?    @relation(fields: [teamId], references: [id])
 
   @@index([teamId])
