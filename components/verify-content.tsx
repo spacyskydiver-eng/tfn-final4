@@ -465,12 +465,12 @@ export function VerifyContent() {
   return (
     <div className="space-y-5 max-w-4xl">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-foreground">Discord Verification</h2>
           <p className="text-xs text-muted-foreground mt-0.5">Auto-verify players by scanning governor profile screenshots. Free up to 150 verifications per server.</p>
         </div>
-        <button onClick={() => setShowAdd(v => !v)} className="flex items-center gap-2 rounded-xl border border-border/50 bg-card/60 px-4 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
+        <button onClick={() => setShowAdd(v => !v)} className="flex-shrink-0 flex items-center gap-2 rounded-xl border border-border/50 bg-card/60 px-4 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
           <Plus className="h-4 w-4" />
           Add Server
         </button>
@@ -565,10 +565,10 @@ export function VerifyContent() {
           {selected && (
             <>
               {/* Tab nav */}
-              <div className="flex items-center gap-1 rounded-xl border border-border/50 bg-card/40 p-1 w-fit">
+              <div className="flex items-center gap-1 rounded-xl border border-border/50 bg-card/40 p-1 overflow-x-auto">
                 {VERIFY_TABS.map(t => (
                   <button key={t.id} onClick={() => setTab(t.id)}
-                    className={cn('flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+                    className={cn('flex-shrink-0 flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors',
                       tab === t.id ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
                     )}>
                     <t.icon className="h-4 w-4" />

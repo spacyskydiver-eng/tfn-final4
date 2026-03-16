@@ -176,8 +176,8 @@ export function ContentPanel({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
-      <header className="flex items-center gap-3 border-b border-border px-4 py-4 md:px-8 md:py-6">
+      {/* Header — hidden on mobile (mobile top bar handles the title) */}
+      <header className="hidden md:flex items-center gap-3 border-b border-border px-8 py-6">
         <div className="flex h-9 w-9 md:h-10 md:w-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
           <Icon className="h-5 w-5" />
         </div>

@@ -118,18 +118,18 @@ export function HomeContent({ onTabChange }: { onTabChange?: (tab: string) => vo
   const { user } = useAuth()
 
   return (
-    <div className="space-y-8 max-w-6xl">
+    <div className="space-y-6 md:space-y-8 max-w-6xl">
       {/* Welcome banner */}
-      <div className="rounded-2xl border border-border bg-card/80 backdrop-blur-sm p-6 md:p-8">
-        <div className="flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
-            <Swords className="h-6 w-6" />
+      <div className="rounded-2xl border border-border bg-card/80 backdrop-blur-sm p-4 md:p-8">
+        <div className="flex items-start gap-3 md:gap-4">
+          <div className="flex h-10 w-10 md:h-12 md:w-12 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
+            <Swords className="h-5 w-5 md:h-6 md:w-6" />
           </div>
           <div>
-            <h2 className="text-2xl md:text-3xl font-bold text-foreground tracking-tight">
+            <h2 className="text-xl md:text-3xl font-bold text-foreground tracking-tight">
               {user ? `Welcome back, ${user.username}` : 'Welcome to RoK Toolkit'}
             </h2>
-            <p className="mt-1.5 text-sm text-muted-foreground max-w-2xl">
+            <p className="mt-1 text-xs md:text-sm text-muted-foreground max-w-2xl">
               Your all-in-one dashboard for Rise of Kingdoms. Track accounts, plan upgrades,
               calculate costs, automate with bots, and stay on top of events.
             </p>

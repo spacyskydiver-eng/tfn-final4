@@ -346,8 +346,8 @@ export function GeneralToolsContent() {
 
   return (
     <div className="space-y-6">
-      {/* Tool tabs */}
-      <div className="flex flex-wrap gap-2">
+      {/* Tool tabs — horizontal scroll on mobile */}
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
         {TOOLS.map(tool => {
           const Icon = tool.icon
           const active = activeTool === tool.id
@@ -355,24 +355,24 @@ export function GeneralToolsContent() {
             <button
               key={tool.id}
               onClick={() => setActiveTool(tool.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+              className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors md:gap-2 md:px-4 md:py-2 md:text-sm ${
                 active
                   ? 'bg-primary text-primary-foreground border-primary'
                   : 'bg-secondary text-foreground border-border hover:bg-secondary/80'
               }`}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-3.5 w-3.5 md:h-4 md:w-4" />
               {tool.label}
             </button>
           )
         })}
       </div>
 
-      {/* Tool content area with navigation arrows */}
-      <div className="flex items-center gap-4">
+      {/* Tool content area — arrows hidden on mobile */}
+      <div className="flex items-center gap-2 md:gap-4">
         <button
           onClick={goPrev}
-          className="flex-shrink-0 h-12 w-12 flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+          className="hidden md:flex flex-shrink-0 h-12 w-12 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
           aria-label="Previous tool"
         >
           <ChevronLeft className="h-6 w-6" />
@@ -393,7 +393,7 @@ export function GeneralToolsContent() {
 
         <button
           onClick={goNext}
-          className="flex-shrink-0 h-12 w-12 flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+          className="hidden md:flex flex-shrink-0 h-12 w-12 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
           aria-label="Next tool"
         >
           <ChevronRight className="h-6 w-6" />
