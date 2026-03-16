@@ -51,6 +51,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         description: body.description ?? undefined,
         scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : undefined,
         status: body.status ?? undefined,
+        discordWebhook: 'discordWebhook' in body ? (body.discordWebhook || null) : undefined,
       },
     })
     return NextResponse.json({ event })

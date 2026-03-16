@@ -8,6 +8,7 @@ import {
   Calendar, Clock, X, AlertCircle, CheckCircle2,
   LayoutGrid, BookOpen, Target, Map, Settings,
   ArrowRight, Link2, ToggleLeft, ToggleRight, GripVertical,
+  MessageSquare, Upload,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth-context'
@@ -71,6 +72,7 @@ type ArkEvent = {
   description?: string | null
   scheduledAt?: string | null
   status: string
+  discordWebhook?: string | null
   form?: ArkForm | null
   teams?: ArkTeam[]
 }
@@ -168,14 +170,106 @@ function EventCard({ event, onSelect, onDelete }: {
   )
 }
 
+// ─── Manual Roster Import Modal ───────────────────────────────────────────────
+
+function ImportRosterModal({ onClose, onDone }: { onClose: () => void; onDone: (total: number) => void }) {
+  const [text, setText] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState<{ upserted: number; total: number; errors: string[] } | null>(null)
+
+  async function doImport() {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/ark/players/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: text.trim(),
+      })
+      const data = await res.json()
+      setResult(data)
+      if (res.ok) onDone(data.total)
+    } finally { setLoading(false) }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-border bg-card shadow-2xl p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-bold text-foreground">Import Player Roster</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+        </div>
+        {result ? (
+          <div className="space-y-3">
+            <div className="rounded-xl border border-green-400/25 bg-green-400/5 p-4 text-sm">
+              <p className="font-semibold text-green-400">✓ Import complete</p>
+              <p className="text-muted-foreground mt-1">{result.upserted} players added/updated · {result.total} total in roster</p>
+            </div>
+            {result.errors.length > 0 && (
+              <div className="rounded-xl border border-amber-400/25 bg-amber-400/5 p-3 text-xs text-amber-400 space-y-0.5">
+                {result.errors.slice(0, 5).map((e, i) => <p key={i}>{e}</p>)}
+              </div>
+            )}
+            <button onClick={onClose} className="w-full rounded-xl bg-primary/15 border border-primary/25 text-primary py-2.5 text-sm font-medium hover:bg-primary/25 transition">Done</button>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">Paste your player list below. One player per line. Format:</p>
+              <div className="rounded-xl border border-border/40 bg-muted/10 px-3 py-2 font-mono text-xs text-muted-foreground">
+                GovernorName, GovernorID<br />
+                GovernorName, GovernorID, PowerInMillions<br />
+                GovernorName, GovernorID, PowerInMillions, AllianceTag
+              </div>
+              <p className="text-[11px] text-muted-foreground">Example: <span className="font-mono">AlexX, 12345678, 92.5, TFN</span></p>
+            </div>
+            <textarea
+              value={text}
+              onChange={e => setText(e.target.value)}
+              placeholder={"AlexX, 12345678, 92.5, TFN\nAlexWolf, 87654321, 65.0, TFN\nAlex Prime, 11112222, 45.0"}
+              rows={8}
+              className="w-full rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5 text-xs font-mono text-foreground focus:outline-none focus:border-primary/50 resize-none"
+            />
+            <div className="flex gap-2">
+              <button onClick={doImport} disabled={loading || !text.trim()}
+                className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-primary/15 border border-primary/25 text-primary py-2.5 text-sm font-medium hover:bg-primary/25 disabled:opacity-40 transition">
+                {loading ? <><Loader2 className="h-4 w-4 animate-spin" /> Importing...</> : <><Users className="h-4 w-4" /> Import Players</>}
+              </button>
+              <button onClick={onClose} className="px-4 rounded-xl border border-border/50 text-muted-foreground text-sm hover:bg-secondary transition">Cancel</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── CommandCenter (Overview tab) ─────────────────────────────────────────────
 
 function CommandCenter({ event, onRefresh, appUrl }: { event: ArkEvent; onRefresh: () => void; appUrl: string }) {
   const [copied, setCopied] = useState(false)
+  const [webhookInput, setWebhookInput] = useState(event.discordWebhook ?? '')
+  const [savingWebhook, setSavingWebhook] = useState(false)
+  const [webhookSaved, setWebhookSaved] = useState(false)
+  const [showBotGuide, setShowBotGuide] = useState(false)
+  const [showImport, setShowImport] = useState(false)
+  const [rosterCount, setRosterCount] = useState<number | null>(null)
+  const [rosterLastSync, setRosterLastSync] = useState<string | null>(null)
+
   const formUrl = event.form ? `${appUrl}/ark/${event.form.shortCode}` : null
   const totalRegistered = event.form?._count?.responses ?? 0
   const totalAssigned = event.teams?.reduce((s, t) => s + (t._count?.assignments ?? 0), 0) ?? 0
   const unassigned = totalRegistered - totalAssigned
+
+  // Load roster stats on mount
+  useEffect(() => {
+    fetch('/api/ark/players/import')
+      .then(r => r.json())
+      .then(d => {
+        setRosterCount(d.total ?? 0)
+        setRosterLastSync(d.lastSync ?? null)
+      })
+      .catch(() => {})
+  }, [])
 
   async function toggleForm() {
     if (!event.form) return
@@ -196,8 +290,31 @@ function CommandCenter({ event, onRefresh, appUrl }: { event: ArkEvent; onRefres
     onRefresh()
   }
 
+  async function saveWebhook() {
+    setSavingWebhook(true)
+    await fetch(`/api/ark/events/${event.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ discordWebhook: webhookInput.trim() || null }),
+    })
+    setSavingWebhook(false)
+    setWebhookSaved(true)
+    setTimeout(() => setWebhookSaved(false), 3000)
+    onRefresh()
+  }
+
+  const botEndpoint = `${appUrl}/api/ark/players`
+  const botEndpointImport = `${appUrl}/api/ark/players/import`
+
   return (
     <div className="space-y-5">
+      {showImport && (
+        <ImportRosterModal
+          onClose={() => setShowImport(false)}
+          onDone={total => { setRosterCount(total); setShowImport(false) }}
+        />
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
         {[
@@ -219,7 +336,7 @@ function CommandCenter({ event, onRefresh, appUrl }: { event: ArkEvent; onRefres
       {formUrl && (
         <div className="rounded-2xl border border-border/50 bg-card/60 p-5 space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-foreground">Registration Form</p>
+            <p className="text-sm font-semibold text-foreground">Registration Form Link</p>
             <button onClick={toggleForm}
               className={cn("flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium border transition",
                 event.form?.isOpen
@@ -240,9 +357,135 @@ function CommandCenter({ event, onRefresh, appUrl }: { event: ArkEvent; onRefres
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
           </div>
-          <p className="text-[11px] text-muted-foreground">Share this link in your alliance chat. Players can fill it out from their in-game browser.</p>
+          <p className="text-[11px] text-muted-foreground">Paste this in your alliance chat. Players tap it from their in-game browser and register in under 60 seconds.</p>
         </div>
       )}
+
+      {/* Discord Webhook */}
+      <div className="rounded-2xl border border-border/50 bg-card/60 p-5 space-y-3">
+        <div>
+          <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <span className="text-indigo-400">🔔</span> Discord Notifications
+          </p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">
+            Every time a player submits their registration, a message is automatically sent to your Discord channel.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <input
+            value={webhookInput}
+            onChange={e => setWebhookInput(e.target.value)}
+            placeholder="https://discord.com/api/webhooks/..."
+            className="flex-1 rounded-xl border border-border/50 bg-muted/20 px-3 py-2 text-xs font-mono text-foreground focus:outline-none focus:border-primary/50 placeholder:text-muted-foreground/40"
+          />
+          <button onClick={saveWebhook} disabled={savingWebhook}
+            className="flex items-center gap-1.5 rounded-xl border border-primary/25 bg-primary/10 text-primary px-4 py-2 text-xs font-medium hover:bg-primary/20 disabled:opacity-40 transition shrink-0">
+            {savingWebhook ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : webhookSaved ? <Check className="h-3.5 w-3.5 text-green-400" /> : 'Save'}
+          </button>
+        </div>
+        {event.discordWebhook && !webhookInput && (
+          <p className="text-[10px] text-green-400">✓ Webhook connected</p>
+        )}
+        <details className="group">
+          <summary className="text-[11px] text-primary/70 cursor-pointer hover:text-primary select-none">How to get a Discord webhook URL →</summary>
+          <div className="mt-2 rounded-xl border border-border/40 bg-muted/10 p-3 text-[11px] text-muted-foreground space-y-1">
+            <p>1. Open Discord → go to your Ark leadership channel</p>
+            <p>2. Click the gear icon (Edit Channel) → Integrations → Webhooks</p>
+            <p>3. Click <strong className="text-foreground">New Webhook</strong> → Copy Webhook URL</p>
+            <p>4. Paste the URL above and click Save</p>
+          </div>
+        </details>
+      </div>
+
+      {/* Player Roster / Bot Integration */}
+      <div className="rounded-2xl border border-border/50 bg-card/60 p-5 space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <span className="text-violet-400">⚡</span> Player Roster (Auto-fill)
+            </p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              When players open the form and search their name, their stats auto-fill from your roster.
+            </p>
+          </div>
+          <div className="shrink-0 text-right">
+            {rosterCount !== null && (
+              <p className={cn("text-sm font-bold", rosterCount > 0 ? "text-green-400" : "text-amber-400")}>
+                {rosterCount}
+              </p>
+            )}
+            {rosterCount !== null && <p className="text-[10px] text-muted-foreground">players</p>}
+          </div>
+        </div>
+
+        {rosterLastSync && (
+          <p className="text-[10px] text-muted-foreground">
+            Last updated: {new Date(rosterLastSync).toLocaleString()}
+          </p>
+        )}
+
+        {rosterCount === 0 && (
+          <div className="rounded-xl border border-amber-400/25 bg-amber-400/5 px-3 py-2.5 text-[11px] text-amber-400">
+            ⚠ No players in roster yet. Import your player list below so the auto-fill works when players register.
+          </div>
+        )}
+
+        {/* Quick import button */}
+        <button onClick={() => setShowImport(true)}
+          className="flex items-center gap-2 rounded-xl border border-primary/25 bg-primary/10 text-primary px-4 py-2.5 text-sm font-medium hover:bg-primary/20 transition w-full justify-center">
+          <Users className="h-4 w-4" /> Import Players Manually
+        </button>
+
+        {/* Bot setup guide */}
+        <button onClick={() => setShowBotGuide(v => !v)}
+          className="flex items-center justify-between w-full text-[11px] text-muted-foreground hover:text-foreground transition pt-1">
+          <span>Set up bot auto-sync (for when your bot is ready)</span>
+          <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", showBotGuide && "rotate-180")} />
+        </button>
+        {showBotGuide && (
+          <div className="rounded-xl border border-border/40 bg-muted/10 p-4 space-y-3 text-[11px] text-muted-foreground">
+            <p className="text-foreground font-semibold text-xs">How the bot connects</p>
+            <p>Your bot calls one endpoint to upload the roster. The website does the rest — players search their name and their stats fill automatically.</p>
+            <div className="space-y-2">
+              <p className="font-semibold text-foreground">Endpoint</p>
+              <div className="flex items-center gap-2 rounded-lg border border-border/40 bg-background/50 px-3 py-2 font-mono">
+                <span className="text-primary flex-1 text-[10px] truncate">POST {botEndpointImport}</span>
+                <button onClick={() => navigator.clipboard.writeText(`POST ${botEndpointImport}`)}
+                  className="shrink-0 text-muted-foreground hover:text-foreground"><Copy className="h-3 w-3" /></button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="font-semibold text-foreground">Authentication header</p>
+              <div className="rounded-lg border border-border/40 bg-background/50 px-3 py-2 font-mono text-[10px]">
+                x-bot-secret: YOUR_BOT_API_SECRET
+              </div>
+            </div>
+            <div className="space-y-2">
+              <p className="font-semibold text-foreground">Payload (JSON)</p>
+              <pre className="rounded-lg border border-border/40 bg-background/50 px-3 py-2 font-mono text-[10px] whitespace-pre-wrap overflow-x-auto">{`{
+  "players": [
+    {
+      "govId": "12345678",
+      "govName": "AlexX",
+      "power": 92000000,
+      "allianceTag": "TFN",
+      "discordVerified": true,
+      "arkExperience": true
+    }
+  ]
+}`}</pre>
+            </div>
+            <p className="text-[10px]">Set <span className="font-mono text-foreground">BOT_API_SECRET</span> in your Vercel environment variables to match the header value.</p>
+            <p className="text-[10px]">Also works as plain text (CSV): one <span className="font-mono text-foreground">Name, ID, PowerM, Tag</span> per line with header <span className="font-mono text-foreground">Content-Type: text/plain</span></p>
+            <div className="space-y-2">
+              <p className="font-semibold text-foreground">Single-player search (for Discord bot lookup)</p>
+              <div className="flex items-center gap-2 rounded-lg border border-border/40 bg-background/50 px-3 py-2 font-mono">
+                <span className="text-primary flex-1 text-[10px] truncate">GET {botEndpoint}?q=name&limit=5</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Event status */}
       <div className="rounded-2xl border border-border/50 bg-card/60 p-5 space-y-3">
@@ -314,9 +557,17 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
   const [editingTitleForm, setEditingTitleForm] = useState(false)
   const [titleDraft, setTitleDraft] = useState(form?.title ?? '')
   const [descDraft, setDescDraft] = useState(form?.description ?? '')
-  // Which question is currently being edited inline
   const [editingQId, setEditingQId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState<{ label: string; placeholder: string; required: boolean } | null>(null)
+  const [rosterCount, setRosterCount] = useState<number | null>(null)
+  const [showImportFromBuilder, setShowImportFromBuilder] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/ark/players/import')
+      .then(r => r.json())
+      .then(d => setRosterCount(d.total ?? 0))
+      .catch(() => {})
+  }, [])
 
   async function createForm() {
     setLoading(true)
@@ -464,16 +715,42 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
         )}
       </div>
 
-      {/* Bot data notice */}
-      <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 flex gap-3">
-        <Zap className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-        <div>
-          <p className="text-sm font-medium text-foreground">Game data fields</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Some questions (marked <span className="text-primary font-medium">Game data</span>) will be filled in automatically from your bot&apos;s roster once the Ark bot is set up. Players won&apos;t need to type these — they just select their name and the data appears. You can still rename these questions.
-          </p>
+      {showImportFromBuilder && (
+        <ImportRosterModal
+          onClose={() => setShowImportFromBuilder(false)}
+          onDone={total => { setRosterCount(total); setShowImportFromBuilder(false) }}
+        />
+      )}
+
+      {/* Roster status */}
+      {rosterCount === 0 ? (
+        <div className="rounded-xl border border-amber-400/25 bg-amber-400/5 px-4 py-3 flex gap-3 items-start">
+          <AlertCircle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-amber-400">No players in roster yet</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              The <strong className="text-foreground">Game data</strong> fields need your player roster to auto-fill. Import your player list so the name search works on the registration form.
+            </p>
+            <button onClick={() => setShowImportFromBuilder(true)}
+              className="mt-2 flex items-center gap-1.5 rounded-lg border border-amber-400/30 bg-amber-400/10 text-amber-400 text-xs font-medium px-3 py-1.5 hover:bg-amber-400/20 transition">
+              <Upload className="h-3.5 w-3.5" /> Import player roster
+            </button>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 flex gap-3 items-start">
+          <Zap className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground">
+              Game data fields
+              <span className="ml-2 text-[10px] font-normal text-green-400">✓ {rosterCount} players in roster</span>
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Fields marked <span className="text-primary font-medium">Game data</span> auto-fill when a player selects their name on the form. Players won&apos;t need to type these — their stats appear instantly.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Questions list */}
       <div className="space-y-2">
@@ -868,7 +1145,7 @@ function TeamsPanel({ event, onRefresh }: { event: ArkEvent; onRefresh: () => vo
     onRefresh()
   }
 
-  // Generate bot sync payload
+  // Copy team assignments as JSON for bot
   function generateBotPayload() {
     const payload: Record<string, unknown[]> = {}
     for (const r of responses) {
@@ -878,9 +1155,36 @@ function TeamsPanel({ event, onRefresh }: { event: ArkEvent; onRefresh: () => vo
         payload[teamName].push({ govId: r.govId, govName: r.govName, role: r.assignment.role })
       }
     }
-    const text = JSON.stringify(payload, null, 2)
-    navigator.clipboard.writeText(text)
-    setBotSyncMsg('Team assignments copied to clipboard!')
+    navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
+    setBotSyncMsg('JSON copied for bot!')
+    setTimeout(() => setBotSyncMsg(null), 3000)
+  }
+
+  // Post team assignments as a formatted Discord message
+  function postToDiscord() {
+    const lines: string[] = [`**📋 Ark Team Assignments**\n`]
+    for (const team of teams) {
+      const assigned = responses.filter(r => r.assignment?.teamRef?.id === team.id)
+      if (assigned.length === 0) continue
+      lines.push(`**${team.name}** (${assigned.length} players)`)
+      for (const r of assigned) {
+        const role = ROLE_LABELS[r.assignment?.role ?? 'member'] ?? 'Member'
+        lines.push(`• ${r.govName}${role !== 'Member' ? ` — ${role}` : ''}`)
+      }
+      lines.push('')
+    }
+    const backups = responses.filter(r => r.assignment?.role === 'backup' && !r.assignment?.teamId)
+    if (backups.length > 0) {
+      lines.push(`**Backup**`)
+      backups.forEach(r => lines.push(`• ${r.govName}`))
+      lines.push('')
+    }
+    const unassigned = responses.filter(r => !r.assignment?.teamId && r.assignment?.role !== 'backup')
+    if (unassigned.length > 0) {
+      lines.push(`**Unassigned (${unassigned.length})**`)
+    }
+    navigator.clipboard.writeText(lines.join('\n'))
+    setBotSyncMsg('Discord message copied!')
     setTimeout(() => setBotSyncMsg(null), 3000)
   }
 
@@ -894,9 +1198,13 @@ function TeamsPanel({ event, onRefresh }: { event: ArkEvent; onRefresh: () => vo
           className="flex items-center gap-2 rounded-xl bg-primary/15 border border-primary/25 text-primary text-sm font-medium px-4 py-2 hover:bg-primary/25 transition">
           <Plus className="h-4 w-4" /> Add Team
         </button>
+        <button onClick={postToDiscord}
+          className="flex items-center gap-2 rounded-xl border border-indigo-400/30 bg-indigo-400/10 text-indigo-400 text-sm px-4 py-2 hover:bg-indigo-400/20 transition">
+          <MessageSquare className="h-4 w-4" /> Post to Discord
+        </button>
         <button onClick={generateBotPayload}
           className="flex items-center gap-2 rounded-xl border border-border/50 bg-card/60 text-muted-foreground text-sm px-4 py-2 hover:bg-secondary hover:text-foreground transition">
-          <Copy className="h-4 w-4" /> Copy for Bot
+          <Copy className="h-4 w-4" /> Copy JSON for Bot
         </button>
         {botSyncMsg && <span className="text-xs text-green-400">{botSyncMsg}</span>}
       </div>

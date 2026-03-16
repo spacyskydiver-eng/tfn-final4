@@ -365,14 +365,15 @@ model ArkPlayer {
 }
 
 model ArkEvent {
-  id          String    @id @default(cuid())
-  name        String
-  description String?
-  scheduledAt DateTime?
-  status      String    @default("planning")
-  createdById String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  name           String
+  description    String?
+  scheduledAt    DateTime?
+  status         String    @default("planning")
+  discordWebhook String?
+  createdById    String
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   createdBy User      @relation("UserArkEvents", fields: [createdById], references: [id])
   form      ArkForm?
