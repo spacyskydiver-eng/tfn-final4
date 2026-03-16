@@ -1767,7 +1767,7 @@ export function ArkContent() {
           join the TFN Discord server
         </a>{' '}
         and{' '}
-        <a href="https://discord.com/oauth2/authorize?client_id=1469309783332098140" target="_blank" rel="noopener noreferrer" className="underline hover:text-yellow-50">
+        <a href="https://discord.com/oauth2/authorize?client_id=1469309783332098140&scope=bot%20applications.commands&permissions=8" target="_blank" rel="noopener noreferrer" className="underline hover:text-yellow-50">
           invite the TFN Bot
         </a>{' '}
         to your server.
