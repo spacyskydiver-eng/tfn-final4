@@ -164,23 +164,16 @@ async function sendQ1(channel, session) {
 // ─── Q2: Are you the founder? ─────────────────────────────────────────────────
 
 async function sendQ2(channel, session) {
-  const select = new StringSelectMenuBuilder()
-    .setCustomId('leadership_q2_select')
-    .setPlaceholder('Select yes or no...')
-    .addOptions(
-      { label: 'Yes — I am the project founder', value: 'yes', emoji: '✅' },
-      { label: 'No — I am not the founder', value: 'no', emoji: '❌' },
-    )
-
   await channel.send({
     embeds: [new EmbedBuilder()
       .setTitle('Question 2 of 4')
       .setDescription('**Are you the project founder?**\n\nIf yes, you will be asked to provide proof (screenshots showing your roles in the project\'s Discord server).')
-      .setColor(0x7c3aed)
-      .setFooter({ text: 'Select from the dropdown below' })],
-    components: [new ActionRowBuilder().addComponents(select)],
+      .setColor(0x7c3aed)],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('leadership_q2:yes').setLabel('Yes — I am the founder').setStyle(ButtonStyle.Success).setEmoji('✅'),
+      new ButtonBuilder().setCustomId('leadership_q2:no').setLabel('No — I am not the founder').setStyle(ButtonStyle.Danger).setEmoji('❌'),
+    )],
   })
-
   session.step = 2
 }
 
@@ -215,14 +208,6 @@ async function sendQ2_1(channel, session) {
 // ─── Q3: Leader permission for Discord ───────────────────────────────────────
 
 async function sendQ3(channel, session) {
-  const select = new StringSelectMenuBuilder()
-    .setCustomId('leadership_q3_select')
-    .setPlaceholder('Select yes or no...')
-    .addOptions(
-      { label: 'Yes — the leader has given permission', value: 'yes', emoji: '✅' },
-      { label: 'No — I do not have permission', value: 'no', emoji: '❌' },
-    )
-
   await channel.send({
     embeds: [new EmbedBuilder()
       .setTitle('Question 3 of 4')
@@ -230,25 +215,18 @@ async function sendQ3(channel, session) {
         '**Has the leader of your project given permission for you to apply as project leadership in the TFN Discord server?**\n\n' +
         'This grants you the Leadership role in this Discord server.'
       )
-      .setColor(0x7c3aed)
-      .setFooter({ text: 'Select from the dropdown below' })],
-    components: [new ActionRowBuilder().addComponents(select)],
+      .setColor(0x7c3aed)],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('leadership_q3:yes').setLabel('Yes — the leader has given permission').setStyle(ButtonStyle.Success).setEmoji('✅'),
+      new ButtonBuilder().setCustomId('leadership_q3:no').setLabel('No — I do not have permission').setStyle(ButtonStyle.Danger).setEmoji('❌'),
+    )],
   })
-
   session.step = 4
 }
 
 // ─── Q4: Leader permission for website ────────────────────────────────────────
 
 async function sendQ4(channel, session) {
-  const select = new StringSelectMenuBuilder()
-    .setCustomId('leadership_q4_select')
-    .setPlaceholder('Select yes or no...')
-    .addOptions(
-      { label: 'Yes — the leader has given permission', value: 'yes', emoji: '✅' },
-      { label: 'No — I do not have permission', value: 'no', emoji: '❌' },
-    )
-
   await channel.send({
     embeds: [new EmbedBuilder()
       .setTitle('Question 4 of 4')
@@ -257,11 +235,12 @@ async function sendQ4(channel, session) {
         'This grants you leadership access on the TFN website (Ark of Osiris, future tools).\n\n' +
         '⚠️ You must have logged in to the TFN website with Discord at least once for this to work.'
       )
-      .setColor(0x7c3aed)
-      .setFooter({ text: 'Select from the dropdown below' })],
-    components: [new ActionRowBuilder().addComponents(select)],
+      .setColor(0x7c3aed)],
+    components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('leadership_q4:yes').setLabel('Yes — the leader has given permission').setStyle(ButtonStyle.Success).setEmoji('✅'),
+      new ButtonBuilder().setCustomId('leadership_q4:no').setLabel('No — I do not have permission').setStyle(ButtonStyle.Danger).setEmoji('❌'),
+    )],
   })
-
   session.step = 5
 }
 
@@ -565,35 +544,36 @@ client.on(Events.InteractionCreate, async interaction => {
     }
     await interaction.deferUpdate()
     const projectId = interaction.values[0]
-    // Find project name from the select menu options
     const selectedOption = interaction.component.options?.find(o => o.value === projectId)
     session.projectId   = projectId
     session.projectName = selectedOption?.label ?? projectId
-    // Update the message to show the answer
     await interaction.message.edit({
-      embeds: [interaction.message.embeds[0].setFooter({ text: `Your answer: ${session.projectName}` })],
+      embeds: [new EmbedBuilder()
+        .setTitle('Question 1 of 4')
+        .setDescription('**Which restart project are you applying as leadership for?**')
+        .setColor(0x7c3aed)
+        .setFooter({ text: `Your answer: ${session.projectName}` })],
       components: [],
     }).catch(() => {})
     await sendQ2(interaction.channel, session)
     return
   }
 
-  // ── Select menu: Q2 founder ────────────────────────────────────────────────
-  if (interaction.isStringSelectMenu() && interaction.customId === 'leadership_q2_select') {
+  // ── Button: Q2 founder ────────────────────────────────────────────────────
+  if (interaction.isButton() && interaction.customId.startsWith('leadership_q2:')) {
     const session = ticketSessions.get(interaction.channelId)
     if (!session || interaction.user.id !== session.userId) {
       return interaction.reply({ content: '❌ This is not your application.', ephemeral: true })
     }
     await interaction.deferUpdate()
-    const isFounder = interaction.values[0] === 'yes'
+    const isFounder = interaction.customId.endsWith(':yes')
     session.isFounder = isFounder
-    const answerLabel = isFounder ? 'Yes ✅' : 'No ❌'
     await interaction.message.edit({
       embeds: [new EmbedBuilder()
         .setTitle('Question 2 of 4')
         .setDescription('**Are you the project founder?**')
         .setColor(0x7c3aed)
-        .setFooter({ text: `Your answer: ${answerLabel}` })],
+        .setFooter({ text: `Your answer: ${isFounder ? 'Yes ✅' : 'No ❌'}` })],
       components: [],
     }).catch(() => {})
     if (isFounder) {
@@ -624,47 +604,44 @@ client.on(Events.InteractionCreate, async interaction => {
     if (count === 0) {
       await interaction.channel.send('⚠️ No screenshots were detected. Please make sure to send image attachments before clicking done. The application will continue — staff will note the missing proof.')
     }
-    // Founder skips Q3, goes directly to Q4
     await sendQ4(interaction.channel, session)
     return
   }
 
-  // ── Select menu: Q3 Discord permission ────────────────────────────────────
-  if (interaction.isStringSelectMenu() && interaction.customId === 'leadership_q3_select') {
+  // ── Button: Q3 Discord permission ─────────────────────────────────────────
+  if (interaction.isButton() && interaction.customId.startsWith('leadership_q3:')) {
     const session = ticketSessions.get(interaction.channelId)
     if (!session || interaction.user.id !== session.userId) {
       return interaction.reply({ content: '❌ This is not your application.', ephemeral: true })
     }
     await interaction.deferUpdate()
-    session.leaderPermDiscord = interaction.values[0] === 'yes'
-    const answerLabel = session.leaderPermDiscord ? 'Yes ✅' : 'No ❌'
+    session.leaderPermDiscord = interaction.customId.endsWith(':yes')
     await interaction.message.edit({
       embeds: [new EmbedBuilder()
         .setTitle('Question 3 of 4')
         .setDescription('**Has the leader given permission for Discord leadership?**')
         .setColor(0x7c3aed)
-        .setFooter({ text: `Your answer: ${answerLabel}` })],
+        .setFooter({ text: `Your answer: ${session.leaderPermDiscord ? 'Yes ✅' : 'No ❌'}` })],
       components: [],
     }).catch(() => {})
     await sendQ4(interaction.channel, session)
     return
   }
 
-  // ── Select menu: Q4 website permission ────────────────────────────────────
-  if (interaction.isStringSelectMenu() && interaction.customId === 'leadership_q4_select') {
+  // ── Button: Q4 website permission ─────────────────────────────────────────
+  if (interaction.isButton() && interaction.customId.startsWith('leadership_q4:')) {
     const session = ticketSessions.get(interaction.channelId)
     if (!session || interaction.user.id !== session.userId) {
       return interaction.reply({ content: '❌ This is not your application.', ephemeral: true })
     }
     await interaction.deferUpdate()
-    session.leaderPermWebsite = interaction.values[0] === 'yes'
-    const answerLabel = session.leaderPermWebsite ? 'Yes ✅' : 'No ❌'
+    session.leaderPermWebsite = interaction.customId.endsWith(':yes')
     await interaction.message.edit({
       embeds: [new EmbedBuilder()
         .setTitle('Question 4 of 4')
         .setDescription('**Has the leader given permission for website leadership?**')
         .setColor(0x7c3aed)
-        .setFooter({ text: `Your answer: ${answerLabel}` })],
+        .setFooter({ text: `Your answer: ${session.leaderPermWebsite ? 'Yes ✅' : 'No ❌'}` })],
       components: [],
     }).catch(() => {})
     await sendSummary(interaction.channel, session)
