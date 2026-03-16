@@ -548,46 +548,134 @@ const BOT_FIELD_DESCRIPTIONS: Record<string, string> = {
   discord:   'Auto-filled: whether the player is verified in your Discord server',
 }
 
+const DEFAULT_TIMESLOTS: { value: string; label: string }[] = [
+  { value: 'sat_11', label: 'Saturday 11:00 UTC' },
+  { value: 'sat_13', label: 'Saturday 13:00 UTC' },
+  { value: 'sat_14', label: 'Saturday 14:00 UTC' },
+  { value: 'sat_15', label: 'Saturday 15:00 UTC' },
+  { value: 'sat_20', label: 'Saturday 20:00 UTC' },
+  { value: 'sun_04', label: 'Sunday 04:00 UTC' },
+  { value: 'sun_12', label: 'Sunday 12:00 UTC' },
+  { value: 'sun_14', label: 'Sunday 14:00 UTC' },
+  { value: 'sun_20', label: 'Sunday 20:00 UTC' },
+]
+
 function slugify(label: string): string {
   return label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40)
 }
 
-// ─── OptionsEditor ────────────────────────────────────────────────────────────
+// ─── OptionsEditor (Multiple Choice / Checkboxes) ────────────────────────────
 
 function OptionsEditor({ options, onChange }: { options: { value: string; label: string }[]; onChange: (opts: { value: string; label: string }[]) => void }) {
   function addOption() {
     const n = options.length + 1
-    onChange([...options, { value: `option_${n}`, label: `Option ${n}` }])
+    onChange([...options, { value: `option_${n}`, label: '' }])
   }
   function removeOption(i: number) {
     onChange(options.filter((_, idx) => idx !== i))
   }
   function editLabel(i: number, label: string) {
-    onChange(options.map((o, idx) => idx === i ? { ...o, label, value: slugify(label) || o.value } : o))
+    // Only update value if it's a generated key (option_N), not a custom one
+    const currentValue = options[i].value
+    const newValue = currentValue.startsWith('option_') ? (slugify(label) || currentValue) : currentValue
+    onChange(options.map((o, idx) => idx === i ? { ...o, label, value: newValue } : o))
   }
   return (
     <div className="space-y-2">
-      <label className="text-xs font-medium text-muted-foreground">Answer options</label>
+      <label className="text-xs font-medium text-muted-foreground">Answer choices (players pick from these)</label>
       <div className="space-y-1.5">
         {options.map((opt, i) => (
           <div key={i} className="flex items-center gap-2">
-            <div className="h-4 w-4 shrink-0 rounded-full border border-border/60" />
+            <div className="h-4 w-4 shrink-0 rounded border border-border/60 bg-muted/10" />
             <input
               value={opt.label}
               onChange={e => editLabel(i, e.target.value)}
               placeholder={`Option ${i + 1}`}
               className="flex-1 rounded-lg border border-border/50 bg-muted/20 px-3 py-1.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
             />
-            <button onClick={() => removeOption(i)} className="text-muted-foreground hover:text-red-400 transition">
+            <button type="button" onClick={() => removeOption(i)} className="text-muted-foreground hover:text-red-400 transition">
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
         ))}
+        {options.length === 0 && (
+          <p className="text-xs text-muted-foreground/50 italic">No options yet — add at least one below</p>
+        )}
       </div>
-      <button onClick={addOption}
+      <button type="button" onClick={addOption}
         className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition">
         <Plus className="h-3 w-3" /> Add option
       </button>
+    </div>
+  )
+}
+
+// ─── TimeSlotsEditor ─────────────────────────────────────────────────────────
+
+function TimeSlotsEditor({ options, onChange }: { options: { value: string; label: string }[]; onChange: (opts: { value: string; label: string }[]) => void }) {
+  const [newSatTime, setNewSatTime] = useState('')
+  const [newSunTime, setNewSunTime] = useState('')
+
+  const satOptions = options.filter(o => o.value.startsWith('sat_'))
+  const sunOptions = options.filter(o => o.value.startsWith('sun_'))
+
+  function remove(value: string) {
+    onChange(options.filter(o => o.value !== value))
+  }
+
+  function addSlot(day: 'sat' | 'sun', timeInput: string) {
+    const clean = timeInput.replace(/[^0-9:]/g, '').replace(':', '').padStart(4, '0').slice(0, 4)
+    const hours = clean.slice(0, 2)
+    const mins = clean.slice(2, 4)
+    const value = `${day}_${hours}`
+    const label = `${day === 'sat' ? 'Saturday' : 'Sunday'} ${hours}:${mins} UTC`
+    if (!options.find(o => o.value === value)) {
+      onChange([...options, { value, label }])
+    }
+    if (day === 'sat') setNewSatTime('')
+    else setNewSunTime('')
+  }
+
+  function SlotGroup({ title, slots, day, inputVal, setInputVal }: {
+    title: string; slots: typeof options; day: 'sat' | 'sun'; inputVal: string; setInputVal: (v: string) => void
+  }) {
+    return (
+      <div className="space-y-1.5">
+        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">{title}</p>
+        <div className="flex flex-wrap gap-1.5">
+          {slots.map(s => (
+            <div key={s.value} className="flex items-center gap-1 rounded-full border border-border/50 bg-muted/20 pl-3 pr-1.5 py-1">
+              <span className="text-xs text-foreground">{s.label.replace(/^(Saturday|Sunday) /, '')}</span>
+              <button type="button" onClick={() => remove(s.value)} className="text-muted-foreground hover:text-red-400 transition ml-0.5">
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+          {slots.length === 0 && <p className="text-xs text-muted-foreground/50 italic">None added</p>}
+        </div>
+        <div className="flex gap-2 items-center">
+          <input
+            value={inputVal}
+            onChange={e => setInputVal(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addSlot(day, inputVal))}
+            placeholder="e.g. 14:00"
+            className="w-24 rounded-lg border border-border/50 bg-muted/20 px-2 py-1 text-xs text-foreground focus:outline-none focus:border-primary/50"
+          />
+          <button type="button" onClick={() => addSlot(day, inputVal)}
+            disabled={!inputVal.trim()}
+            className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 disabled:opacity-40 transition">
+            <Plus className="h-3 w-3" /> Add
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3 rounded-xl border border-border/40 bg-muted/5 p-3">
+      <label className="text-xs font-medium text-muted-foreground">Time slots (players tick which times they can play)</label>
+      <SlotGroup title="Saturday" slots={satOptions} day="sat" inputVal={newSatTime} setInputVal={setNewSatTime} />
+      <SlotGroup title="Sunday" slots={sunOptions} day="sun" inputVal={newSunTime} setInputVal={setNewSunTime} />
     </div>
   )
 }
@@ -655,12 +743,24 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
 
   function startEditQ(q: ArkQuestion) {
     setEditingQId(q.id)
-    setEditDraft({ label: q.label, placeholder: q.placeholder ?? '', required: q.required, options: q.options ?? null })
+    const opts = q.type === 'timeslots' && (q.options == null || (q.options as unknown[]).length === 0)
+      ? DEFAULT_TIMESLOTS
+      : (q.options ?? null)
+    setEditDraft({ label: q.label, placeholder: q.placeholder ?? '', required: q.required, options: opts })
   }
 
   function handleTypeChange(type: string) {
     const needsOptions = type === 'select' || type === 'checkboxes'
-    setNewQ(q => ({ ...q, type, options: needsOptions ? [{ value: 'option_1', label: 'Option 1' }, { value: 'option_2', label: 'Option 2' }] : null }))
+    const needsTimeslots = type === 'timeslots'
+    setNewQ(q => ({
+      ...q,
+      type,
+      options: needsOptions
+        ? [{ value: 'option_1', label: 'Option 1' }, { value: 'option_2', label: 'Option 2' }]
+        : needsTimeslots
+          ? DEFAULT_TIMESLOTS
+          : null,
+    }))
   }
 
   async function saveQ(qid: string) {
@@ -972,9 +1072,15 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
                       <span className="text-sm text-foreground">This question is required</span>
                     </label>
                   )}
-                  {(q.type === 'select' || q.type === 'timeslots' || q.type === 'checkboxes') && editDraft.options !== null && (
+                  {(q.type === 'select' || q.type === 'checkboxes') && editDraft.options !== null && (
                     <OptionsEditor
                       options={editDraft.options ?? []}
+                      onChange={opts => setEditDraft(d => d ? { ...d, options: opts } : d)}
+                    />
+                  )}
+                  {q.type === 'timeslots' && (
+                    <TimeSlotsEditor
+                      options={editDraft.options ?? DEFAULT_TIMESLOTS}
                       onChange={opts => setEditDraft(d => d ? { ...d, options: opts } : d)}
                     />
                   )}
@@ -1030,6 +1136,12 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
           </label>
           {(newQ.type === 'select' || newQ.type === 'checkboxes') && newQ.options && (
             <OptionsEditor options={newQ.options} onChange={opts => setNewQ(q => ({ ...q, options: opts }))} />
+          )}
+          {newQ.type === 'timeslots' && (
+            <TimeSlotsEditor
+              options={newQ.options ?? DEFAULT_TIMESLOTS}
+              onChange={opts => setNewQ(q => ({ ...q, options: opts }))}
+            />
           )}
           <div className="flex gap-2">
             <button onClick={addQuestion} disabled={loading || !newQ.label.trim()}

@@ -494,7 +494,9 @@ function QuestionField({
   }
 
   if (q.type === 'commanders') {
-    const commanders: CommanderEntry[] = Array.isArray(value) ? value as CommanderEntry[] : []
+    const commanders: CommanderEntry[] = Array.isArray(value) && (value as CommanderEntry[]).length > 0
+      ? value as CommanderEntry[]
+      : [{ name: '', skills: [1, 1, 1, 1] }]
     return (
       <div>
         <label className="block text-sm font-semibold text-white mb-1.5">
@@ -547,7 +549,13 @@ export function ArkFormClient({ form }: { form: Form }) {
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
   const [govId, setGovId] = useState('')
   const [govName, setGovName] = useState('')
-  const [answers, setAnswers] = useState<Record<string, unknown>>({})
+  const [answers, setAnswers] = useState<Record<string, unknown>>(() => {
+    const init: Record<string, unknown> = {}
+    for (const q of form.questions) {
+      if (q.type === 'commanders') init[q.key] = [{ name: '', skills: [1, 1, 1, 1] }]
+    }
+    return init
+  })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
