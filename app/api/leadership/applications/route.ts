@@ -32,7 +32,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'discordUserId, discordUsername, ticketChannelId required' }, { status: 400 })
     const app = await prisma.leadershipApplication.create({
       data: {
-        discordUserId: body.discordUserId,
+        type:            body.type ?? 'leadership',
+        discordUserId:   body.discordUserId,
         discordUsername: body.discordUsername,
         ticketChannelId: body.ticketChannelId,
       },

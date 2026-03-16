@@ -54,6 +54,15 @@ const commands = [
         .setDescription('Your product key (e.g. TFN-XXXX-XXXX-XXXX)')
         .setRequired(true)
     ),
+
+  new SlashCommandBuilder()
+    .setName('continue')
+    .setDescription('(Staff only) Resume a paused founder ticket that is waiting on bot installation')
+    .addStringOption(o =>
+      o.setName('ticket')
+        .setDescription('Ticket channel name (e.g. founder-ABC123)')
+        .setRequired(true)
+    ),
 ].map(c => c.toJSON())
 
 const rest = new REST().setToken(process.env.DISCORD_BOT_TOKEN)

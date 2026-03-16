@@ -488,14 +488,20 @@ model ArkAssignment {
 // ─── Restart Projects ──────────────────────────────────────────────────────────
 // Projects that have TFN bot installed. Staff manage these in the portal.
 model RestartProject {
-  id          String   @id @default(cuid())
-  name        String
-  guildId     String   @unique  // Discord server ID where TFN bot is installed
-  guildName   String
-  active      Boolean  @default(true)
-  addedById   String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id               String   @id @default(cuid())
+  name             String
+  guildId          String   @unique  // Discord server ID where TFN bot is installed
+  guildName        String
+  serverLink       String?           // Discord invite link
+  founderDiscordId String?           // Discord user ID of founder
+  founderUsername  String?           // Discord username of founder
+  targetKingdom    String?           // null / "N/A" = no target
+  usesSleeper      Boolean  @default(false)
+  sleeperKingdom   String?           // null / "N/A" = no starting kingdom
+  active           Boolean  @default(true)
+  addedById        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   applications LeadershipApplication[]
 
@@ -506,6 +512,7 @@ model RestartProject {
 // Created by Discord bot when user opens a leadership ticket.
 model LeadershipApplication {
   id                  String   @id @default(cuid())
+  type                String   @default("leadership") // "founder" | "leadership"
   discordUserId       String
   discordUsername     String
   ticketChannelId     String   @unique
@@ -514,7 +521,7 @@ model LeadershipApplication {
   screenshotUrls      Json?    // string[] of attachment URLs
   leaderPermDiscord   Boolean?
   leaderPermWebsite   Boolean?
-  status              String   @default("pending") // pending | reviewing | closed | verified | denied
+  status              String   @default("pending") // pending | reviewing | closed | approved | denied
   discordRoleGranted  Boolean  @default(false)
   websiteRoleGranted  Boolean  @default(false)
   staffVerifiedQ2     String?  // "verified" | "denied" | null
