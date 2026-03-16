@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { CheckCircle2, Loader2, Search, ChevronDown, Globe, Shield, Zap, X } from 'lucide-react'
+import { CheckCircle2, Loader2, Search, ChevronDown, Globe, Shield, Zap, X, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -24,6 +24,9 @@ type Form = {
   title: string
   description?: string | null
   isOpen: boolean
+  guildId?: string | null
+  guildName?: string | null
+  requireDiscordVerification?: boolean
   questions: Question[]
 }
 
@@ -33,8 +36,10 @@ type Player = {
   allianceTag?: string | null
   power?: string | null
   discordVerified: boolean
-  arkExperience: boolean
+  arkExperience?: boolean
   rallyCapacity?: string | null
+  discordUserId?: string | null
+  discordUsername?: string | null
 }
 
 // ─── Translations ─────────────────────────────────────────────────────────────
@@ -125,9 +130,11 @@ function t(lang: string, key: string): string {
 function PlayerSearch({
   lang,
   onSelect,
+  guildId,
 }: {
   lang: string
   onSelect: (player: Player | null, govName: string, govId: string) => void
+  guildId?: string | null
 }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<Player[]>([])
@@ -143,12 +150,15 @@ function PlayerSearch({
   const search = useCallback((q: string) => {
     if (!q.trim()) { setResults([]); return }
     setLoading(true)
-    fetch(`/api/ark/players?q=${encodeURIComponent(q)}&limit=10`)
+    const url = guildId
+      ? `/api/ark/verified-players?guildId=${encodeURIComponent(guildId)}&q=${encodeURIComponent(q)}&limit=10`
+      : `/api/ark/players?q=${encodeURIComponent(q)}&limit=10`
+    fetch(url)
       .then(r => r.json())
       .then(d => setResults(d.players ?? []))
       .catch(() => setResults([]))
       .finally(() => setLoading(false))
-  }, [])
+  }, [guildId])
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -274,6 +284,76 @@ function PlayerSearch({
   )
 }
 
+// ─── Commander Input ──────────────────────────────────────────────────────────
+
+type CommanderEntry = { name: string; skills: [number, number, number, number] }
+
+function CommanderInput({ value, onChange }: {
+  value: CommanderEntry[]
+  onChange: (v: CommanderEntry[]) => void
+  lang: string
+}) {
+  function addCommander() {
+    onChange([...value, { name: '', skills: [1, 1, 1, 1] }])
+  }
+  function removeCommander(i: number) {
+    onChange(value.filter((_, idx) => idx !== i))
+  }
+  function setName(i: number, name: string) {
+    onChange(value.map((c, idx) => idx === i ? { ...c, name } : c))
+  }
+  function setSkill(i: number, skillIdx: number, level: number) {
+    onChange(value.map((c, idx) => idx === i ? { ...c, skills: c.skills.map((s, si) => si === skillIdx ? level : s) as [number,number,number,number] } : c))
+  }
+
+  return (
+    <div className="space-y-3">
+      {value.map((cmd, i) => (
+        <div key={i} className="rounded-xl border border-white/15 bg-white/5 p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <input
+              value={cmd.name}
+              onChange={e => setName(i, e.target.value)}
+              placeholder="Commander name (e.g. Cao Cao)"
+              className="flex-1 bg-white/10 border border-white/20 rounded-lg px-3 py-2.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-violet-400/60"
+            />
+            <button onClick={() => removeCommander(i)} className="text-white/30 hover:text-red-400 transition shrink-0">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-white/40 shrink-0 w-12">Skills:</span>
+            {cmd.skills.map((skill, si) => (
+              <div key={si} className="flex-1 space-y-0.5">
+                <p className="text-[10px] text-white/30 text-center">S{si + 1}</p>
+                <select
+                  value={skill}
+                  onChange={e => setSkill(i, si, parseInt(e.target.value))}
+                  className="w-full bg-white/10 border border-white/20 rounded-lg px-2 py-1.5 text-sm text-white text-center focus:outline-none focus:border-violet-400/60 appearance-none cursor-pointer"
+                >
+                  {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+      {value.length < 8 && value.length > 0 && (
+        <button type="button" onClick={addCommander}
+          className="flex items-center gap-2 text-sm text-white/40 hover:text-white/70 transition">
+          <Plus className="h-4 w-4" /> Add commander
+        </button>
+      )}
+      {value.length === 0 && (
+        <button type="button" onClick={addCommander}
+          className="w-full flex items-center justify-center gap-2 rounded-xl border border-dashed border-white/15 py-4 text-sm text-white/40 hover:border-white/30 hover:text-white/60 transition">
+          <Plus className="h-4 w-4" /> Add your first commander
+        </button>
+      )}
+    </div>
+  )
+}
+
 // ─── Question rendering ───────────────────────────────────────────────────────
 
 function QuestionField({
@@ -385,17 +465,42 @@ function QuestionField({
     )
   }
 
-  if (q.type === 'commanders') {
+  if (q.type === 'checkboxes') {
+    const selectedVals: string[] = Array.isArray(value) ? (value as string[]) : []
+    function toggleCheckbox(v: string) {
+      onChange(selectedVals.includes(v) ? selectedVals.filter(x => x !== v) : [...selectedVals, v])
+    }
     return (
       <div>
         <label className="block text-sm font-semibold text-white mb-1.5">
           {q.label} {q.required && <span className="text-red-400">*</span>}
         </label>
-        <textarea value={String(value ?? '')} onChange={e => onChange(e.target.value)}
-          placeholder={q.placeholder ?? 'Cao Cao - 5 1 2 1\nPelagius - 5 5 5 5'}
-          rows={4}
-          className={cn(base, error ? errCls : normal, "resize-none font-mono text-sm")} />
-        <p className="text-[11px] text-white/30 mt-1">Format: Commander Name - Skill1 Skill2 Skill3 Skill4</p>
+        <div className="space-y-2">
+          {(q.options ?? []).map(o => (
+            <button key={o.value} type="button" onClick={() => toggleCheckbox(o.value)}
+              className={cn("w-full flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium text-left transition",
+                selectedVals.includes(o.value)
+                  ? "border-violet-400/60 bg-violet-500/20 text-violet-200"
+                  : "border-white/15 bg-white/5 text-white/60 hover:border-white/30 hover:text-white")}>
+              <div className={cn("h-4 w-4 shrink-0 rounded border transition",
+                selectedVals.includes(o.value) ? "bg-violet-500 border-violet-400" : "border-white/30")} />
+              {o.label}
+            </button>
+          ))}
+        </div>
+        {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
+      </div>
+    )
+  }
+
+  if (q.type === 'commanders') {
+    const commanders: CommanderEntry[] = Array.isArray(value) ? value as CommanderEntry[] : []
+    return (
+      <div>
+        <label className="block text-sm font-semibold text-white mb-1.5">
+          {q.label} {q.required && <span className="text-red-400">*</span>}
+        </label>
+        <CommanderInput value={commanders} onChange={onChange} lang={lang} />
         {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
       </div>
     )
@@ -447,6 +552,23 @@ export function ArkFormClient({ form }: { form: Form }) {
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [autoDetected, setAutoDetected] = useState(false)
+
+  // Auto-detect logged-in user's governor
+  useEffect(() => {
+    if (!form.guildId) return
+    fetch(`/api/ark/me-player?guildId=${form.guildId}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.player) {
+          setSelectedPlayer(d.player)
+          setGovId(d.player.govId)
+          setGovName(d.player.govName)
+          setAutoDetected(true)
+        }
+      })
+      .catch(() => {})
+  }, [form.guildId])
 
   const visibleQuestions = form.questions.filter(q => q.type !== 'botfield' || q.botManaged)
 
@@ -582,8 +704,37 @@ export function ArkFormClient({ form }: { form: Form }) {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Player search */}
-          <div className="rounded-2xl border border-violet-400/20 bg-violet-500/5 p-5">
-            <PlayerSearch lang={lang} onSelect={handlePlayerSelect} />
+          <div className="rounded-2xl border border-violet-400/20 bg-violet-500/5 p-5 space-y-3">
+            {form.guildId ? (
+              <p className="text-xs text-white/50">
+                <Shield className="inline h-3.5 w-3.5 mr-1 text-violet-400" />
+                Search your governor name — your verified stats from <span className="text-white/70 font-medium">{form.guildName ?? 'the linked server'}</span> will auto-fill.
+              </p>
+            ) : (
+              <p className="text-xs text-white/50">Enter your governor name and ID below.</p>
+            )}
+            {autoDetected && selectedPlayer ? (
+              <div className="space-y-2">
+                <div className="rounded-xl border border-green-400/30 bg-green-500/10 px-4 py-3 flex items-center gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-green-500/20 text-green-300 text-sm font-bold">
+                    {selectedPlayer.govName.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-white">{selectedPlayer.govName}</div>
+                    <div className="text-xs text-white/50 font-mono">ID: {selectedPlayer.govId}</div>
+                  </div>
+                  <div className="flex items-center gap-1 text-xs text-green-400 shrink-0">
+                    <Shield className="h-3.5 w-3.5" /> Verified
+                  </div>
+                </div>
+                <button onClick={() => { setAutoDetected(false); setSelectedPlayer(null); setGovId(''); setGovName('') }}
+                  className="text-xs text-white/40 hover:text-white/60 transition underline">
+                  Not you? Search another name →
+                </button>
+              </div>
+            ) : (
+              <PlayerSearch lang={lang} onSelect={handlePlayerSelect} guildId={form.guildId} />
+            )}
             {errors['_player'] && <p className="text-xs text-red-400 mt-2">{errors['_player']}</p>}
           </div>
 

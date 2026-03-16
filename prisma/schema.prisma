@@ -390,6 +390,9 @@ model ArkForm {
   title       String
   description String?
   isOpen      Boolean  @default(true)
+  guildId                    String?
+  guildName                  String?
+  requireDiscordVerification Boolean @default(true)
   createdById String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

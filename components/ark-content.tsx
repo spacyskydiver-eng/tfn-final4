@@ -33,6 +33,9 @@ type ArkForm = {
   title: string
   description?: string | null
   isOpen: boolean
+  guildId?: string | null
+  guildName?: string | null
+  requireDiscordVerification?: boolean
   questions: ArkQuestion[]
   _count?: { responses: number }
 }
@@ -117,10 +120,11 @@ const ROLE_COLORS: Record<string, string> = {
 const QUESTION_TYPES = [
   { type: 'text',       label: 'Short Answer',     hint: 'Single line of text' },
   { type: 'textarea',   label: 'Paragraph',         hint: 'Multiple lines of text' },
-  { type: 'number',     label: 'Number',            hint: 'Numeric value only' },
-  { type: 'select',     label: 'Multiple Choice',   hint: 'Pick one option' },
-  { type: 'timeslots',  label: 'Checkboxes',        hint: 'Pick multiple time slots' },
-  { type: 'commanders', label: 'Commander Input',   hint: 'Commander names & skill levels' },
+  { type: 'number',     label: 'Number',            hint: 'Numeric value (e.g. rally capacity)' },
+  { type: 'select',     label: 'Multiple Choice',   hint: 'Player picks one option' },
+  { type: 'checkboxes', label: 'Checkboxes',        hint: 'Player picks multiple options' },
+  { type: 'timeslots',  label: 'Time Slots',        hint: 'Availability checkboxes (Sat/Sun times)' },
+  { type: 'commanders', label: 'Commander Input',   hint: 'Name + 4 skill levels (1-5 each)' },
 ]
 
 const APP_URL = typeof window !== 'undefined' ? window.location.origin : ''
@@ -529,9 +533,10 @@ const Q_TYPE_LABELS: Record<string, string> = {
   text:       'Short text',
   textarea:   'Long text',
   number:     'Number',
-  select:     'Single choice',
-  timeslots:  'Time slots (checkboxes)',
-  commanders: 'Commander list',
+  select:     'Multiple choice',
+  checkboxes: 'Checkboxes',
+  timeslots:  'Time slots',
+  commanders: 'Commander input',
   botfield:   'Game data',
 }
 
@@ -547,27 +552,80 @@ function slugify(label: string): string {
   return label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40)
 }
 
+// ─── OptionsEditor ────────────────────────────────────────────────────────────
+
+function OptionsEditor({ options, onChange }: { options: { value: string; label: string }[]; onChange: (opts: { value: string; label: string }[]) => void }) {
+  function addOption() {
+    const n = options.length + 1
+    onChange([...options, { value: `option_${n}`, label: `Option ${n}` }])
+  }
+  function removeOption(i: number) {
+    onChange(options.filter((_, idx) => idx !== i))
+  }
+  function editLabel(i: number, label: string) {
+    onChange(options.map((o, idx) => idx === i ? { ...o, label, value: slugify(label) || o.value } : o))
+  }
+  return (
+    <div className="space-y-2">
+      <label className="text-xs font-medium text-muted-foreground">Answer options</label>
+      <div className="space-y-1.5">
+        {options.map((opt, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <div className="h-4 w-4 shrink-0 rounded-full border border-border/60" />
+            <input
+              value={opt.label}
+              onChange={e => editLabel(i, e.target.value)}
+              placeholder={`Option ${i + 1}`}
+              className="flex-1 rounded-lg border border-border/50 bg-muted/20 px-3 py-1.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
+            />
+            <button onClick={() => removeOption(i)} className="text-muted-foreground hover:text-red-400 transition">
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+      <button onClick={addOption}
+        className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition">
+        <Plus className="h-3 w-3" /> Add option
+      </button>
+    </div>
+  )
+}
+
 // ─── FormBuilder ──────────────────────────────────────────────────────────────
 
 function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => void }) {
   const [form, setForm] = useState<ArkForm | null>(event.form ?? null)
   const [loading, setLoading] = useState(false)
   const [addingQ, setAddingQ] = useState(false)
-  const [newQ, setNewQ] = useState({ type: 'text', label: '', placeholder: '', required: false })
+  const [newQ, setNewQ] = useState<{ type: string; label: string; placeholder: string; required: boolean; options: { value: string; label: string }[] | null }>({ type: 'text', label: '', placeholder: '', required: false, options: null })
   const [editingTitleForm, setEditingTitleForm] = useState(false)
   const [titleDraft, setTitleDraft] = useState(form?.title ?? '')
   const [descDraft, setDescDraft] = useState(form?.description ?? '')
   const [editingQId, setEditingQId] = useState<string | null>(null)
-  const [editDraft, setEditDraft] = useState<{ label: string; placeholder: string; required: boolean } | null>(null)
+  const [editDraft, setEditDraft] = useState<{ label: string; placeholder: string; required: boolean; options: { value: string; label: string }[] | null } | null>(null)
   const [rosterCount, setRosterCount] = useState<number | null>(null)
   const [showImportFromBuilder, setShowImportFromBuilder] = useState(false)
+  const [servers, setServers] = useState<{ id: string; guildId: string; guildName: string }[]>([])
 
   useEffect(() => {
     fetch('/api/ark/players/import')
       .then(r => r.json())
       .then(d => setRosterCount(d.total ?? 0))
       .catch(() => {})
+    fetch('/api/verify/servers').then(r => r.json()).then(d => setServers(d.servers ?? [])).catch(() => {})
   }, [])
+
+  async function saveFormSettings(patch: Partial<{ guildId: string | null; guildName: string | null; requireDiscordVerification: boolean }>) {
+    if (!form) return
+    await fetch(`/api/ark/forms/${form.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
+    setForm(f => f ? { ...f, ...patch } : f)
+    onRefresh()
+  }
 
   async function createForm() {
     setLoading(true)
@@ -597,7 +655,12 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
 
   function startEditQ(q: ArkQuestion) {
     setEditingQId(q.id)
-    setEditDraft({ label: q.label, placeholder: q.placeholder ?? '', required: q.required })
+    setEditDraft({ label: q.label, placeholder: q.placeholder ?? '', required: q.required, options: q.options ?? null })
+  }
+
+  function handleTypeChange(type: string) {
+    const needsOptions = type === 'select' || type === 'checkboxes'
+    setNewQ(q => ({ ...q, type, options: needsOptions ? [{ value: 'option_1', label: 'Option 1' }, { value: 'option_2', label: 'Option 2' }] : null }))
   }
 
   async function saveQ(qid: string) {
@@ -615,20 +678,33 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
     setEditDraft(null)
   }
 
+  function slugifyLocal(label: string): string {
+    return label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40)
+  }
+
   async function addQuestion() {
-    if (!form || !newQ.label) return
+    if (!form || !newQ.label.trim()) return
     setLoading(true)
     try {
-      const key = slugify(newQ.label) || `question_${Date.now()}`
+      const key = slugifyLocal(newQ.label) || `question_${Date.now()}`
       const res = await fetch(`/api/ark/forms/${form.id}/questions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...newQ, key }),
+        body: JSON.stringify({
+          type: newQ.type,
+          key,
+          label: newQ.label.trim(),
+          placeholder: newQ.placeholder.trim() || null,
+          required: newQ.required,
+          botManaged: false,
+          options: newQ.options ?? null,
+        }),
       })
       const data = await res.json()
       setForm(f => f ? { ...f, questions: [...f.questions, data.question] } : f)
-      setNewQ({ type: 'text', label: '', placeholder: '', required: false })
+      setNewQ({ type: 'text', label: '', placeholder: '', required: false, options: null })
       setAddingQ(false)
+      onRefresh()
     } finally { setLoading(false) }
   }
 
@@ -669,7 +745,7 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
       <div className="flex flex-col items-center py-16 text-center rounded-2xl border border-border/50 bg-card/60">
         <ClipboardList className="h-12 w-12 text-muted-foreground/30 mb-4" />
         <p className="text-foreground font-semibold mb-1">No form yet</p>
-        <p className="text-sm text-muted-foreground mb-5">Create a registration form — comes with a ready-to-use default template.</p>
+        <p className="text-sm text-muted-foreground mb-5">Create a registration form and add your own questions.</p>
         <button onClick={createForm} disabled={loading}
           className="flex items-center gap-2 rounded-xl bg-primary/15 border border-primary/25 px-5 py-2.5 text-sm font-medium text-primary hover:bg-primary/25 transition disabled:opacity-40">
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -681,6 +757,42 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
 
   return (
     <div className="space-y-5">
+      {/* Tutorial / help */}
+      <details className="group rounded-xl border border-border/40 bg-muted/5 overflow-hidden">
+        <summary className="flex items-center justify-between px-4 py-3 cursor-pointer select-none text-sm font-medium text-foreground hover:bg-muted/10">
+          <span className="flex items-center gap-2"><BookOpen className="h-4 w-4 text-primary" /> How to build this form</span>
+          <ChevronDown className="h-4 w-4 text-muted-foreground group-open:rotate-180 transition-transform" />
+        </summary>
+        <div className="px-4 pb-4 pt-2 space-y-3 text-xs text-muted-foreground">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="rounded-lg border border-border/30 bg-background/50 p-3 space-y-1">
+              <p className="font-semibold text-foreground text-[11px] uppercase tracking-wide">1. Link a kingdom</p>
+              <p>Select the Discord server for this Ark event in Form Settings. Players registered in that server will appear in the search box automatically.</p>
+            </div>
+            <div className="rounded-lg border border-border/30 bg-background/50 p-3 space-y-1">
+              <p className="font-semibold text-foreground text-[11px] uppercase tracking-wide">2. Add questions</p>
+              <p>Click <strong className="text-foreground">+ Add a question</strong>. Choose a type — Short Answer, Multiple Choice, Checkboxes, Commander Input, etc.</p>
+            </div>
+            <div className="rounded-lg border border-border/30 bg-background/50 p-3 space-y-1">
+              <p className="font-semibold text-foreground text-[11px] uppercase tracking-wide">3. Multiple choice & checkboxes</p>
+              <p>After choosing Multiple Choice or Checkboxes, you&apos;ll see an option editor — type your choices. Players pick from them on the form.</p>
+            </div>
+            <div className="rounded-lg border border-border/30 bg-background/50 p-3 space-y-1">
+              <p className="font-semibold text-foreground text-[11px] uppercase tracking-wide">4. Commander Input</p>
+              <p>Players enter commander names and set each of the 4 skill levels (1–5) via a dropdown. No typing needed for skill levels.</p>
+            </div>
+            <div className="rounded-lg border border-border/30 bg-background/50 p-3 space-y-1">
+              <p className="font-semibold text-foreground text-[11px] uppercase tracking-wide">5. Open the form</p>
+              <p>When ready, go to Overview and toggle the form to <strong className="text-foreground">Open</strong>. Copy the link and paste it in your alliance chat.</p>
+            </div>
+            <div className="rounded-lg border border-border/30 bg-background/50 p-3 space-y-1">
+              <p className="font-semibold text-foreground text-[11px] uppercase tracking-wide">6. Check responses</p>
+              <p>View all submissions in the <strong className="text-foreground">Responses</strong> tab. Assign each player to a team from there.</p>
+            </div>
+          </div>
+        </div>
+      </details>
+
       {/* Form title / description */}
       <div className="rounded-2xl border border-border/50 bg-card/60 p-5">
         {editingTitleForm ? (
@@ -713,6 +825,34 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
             </button>
           </div>
         )}
+      </div>
+
+      {/* Form Settings */}
+      <div className="rounded-xl border border-border/50 bg-card/60 p-4 space-y-3">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Form Settings</p>
+
+        {/* Server/kingdom selector */}
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Kingdom / Discord server</label>
+          <select value={form.guildId ?? ''} onChange={e => saveFormSettings({ guildId: e.target.value || null, guildName: servers.find(s => s.guildId === e.target.value)?.guildName ?? null })}
+            className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50">
+            <option value="">No server linked (anyone can submit)</option>
+            {servers.map(s => <option key={s.guildId} value={s.guildId}>{s.guildName}</option>)}
+          </select>
+          <p className="text-[10px] text-muted-foreground">When linked, players select their name from the server&apos;s verified member list and their data auto-fills.</p>
+        </div>
+
+        {/* requireDiscordVerification toggle */}
+        <label className="flex items-center gap-3 cursor-pointer">
+          <div className={cn("relative w-9 h-5 rounded-full transition", (form.requireDiscordVerification ?? true) ? "bg-primary" : "bg-muted")}
+            onClick={() => saveFormSettings({ requireDiscordVerification: !(form.requireDiscordVerification ?? true) })}>
+            <div className={cn("absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform", (form.requireDiscordVerification ?? true) ? "translate-x-4" : "translate-x-0")} />
+          </div>
+          <div>
+            <p className="text-sm text-foreground">Require Discord verification</p>
+            <p className="text-[10px] text-muted-foreground">Only players verified in the linked server can submit</p>
+          </div>
+        </label>
       </div>
 
       {showImportFromBuilder && (
@@ -832,6 +972,12 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
                       <span className="text-sm text-foreground">This question is required</span>
                     </label>
                   )}
+                  {(q.type === 'select' || q.type === 'timeslots' || q.type === 'checkboxes') && editDraft.options !== null && (
+                    <OptionsEditor
+                      options={editDraft.options ?? []}
+                      onChange={opts => setEditDraft(d => d ? { ...d, options: opts } : d)}
+                    />
+                  )}
                   <div className="flex gap-2">
                     <button onClick={() => saveQ(q.id)}
                       className="flex items-center gap-1.5 rounded-lg bg-primary/15 border border-primary/25 px-4 py-1.5 text-xs text-primary hover:bg-primary/25">
@@ -855,7 +1001,7 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
             <label className="text-xs font-medium text-muted-foreground">Question type</label>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {QUESTION_TYPES.map(t => (
-                <button key={t.type} onClick={() => setNewQ(q => ({ ...q, type: t.type }))}
+                <button key={t.type} onClick={() => handleTypeChange(t.type)}
                   className={cn("rounded-xl border px-3 py-2.5 text-left transition",
                     newQ.type === t.type
                       ? "border-primary/40 bg-primary/10 text-primary"
@@ -882,6 +1028,9 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
             <input type="checkbox" checked={newQ.required} onChange={e => setNewQ(q => ({ ...q, required: e.target.checked }))} />
             <span className="text-sm text-foreground">This question is required</span>
           </label>
+          {(newQ.type === 'select' || newQ.type === 'checkboxes') && newQ.options && (
+            <OptionsEditor options={newQ.options} onChange={opts => setNewQ(q => ({ ...q, options: opts }))} />
+          )}
           <div className="flex gap-2">
             <button onClick={addQuestion} disabled={loading || !newQ.label.trim()}
               className="flex items-center gap-2 rounded-lg bg-primary/15 border border-primary/25 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/25 disabled:opacity-40">
@@ -903,6 +1052,19 @@ function FormBuilder({ event, onRefresh }: { event: ArkEvent; onRefresh: () => v
 
 // ─── ResponseCard ─────────────────────────────────────────────────────────────
 
+function formatCommanders(answers: ArkAnswer[]): string {
+  const a = answers.find(x => x.question.key === 'commanders')
+  if (!a) return '—'
+  if (Array.isArray(a.value)) {
+    const formatted = (a.value as Array<{ name: string; skills: number[] }>)
+      .filter(c => c.name)
+      .map(c => `${c.name} — ${c.skills.join(' ')}`)
+      .join('\n')
+    return formatted || '—'
+  }
+  return String(a.value) || '—'
+}
+
 function ResponseCard({ response, teams, onAssign }: {
   response: ArkResponse
   teams: ArkTeam[]
@@ -910,7 +1072,7 @@ function ResponseCard({ response, teams, onAssign }: {
 }) {
   const [assigning, setAssigning] = useState(false)
   const avail = getAvailability(response.answers)
-  const commanders = getAnswer(response.answers, 'commanders')
+  const commanders = formatCommanders(response.answers)
   const rally = getAnswer(response.answers, 'rally_cap')
   const arkExp = getAnswer(response.answers, 'ark_exp')
   const assignedTeam = response.assignment?.teamRef

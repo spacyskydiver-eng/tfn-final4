@@ -34,6 +34,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         title: body?.title ?? undefined,
         description: body?.description ?? undefined,
         isOpen: body?.isOpen !== undefined ? body.isOpen : undefined,
+        guildId: body?.guildId !== undefined ? body.guildId : undefined,
+        guildName: body?.guildName !== undefined ? body.guildName : undefined,
+        requireDiscordVerification: body?.requireDiscordVerification !== undefined ? body.requireDiscordVerification : undefined,
       },
     })
     return NextResponse.json({ form })
