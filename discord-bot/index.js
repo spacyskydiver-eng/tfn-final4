@@ -485,15 +485,15 @@ client.on(Events.InteractionCreate, async interaction => {
 
   // ── Select menu: Apply for leadership ──────────────────────────────────────
   if (interaction.isStringSelectMenu() && interaction.customId === 'leadership_apply') {
-    await interaction.deferReply({ ephemeral: true })
+    await interaction.deferUpdate()
     const guild = interaction.guild
-    if (!guild) return interaction.editReply('❌ This must be used in the TFN server.')
+    if (!guild) return interaction.followUp({ content: '❌ This must be used in the TFN server.', ephemeral: true })
 
     // Check for existing open ticket from this user
     const existing = ticketSessions
     for (const [, s] of existing) {
       if (s.userId === interaction.user.id) {
-        return interaction.editReply('❌ You already have an open leadership application. Please complete it first.')
+        return interaction.followUp({ content: '❌ You already have an open leadership application. Please complete it first.', ephemeral: true })
       }
     }
 
@@ -550,10 +550,10 @@ client.on(Events.InteractionCreate, async interaction => {
       // Send Q1
       await sendQ1(ticketChannel, session)
 
-      return interaction.editReply(`✅ Your application ticket has been created: <#${ticketChannel.id}>`)
+      return interaction.followUp({ content: `✅ Your application ticket has been created: <#${ticketChannel.id}>`, ephemeral: true })
     } catch (err) {
       console.error('[leadership/apply]', err)
-      return interaction.editReply(`❌ Failed to create ticket: ${err.message}`)
+      return interaction.followUp({ content: `❌ Failed to create ticket: ${err.message}`, ephemeral: true })
     }
   }
 
