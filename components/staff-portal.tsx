@@ -6,7 +6,7 @@ import {
   Clock, AlertCircle, CheckCircle2, XCircle, ShieldCheck,
   ScanSearch, Crown, Flag, Bell, MessageSquare, UserCheck,
   UserMinus, BarChart2, ClipboardList, ListChecks, Trophy,
-  Calendar, Users, TrendingUp,
+  Calendar, Users, TrendingUp, Plus,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/lib/auth-context'
@@ -1122,12 +1122,169 @@ function StatsTab() {
   )
 }
 
+// ─── Restart Projects Tab ─────────────────────────────────────────────────────
+
+interface RestartProject {
+  id: string
+  name: string
+  guildId: string
+  guildName: string
+  active: boolean
+  createdAt: string
+}
+
+function RestartProjectsTab() {
+  const [projects, setProjects] = useState<RestartProject[]>([])
+  const [loading, setLoading] = useState(true)
+  const [adding, setAdding] = useState(false)
+  const [draft, setDraft] = useState({ name: '', guildId: '', guildName: '' })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/restart-projects?active=false')
+      const data = await res.json()
+      setProjects(data.projects ?? [])
+    } finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  async function addProject() {
+    if (!draft.name.trim() || !draft.guildId.trim() || !draft.guildName.trim()) return
+    setSaving(true); setError(null)
+    try {
+      const res = await fetch('/api/restart-projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(draft),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setProjects(p => [...p, data.project])
+      setDraft({ name: '', guildId: '', guildName: '' })
+      setAdding(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed')
+    } finally { setSaving(false) }
+  }
+
+  async function toggleActive(id: string, active: boolean) {
+    await fetch(`/api/restart-projects/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active }),
+    })
+    setProjects(p => p.map(x => x.id === id ? { ...x, active } : x))
+  }
+
+  async function deleteProject(id: string) {
+    if (!confirm('Delete this project? This cannot be undone.')) return
+    await fetch(`/api/restart-projects/${id}`, { method: 'DELETE' })
+    setProjects(p => p.filter(x => x.id !== id))
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-bold text-foreground">Restart Projects</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Projects with TFN Bot installed. These appear in the leadership application dropdown in Discord.
+          </p>
+        </div>
+        <button onClick={() => setAdding(v => !v)}
+          className="flex items-center gap-1.5 rounded-xl bg-primary/15 border border-primary/25 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/25 transition">
+          <Plus className="h-4 w-4" /> Add Project
+        </button>
+      </div>
+
+      {adding && (
+        <div className="rounded-2xl border border-primary/25 bg-primary/5 p-5 space-y-3">
+          <p className="text-sm font-semibold text-foreground">New Restart Project</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Project Name</label>
+              <input value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))}
+                placeholder="e.g. Kingdom 3517 Restart"
+                className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Discord Server ID</label>
+              <input value={draft.guildId} onChange={e => setDraft(d => ({ ...d, guildId: e.target.value }))}
+                placeholder="e.g. 123456789012345678"
+                className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Server Name</label>
+              <input value={draft.guildName} onChange={e => setDraft(d => ({ ...d, guildName: e.target.value }))}
+                placeholder="e.g. KD3517 Restart"
+                className="w-full rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50" />
+            </div>
+          </div>
+          {error && <p className="text-xs text-red-400">{error}</p>}
+          <div className="flex gap-2">
+            <button onClick={addProject} disabled={saving || !draft.name.trim() || !draft.guildId.trim() || !draft.guildName.trim()}
+              className="flex items-center gap-1.5 rounded-lg bg-primary/15 border border-primary/25 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/25 disabled:opacity-40">
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              Save Project
+            </button>
+            <button onClick={() => setAdding(false)} className="text-sm text-muted-foreground hover:text-foreground">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+      ) : projects.length === 0 ? (
+        <div className="text-center py-14 rounded-2xl border border-border/50 bg-card/60">
+          <p className="text-muted-foreground text-sm">No restart projects yet. Add one above to get started.</p>
+          <p className="text-xs text-muted-foreground mt-1">Make sure TFN Bot is installed in the project&apos;s Discord server first.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {projects.map(p => (
+            <div key={p.id} className={cn(
+              "flex items-center gap-4 rounded-xl border px-4 py-3 transition",
+              p.active ? "border-border/50 bg-card/60" : "border-border/30 bg-muted/20 opacity-60"
+            )}>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-sm text-foreground">{p.name}</span>
+                  {p.active
+                    ? <span className="text-[10px] rounded-full border border-green-400/30 bg-green-400/10 text-green-400 px-2 py-0.5">Active</span>
+                    : <span className="text-[10px] rounded-full border border-border/50 bg-muted/20 text-muted-foreground px-2 py-0.5">Inactive</span>
+                  }
+                </div>
+                <p className="text-xs text-muted-foreground font-mono mt-0.5">{p.guildName} · {p.guildId}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => toggleActive(p.id, !p.active)}
+                  className="text-xs text-muted-foreground hover:text-foreground border border-border/50 rounded-lg px-3 py-1.5 hover:bg-secondary transition">
+                  {p.active ? 'Disable' : 'Enable'}
+                </button>
+                <button onClick={() => deleteProject(p.id)}
+                  className="text-xs text-red-400 border border-red-400/20 rounded-lg px-3 py-1.5 hover:bg-red-400/10 transition">
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 const PORTAL_TABS = [
-  { id: 'requests', label: 'Requests',     icon: ListChecks  },
-  { id: 'orders',   label: 'Orders',       icon: ClipboardList },
-  { id: 'stats',    label: 'Stats',        icon: BarChart2   },
+  { id: 'requests',  label: 'Requests',          icon: ListChecks    },
+  { id: 'orders',    label: 'Orders',             icon: ClipboardList },
+  { id: 'stats',     label: 'Stats',              icon: BarChart2     },
+  { id: 'projects',  label: 'Restart Projects',   icon: Flag          },
 ] as const
 
 type PortalTab = typeof PORTAL_TABS[number]['id']
@@ -1166,9 +1323,10 @@ export function StaffPortal() {
       </div>
 
       {/* Tab content */}
-      {tab === 'requests' && <RequestsTab currentUserId={user?.id ?? ''} />}
-      {tab === 'orders'   && <OrdersTab />}
-      {tab === 'stats'    && <StatsTab />}
+      {tab === 'requests'  && <RequestsTab currentUserId={user?.id ?? ''} />}
+      {tab === 'orders'    && <OrdersTab />}
+      {tab === 'stats'     && <StatsTab />}
+      {tab === 'projects'  && <RestartProjectsTab />}
     </div>
   )
 }

@@ -17,7 +17,8 @@ model User {
   discordId String   @unique
   username  String
   avatar    String?
-  isAdmin   Boolean  @default(false)
+  isAdmin      Boolean  @default(false)
+  isLeadership Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -482,4 +483,47 @@ model ArkAssignment {
 
   @@index([teamId])
   @@map("ark_assignments")
+}
+
+// ─── Restart Projects ──────────────────────────────────────────────────────────
+// Projects that have TFN bot installed. Staff manage these in the portal.
+model RestartProject {
+  id          String   @id @default(cuid())
+  name        String
+  guildId     String   @unique  // Discord server ID where TFN bot is installed
+  guildName   String
+  active      Boolean  @default(true)
+  addedById   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  applications LeadershipApplication[]
+
+  @@map("restart_projects")
+}
+
+// ─── Leadership Applications ───────────────────────────────────────────────────
+// Created by Discord bot when user opens a leadership ticket.
+model LeadershipApplication {
+  id                  String   @id @default(cuid())
+  discordUserId       String
+  discordUsername     String
+  ticketChannelId     String   @unique
+  projectId           String?
+  isFounder           Boolean?
+  screenshotUrls      Json?    // string[] of attachment URLs
+  leaderPermDiscord   Boolean?
+  leaderPermWebsite   Boolean?
+  status              String   @default("pending") // pending | reviewing | closed | verified | denied
+  discordRoleGranted  Boolean  @default(false)
+  websiteRoleGranted  Boolean  @default(false)
+  staffVerifiedQ2     String?  // "verified" | "denied" | null
+  staffVerifiedQ3     String?
+  staffVerifiedQ4     String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  project RestartProject? @relation(fields: [projectId], references: [id])
+
+  @@map("leadership_applications")
 }

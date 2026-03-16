@@ -1638,9 +1638,13 @@ function EventDetail({ event: initialEvent, onBack, appUrl }: {
   const [ready, setReady] = useState(false)
 
   const refresh = useCallback(async () => {
-    const res = await fetch(`/api/ark/events/${event.id}`)
-    const data = await res.json()
-    if (res.ok) { setEvent(data.event); setReady(true) }
+    try {
+      const res = await fetch(`/api/ark/events/${event.id}`)
+      const data = await res.json()
+      if (res.ok) setEvent(data.event)
+    } finally {
+      setReady(true)
+    }
   }, [event.id])
 
   useEffect(() => { refresh() }, [refresh])

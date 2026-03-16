@@ -18,7 +18,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         assignment: {
           include: { teamRef: { select: { id: true, name: true, color: true } } },
         },
-        player: true,
       },
     })
     return NextResponse.json({ responses })
