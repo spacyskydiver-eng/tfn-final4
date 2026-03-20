@@ -14,7 +14,7 @@ const HG = 48    // horizontal gap
 const LS = 126   // line spacing
 const PL = 24    // padding left
 const PT = 70    // padding top
-const PB = 220   // padding bottom (extra room for info tooltips)
+const PB = 170   // padding bottom (room for info tooltips below bottom-row nodes)
 
 const COL_PATTERN = [4,4,1,3,3,2,4,4,4,1,3,2,4,4,1,2,4,1] as const
 
@@ -393,6 +393,7 @@ function TechNode({ techKey, levels, rc, onSet }: {
   const pct    = (cur / tech.maxLevel) * 100
   const accent = CAT_COLOR[tech.category] ?? '#3498DB'
   const [showInfo, setShowInfo] = useState(false)
+  const [hovered, setHovered] = useState(false)
 
   // Drag to scrub level
   const dragRef = useRef<{startX:number; startLv:number} | null>(null)
@@ -436,8 +437,13 @@ function TechNode({ techKey, levels, rc, onSet }: {
         cursor: locked ? 'not-allowed' : 'ew-resize',
         userSelect:'none',
         opacity: locked ? 0.35 : 1,
+        transform: hovered && !locked ? 'scale(1.04)' : 'scale(1)',
+        transition: 'transform 0.12s ease, opacity 0.12s',
+        zIndex: hovered ? 10 : 1,
       }}
       onMouseDown={handleMouseDown}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => { setHovered(false); setShowInfo(false) }}
       onContextMenu={e => { e.preventDefault(); if (!locked && cur>0 && canRemove(techKey,cur-1,levels)) onSet(techKey,cur-1) }}
     >
       {/* Info tooltip */}
@@ -449,9 +455,14 @@ function TechNode({ techKey, levels, rc, onSet }: {
         background: maxed
           ? 'linear-gradient(135deg,#0c3040 0%,#082030 100%)'
           : 'linear-gradient(135deg,#162d45 0%,#0e2035 100%)',
-        border:`1.5px solid ${maxed ? 'rgba(0,229,255,0.7)' : locked ? 'rgba(255,255,255,0.06)' : 'rgba(80,160,255,0.25)'}`,
-        boxShadow: maxed ? '0 0 10px rgba(0,229,255,0.25)' : undefined,
+        border:`1.5px solid ${maxed ? 'rgba(0,229,255,0.7)' : hovered ? accent : locked ? 'rgba(255,255,255,0.06)' : 'rgba(80,160,255,0.25)'}`,
+        boxShadow: maxed
+          ? '0 0 14px rgba(0,229,255,0.35)'
+          : hovered && !locked
+            ? `0 0 16px ${accent}55, 0 4px 20px rgba(0,0,0,0.5)`
+            : '0 2px 8px rgba(0,0,0,0.3)',
         display:'flex', flexDirection:'column',
+        transition: 'border-color 0.12s, box-shadow 0.12s',
       }}>
         {/* Info button — absolute top-right */}
         <button
@@ -553,6 +564,54 @@ export function CrystalTechContent() {
   const [speed, setSpeed]   = useState(0)
   const [helps, setHelps]   = useState(30)
   const [confirmClear, setConfirmClear] = useState(false)
+
+  // Momentum drag-to-scroll
+  const scrollRef  = useRef<HTMLDivElement>(null)
+  const momentumRef = useRef<{vel:number; frame:number} | null>(null)
+
+  const handleCanvasMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('[data-tech]')) return
+    e.preventDefault()
+    const el = scrollRef.current; if (!el) return
+
+    // Cancel any running momentum animation
+    if (momentumRef.current) {
+      cancelAnimationFrame(momentumRef.current.frame)
+      momentumRef.current = null
+    }
+
+    let startX   = e.pageX
+    let scrollX  = el.scrollLeft
+    let lastX    = e.pageX
+    let lastTime = Date.now()
+    let vel      = 0
+
+    const move = (ev: MouseEvent) => {
+      const now = Date.now()
+      const dt  = Math.max(1, now - lastTime)
+      vel     = (ev.pageX - lastX) / dt        // px/ms
+      lastX   = ev.pageX
+      lastTime = now
+      el.scrollLeft = scrollX - (ev.pageX - startX)
+    }
+
+    const up = () => {
+      document.removeEventListener('mousemove', move)
+      document.removeEventListener('mouseup', up)
+      // Kick off momentum — vel is px/ms, convert to px/frame at ~60fps
+      let v = vel * 16
+      const animate = () => {
+        if (Math.abs(v) < 0.3) { momentumRef.current = null; return }
+        el.scrollLeft -= v
+        v *= 0.93   // friction
+        momentumRef.current = { vel: v, frame: requestAnimationFrame(animate) }
+      }
+      momentumRef.current = { vel: v, frame: requestAnimationFrame(animate) }
+    }
+
+    document.addEventListener('mousemove', move)
+    document.addEventListener('mouseup', up)
+  }, [])
 
   const handleSet = useCallback((key: string, lv: number) => {
     setLevels(prev => ({ ...prev, [key]: lv }))
@@ -659,8 +718,10 @@ export function CrystalTechContent() {
 
       {/* Canvas */}
       <div
+        ref={scrollRef}
         className="w-full overflow-x-auto"
-        style={{ borderRadius:12, border:'1px solid rgba(100,200,255,0.15)' }}
+        style={{ borderRadius:12, border:'1px solid rgba(100,200,255,0.15)', cursor:'grab' }}
+        onMouseDown={handleCanvasMouseDown}
       >
         <div style={{
           position:'relative', width:CANVAS_W, height:CANVAS_H,
