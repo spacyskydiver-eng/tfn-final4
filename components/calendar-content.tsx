@@ -57,6 +57,32 @@ import {
 
 type ViewMode = 'timeline' | 'cards' | 'calendar'
 
+/* ------------------------------------------------------------------ */
+/*  Event icons map                                                     */
+/* ------------------------------------------------------------------ */
+
+const EVENT_ICON_MAP: Record<string, string> = {
+  'Mightiest Governor':     '/images/calendar/event_icons/mge_icon.webp',
+  'KvK':                    '/images/calendar/event_icons/reveal.webp',
+  'Ark of Osiris':          '/images/calendar/event_icons/ark.webp',
+  'AoO Registration':       '/images/calendar/event_icons/ark.webp',
+  'Osiris League':          '/images/calendar/event_icons/ark.webp',
+  'More Than Gems':         '/images/calendar/event_icons/mtg.webp',
+  'Wheel of Fortune':       '/images/calendar/event_icons/wheel.webp',
+  'Ceroli Crisis':          '/images/calendar/event_icons/ceroli.webp',
+  'Golden Kingdom':         '/images/calendar/event_icons/golden_kingdom.webp',
+  'Champions of Olympia':   '/images/calendar/event_icons/olympia.webp',
+  "Esmeralda's House":      '/images/calendar/event_icons/esmeralda_house.webp',
+  'Realm of Mystique':      '/images/calendar/event_icons/realm_of_mystique.webp',
+  "Dharluk's Puzzle Box":   '/images/calendar/event_icons/dhalruk.webp',
+  '20 Gold Head Event':     '/images/calendar/event_icons/legendary_head.webp',
+  'Egg / Hammer Event':     '/images/calendar/event_icons/egg_hammer.webp',
+}
+
+function getEventIcon(category: string, title?: string): string | null {
+  return EVENT_ICON_MAP[category] ?? EVENT_ICON_MAP[title ?? ''] ?? null
+}
+
 function formatDate(dateStr: string) {
   const d = new Date(dateStr + 'T00:00:00Z')
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
@@ -689,11 +715,19 @@ function TimelineView({ events, settings, onEdit, onDelete }: {
                 : 'border-border hover:border-primary/30'
             }`}
           >
-            {/* Color stripe */}
-            <div
-              className="w-1 rounded-full flex-shrink-0"
-              style={{ backgroundColor: event.color }}
-            />
+            {/* Event icon or color stripe */}
+            {(() => {
+              const icon = getEventIcon(event.category, event.title)
+              return icon ? (
+                <div className="flex-shrink-0 flex items-center">
+                  <img src={icon} alt={event.category} width={36} height={36}
+                    className="object-contain rounded-lg"
+                    onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0' }} />
+                </div>
+              ) : (
+                <div className="w-1 rounded-full flex-shrink-0" style={{ backgroundColor: event.color }} />
+              )
+            })()}
 
             {/* Content */}
             <div className="flex-1 min-w-0">
@@ -800,6 +834,12 @@ function CardsView({ events, settings, onEdit, onDelete }: {
 
             <CardContent className="pt-4 space-y-3">
               <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start gap-3 min-w-0">
+                  {getEventIcon(event.category, event.title) && (
+                    <img src={getEventIcon(event.category, event.title)!} alt={event.category}
+                      width={40} height={40} className="object-contain rounded-lg flex-shrink-0 mt-0.5"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                  )}
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span
@@ -831,6 +871,7 @@ function CardsView({ events, settings, onEdit, onDelete }: {
                     )}
                   </div>
                 )}
+                </div>{/* close inner text div */}
               </div>
 
               {event.description && (
