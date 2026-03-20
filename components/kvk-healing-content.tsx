@@ -52,7 +52,7 @@ const TROOP_TYPES: TroopType[] = ['infantry', 'cavalry', 'archer', 'siege']
 type Res = { food: number; wood: number; stone: number; gold: number }
 type Counts = Record<'t4' | 't5', Record<TroopType, string>>
 type TroopFocus = 'infantry' | 'cavalry' | 'archer' | 'mixed'
-type Mode = 'cost' | 'from-speeds' | 'from-resources'
+type Mode = 'cost' | 'from-speeds' | 'from-resources' | 'combined'
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                             */
@@ -498,22 +498,39 @@ function ModeFromSpeeds({ healSpd, costRed, tradeRatio }: { healSpd: string; cos
             <ResultRes needed={result.needed} />
           </div>
 
-          {/* Resource bar chart */}
+          {/* Resource bar chart — no tooltip, values shown as axis labels */}
           <div className="rounded-xl border border-border bg-card p-4">
             <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Resource Cost Breakdown</p>
             <ResponsiveContainer width="100%" height={140}>
               <BarChart data={RES_META.filter(r => result.needed[r.key] > 0).map(r => ({ name: r.label, value: result.needed[r.key] }))}
-                margin={{ left: 0, right: 8, top: 0, bottom: 0 }}>
+                margin={{ left: 0, right: 8, top: 16, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
                 <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} />
                 <YAxis tickFormatter={v => fmt(v)} tick={{ fill: '#6b7280', fontSize: 10 }} />
-                <Tooltip contentStyle={{ background: '#1c1c1c', border: '1px solid #333', borderRadius: 8, fontSize: 11 }}
-                  formatter={(v: number) => [fmt(v), '']} />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                <Bar dataKey="value" radius={[4, 4, 0, 0]} label={{ position: 'top', formatter: (v: number) => fmt(v), fill: '#9ca3af', fontSize: 10 }}>
                   {RES_META.filter(r => result.needed[r.key] > 0).map((r, i) => <Cell key={i} fill={r.color} fillOpacity={0.85} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
+          </div>
+
+          {/* Per 10k troops card */}
+          <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Cost Per 10,000 Troops</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              {RES_META.filter(r => result.costPerTroop[r.key] > 0).map(r => (
+                <div key={r.key} className="flex items-center gap-2">
+                  <RokImg src={r.icon} alt={r.label} size={18} />
+                  <span className="text-sm font-semibold tabular-nums" style={{ color: r.color }}>{fmt(result.costPerTroop[r.key] * 10_000)}</span>
+                  <span className="text-xs text-muted-foreground">{r.label}</span>
+                </div>
+              ))}
+              <div className="flex items-center gap-2">
+                <Image src="/images/bundle/healing_speed.png" alt="Speed" width={18} height={18} className="object-contain" />
+                <span className="text-sm font-semibold tabular-nums text-indigo-400">{fmtTime(Math.ceil(applyHelps(result.secsPerTroop * 10_000)))}</span>
+                <span className="text-xs text-muted-foreground">speedup</span>
+              </div>
+            </div>
           </div>
 
           {chartData && (
@@ -657,20 +674,38 @@ function ModeFromResources({ healSpd, costRed, tradeRatio }: { healSpd: string; 
             </div>
           )}
 
+          {/* Per 10k troops card */}
+          <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Cost Per 10,000 Troops</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              {RES_META.filter(r => result.costPerTroop[r.key] > 0).map(r => (
+                <div key={r.key} className="flex items-center gap-2">
+                  <RokImg src={r.icon} alt={r.label} size={18} />
+                  <span className="text-sm font-semibold tabular-nums" style={{ color: r.color }}>{fmt(result.costPerTroop[r.key] * 10_000)}</span>
+                  <span className="text-xs text-muted-foreground">{r.label}</span>
+                </div>
+              ))}
+              <div className="flex items-center gap-2">
+                <Image src="/images/bundle/healing_speed.png" alt="Speed" width={18} height={18} className="object-contain" />
+                <span className="text-sm font-semibold tabular-nums text-indigo-400">{fmtTime(Math.ceil(applyHelps(result.secsPerTroop * 10_000)))}</span>
+                <span className="text-xs text-muted-foreground">speedup</span>
+              </div>
+            </div>
+          </div>
+
           {/* Capacity bar chart — each resource's troop cap */}
           <div className="rounded-xl border border-border bg-card p-4">
             <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Troops Each Resource Can Fund</p>
             <p className="text-xs text-muted-foreground mb-3">The shortest bar is your limiting factor.</p>
             <ResponsiveContainer width="100%" height={result.caps.length * 40 + 20}>
               <BarChart data={result.caps.map(c => ({ name: c.label, troops: Math.min(c.cap, result.maxTroops * 3), fill: c.color }))}
-                layout="vertical" margin={{ left: 8, right: 16, top: 0, bottom: 0 }}>
+                layout="vertical" margin={{ left: 8, right: 60, top: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" horizontal={false} />
                 <XAxis type="number" tickFormatter={v => fmt(v)} tick={{ fill: '#6b7280', fontSize: 10 }} />
                 <YAxis type="category" dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} width={56} />
-                <Tooltip contentStyle={{ background: '#1c1c1c', border: '1px solid #333', borderRadius: 8, fontSize: 11 }}
-                  formatter={(v: number) => [fmt(v) + ' troops', '']} />
                 <ReferenceLine x={result.maxTroops} stroke="#e5e7eb" strokeDasharray="4 4" strokeWidth={1.5} />
-                <Bar dataKey="troops" radius={[0, 4, 4, 0]}>
+                <Bar dataKey="troops" radius={[0, 4, 4, 0]}
+                  label={{ position: 'right', formatter: (v: number) => fmt(v), fill: '#9ca3af', fontSize: 10 }}>
                   {result.caps.map((c, i) => <Cell key={i} fill={c.color} fillOpacity={0.85} />)}
                 </Bar>
               </BarChart>
@@ -843,6 +878,236 @@ function ModeCost({ healSpd, costRed, tradeRatio }: { healSpd: string; costRed: 
 }
 
 /* ------------------------------------------------------------------ */
+/*  Mode D — Combined: enter both speedups AND resources               */
+/* ------------------------------------------------------------------ */
+
+function ModeCombined({ healSpd, costRed, tradeRatio }: { healSpd: string; costRed: string; tradeRatio: number | null }) {
+  const [speedupVal, setSpeedupVal]   = useState('')
+  const [speedupUnit, setSpeedupUnit] = useState<'hours' | 'days'>('hours')
+  const [sFood, setSFood]   = useState('')
+  const [sWood, setSWood]   = useState('')
+  const [sStone, setSStone] = useState('')
+  const [sGold, setSGold]   = useState('')
+  const [t5Pct, setT5Pct]   = useState('30')
+  const [focus, setFocus]   = useState<TroopFocus>('infantry')
+
+  const speedupSecs = useMemo(() => {
+    const v = parseFloat(speedupVal)
+    return (!speedupVal || isNaN(v) || v <= 0) ? null : (speedupUnit === 'days' ? v * 86400 : v * 3600)
+  }, [speedupVal, speedupUnit])
+
+  const stockpile: Res = useMemo(() => ({
+    food: parseStockpile(sFood), wood: parseStockpile(sWood),
+    stone: parseStockpile(sStone), gold: parseStockpile(sGold),
+  }), [sFood, sWood, sStone, sGold])
+
+  const result = useMemo(() => {
+    const hasRes = stockpile.food || stockpile.wood || stockpile.stone || stockpile.gold
+    if (!speedupSecs && !hasRes) return null
+    const hs = parseFloat(healSpd) || 0, cr = parseFloat(costRed) || 0
+    const { secsPerTroop, costPerTroop } = perTroopRates(focus, parseFloat(t5Pct) || 0, hs, cr)
+
+    // Speedup cap
+    const speedupCap = speedupSecs ? maxTroopsFromSpeeds(speedupSecs, secsPerTroop) : Infinity
+
+    // Resource caps (only for resources actually needed by this troop type)
+    const caps: { key: string; label: string; icon: string; color: string; cap: number }[] = []
+    for (const r of RES_META) {
+      if (costPerTroop[r.key] > 0) {
+        caps.push({ ...r, cap: stockpile[r.key] > 0 ? maxTroopsFromResource(stockpile[r.key], costPerTroop[r.key]) : 0 })
+      }
+    }
+
+    const finiteCaps = caps.filter(c => isFinite(c.cap))
+    const resCap = hasRes && finiteCaps.length > 0 ? Math.min(...finiteCaps.map(c => c.cap)) : Infinity
+
+    const maxTroops = Math.min(speedupCap === Infinity ? resCap : speedupCap, resCap)
+    if (!isFinite(maxTroops) || maxTroops <= 0) return null
+
+    // What's the actual bottleneck?
+    const speedupIsLimit = speedupCap <= resCap
+    const resBottleneck = finiteCaps.length > 0 ? finiteCaps.reduce((a, b) => a.cap < b.cap ? a : b) : null
+    const bottleneckLabel = speedupIsLimit && speedupSecs ? 'Speedups' : (resBottleneck?.label ?? 'Resources')
+    const bottleneckIcon  = speedupIsLimit ? null : (resBottleneck?.icon ?? null)
+
+    const needed: Res = {
+      food:  Math.ceil(maxTroops * costPerTroop.food),
+      wood:  Math.ceil(maxTroops * costPerTroop.wood),
+      stone: Math.ceil(maxTroops * costPerTroop.stone),
+      gold:  Math.ceil(maxTroops * costPerTroop.gold),
+    }
+
+    // Surplus/deficit for each resource relative to what the speedup cap needs
+    const surpluses = RES_META.filter(r => costPerTroop[r.key] > 0).map(r => {
+      const forSpeedupCap = isFinite(speedupCap) ? Math.ceil(speedupCap * costPerTroop[r.key]) : null
+      const have = stockpile[r.key]
+      return { ...r, need: forSpeedupCap, have, surplus: forSpeedupCap != null ? have - forSpeedupCap : null }
+    })
+
+    const speedupNeeded = secsPerTroop > 0 ? fmtTime(applyHelps(maxTroops * secsPerTroop)) : null
+    const allNeededEntered = RES_META.every(r => costPerTroop[r.key] === 0 || stockpile[r.key] > 0)
+    const t5f = Math.max(0, Math.min(1, (parseFloat(t5Pct) || 0) / 100))
+    const t5troops = Math.round(maxTroops * t5f), t4troops = maxTroops - t5troops
+    const expectedKills = (tradeRatio && allNeededEntered && speedupSecs) ? Math.floor((t4troops + t5troops) * tradeRatio) : 0
+    const expectedKP    = (tradeRatio && allNeededEntered && speedupSecs) ? Math.floor(t4troops * tradeRatio * KP_PER_UNIT.t4 + t5troops * tradeRatio * KP_PER_UNIT.t5) : 0
+
+    return { maxTroops, speedupCap, resCap, speedupIsLimit, bottleneckLabel, bottleneckIcon, needed, caps, surpluses, secsPerTroop, costPerTroop, speedupNeeded, speedupNeededFull: speedupSecs ? fmtTime(speedupSecs) : null, expectedKills, expectedKP, allNeededEntered }
+  }, [speedupSecs, stockpile, healSpd, costRed, focus, t5Pct, tradeRatio])
+
+  const chartData = useMemo(() => {
+    if (!result) return null
+    const domain = Math.max(result.maxTroops * 1.8, 50_000)
+    return buildScalingData(result.secsPerTroop, result.costPerTroop, stockpile, speedupSecs, domain)
+  }, [result, stockpile, speedupSecs])
+
+  const hasInputs = speedupSecs || stockpile.food || stockpile.wood || stockpile.stone || stockpile.gold
+
+  return (
+    <div className="space-y-4">
+      {/* Inputs */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="rounded-xl border border-border bg-card p-4 space-y-4">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Your Speedups</p>
+          <SpeedupInput val={speedupVal} setVal={setSpeedupVal} unit={speedupUnit} setUnit={setSpeedupUnit} />
+          <div className="pt-2 border-t border-border space-y-3">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Your Resources</p>
+            <div className="grid grid-cols-2 gap-3">
+              {RES_META.map(r => (
+                <ResInput key={r.key} label={r.label} icon={r.icon}
+                  value={r.key === 'food' ? sFood : r.key === 'wood' ? sWood : r.key === 'stone' ? sStone : sGold}
+                  onChange={r.key === 'food' ? setSFood : r.key === 'wood' ? setSWood : r.key === 'stone' ? setSStone : setSGold} />
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Troop Composition</p>
+          <TroopCompositionInputs t5Pct={t5Pct} setT5Pct={setT5Pct} focus={focus} setFocus={setFocus} />
+        </div>
+      </div>
+
+      {result ? (
+        <div className="space-y-4">
+          {/* What's limiting you */}
+          <div className={`rounded-xl border p-4 flex items-center gap-3 ${result.speedupIsLimit ? 'border-indigo-500/30 bg-indigo-500/5' : 'border-red-500/30 bg-red-500/5'}`}>
+            {result.speedupIsLimit
+              ? <Image src="/images/bundle/healing_speed.png" alt="" width={28} height={28} className="object-contain flex-shrink-0" />
+              : result.bottleneckIcon
+                ? <RokImg src={result.bottleneckIcon} alt={result.bottleneckLabel} size={28} />
+                : <AlertTriangle className="h-6 w-6 text-red-400 flex-shrink-0" />
+            }
+            <div>
+              <p className={`text-sm font-semibold ${result.speedupIsLimit ? 'text-indigo-300' : 'text-red-300'}`}>
+                {result.bottleneckLabel} is your limiting factor
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {result.speedupIsLimit
+                  ? `Speedups cap you at ${fmt(result.speedupCap)} — you have enough resources for more`
+                  : `Resources cap you at ${fmt(result.resCap)} — you have enough speedups for more`
+                }
+              </p>
+            </div>
+          </div>
+
+          {/* Hero stats */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-xl border border-primary/25 bg-primary/5 p-4 text-center">
+              <div className="text-2xl font-bold text-primary">{fmt(result.maxTroops)}</div>
+              <div className="text-xs text-muted-foreground mt-1">Max healable</div>
+            </div>
+            <div className={`rounded-xl border p-4 text-center ${result.speedupIsLimit ? 'border-red-500/25 bg-red-500/5' : 'border-border bg-card'}`}>
+              <div className={`text-2xl font-bold ${result.speedupIsLimit ? 'text-red-300' : 'text-foreground'}`}>
+                {isFinite(result.speedupCap) ? fmt(result.speedupCap) : '∞'}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">Speedup cap</div>
+            </div>
+            <div className={`rounded-xl border p-4 text-center ${!result.speedupIsLimit ? 'border-red-500/25 bg-red-500/5' : 'border-border bg-card'}`}>
+              <div className={`text-2xl font-bold ${!result.speedupIsLimit ? 'text-red-300' : 'text-foreground'}`}>
+                {isFinite(result.resCap) ? fmt(result.resCap) : '∞'}
+              </div>
+              <div className="text-xs text-muted-foreground mt-1">Resource cap</div>
+            </div>
+          </div>
+
+          {/* Surplus / deficit table — for each resource, how much you need vs have */}
+          {result.surpluses.some(s => s.need != null) && (
+            <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Resources vs Speedup Cap ({fmt(isFinite(result.speedupCap) ? result.speedupCap : result.maxTroops)} troops)
+              </p>
+              <div className="space-y-2">
+                {result.surpluses.filter(s => s.need != null).map(s => {
+                  const surplus = s.surplus ?? 0
+                  const isShort = surplus < 0
+                  return (
+                    <div key={s.key} className="flex items-center gap-3">
+                      <RokImg src={s.icon} alt={s.label} size={18} />
+                      <span className="text-xs text-muted-foreground w-10">{s.label}</span>
+                      <div className="flex-1 flex items-center gap-2 text-xs">
+                        <span className="tabular-nums text-foreground">{fmt(s.have)}</span>
+                        <span className="text-muted-foreground">have</span>
+                        <span className="text-muted-foreground">·</span>
+                        <span className="tabular-nums text-muted-foreground">{s.need != null ? fmt(s.need) : '—'}</span>
+                        <span className="text-muted-foreground">need</span>
+                      </div>
+                      <span className={`text-xs font-bold tabular-nums ${isShort ? 'text-red-400' : 'text-emerald-400'}`}>
+                        {isShort ? `−${fmt(-surplus)}` : `+${fmt(surplus)}`}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {result.speedupNeeded && (
+            <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
+              <Image src="/images/bundle/healing_speed.png" alt="" width={28} height={28} className="object-contain" />
+              <div>
+                <div className="text-xs text-muted-foreground">Speedups needed for {fmt(result.maxTroops)} troops</div>
+                <div className="text-lg font-bold text-foreground">{result.speedupNeeded} <span className="text-sm font-normal text-muted-foreground">after 30 helps</span></div>
+              </div>
+            </div>
+          )}
+
+          {/* Combined scaling chart — the key view */}
+          {chartData && (
+            <div className="rounded-xl border border-border bg-card p-4">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                Speedups & Resources Together — % Used vs Troop Count
+              </p>
+              <p className="text-xs text-muted-foreground mb-3">
+                Every line starts at 0% and climbs as troop count increases. The first to hit 100% is your limit.
+              </p>
+              <ScalingChart data={chartData} refTroops={result.maxTroops} />
+            </div>
+          )}
+
+          {tradeRatio && result.expectedKP > 0 && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl border border-border bg-card p-3 text-center">
+                <div className="text-xl font-bold">{fmt(result.expectedKills)}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Enemy Kills</div>
+              </div>
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-center">
+                <div className="text-xl font-bold text-primary">{fmt(result.expectedKP)}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Kill Points</div>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-border bg-card/50 p-8 text-center text-muted-foreground text-sm">
+          {hasInputs
+            ? 'Enter both speedups and at least one resource to compare them'
+            : 'Enter your speedups and resources to see what limits you'}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /*  Root                                                                */
 /* ------------------------------------------------------------------ */
 
@@ -854,8 +1119,9 @@ export function KvkHealingContent() {
 
   const MODES: { id: Mode; icon: React.ReactNode; label: string; desc: string }[] = [
     { id: 'cost',           icon: <Swords className="h-4 w-4" />,  label: 'Cost Calculator',    desc: 'Enter troops → get speedup & resource cost' },
-    { id: 'from-speeds',    icon: <Zap className="h-4 w-4" />,     label: 'From Speedups',      desc: 'Enter speedups → see how many you can heal & what resources you need' },
-    { id: 'from-resources', icon: <Package className="h-4 w-4" />, label: 'From Resources',     desc: 'Enter resources → see how many you can heal & what speedup is needed' },
+    { id: 'from-speeds',    icon: <Zap className="h-4 w-4" />,     label: 'From Speedups',      desc: 'Enter speedups → max troops you can heal & resources needed' },
+    { id: 'from-resources', icon: <Package className="h-4 w-4" />, label: 'From Resources',     desc: 'Enter resources → max troops you can heal & speedup needed' },
+    { id: 'combined',       icon: <Swords className="h-4 w-4" />,  label: 'Speedups + Resources', desc: 'Enter both — see what limits you and how they balance against each other' },
   ]
 
   return (
@@ -872,7 +1138,7 @@ export function KvkHealingContent() {
       </div>
 
       {/* Mode selector */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         {MODES.map(m => (
           <button key={m.id} onClick={() => setMode(m.id)}
             className={`rounded-xl border p-3 text-left transition-all ${mode === m.id ? 'border-primary bg-primary/10' : 'border-border bg-card hover:border-primary/40'}`}>
@@ -885,32 +1151,19 @@ export function KvkHealingContent() {
         ))}
       </div>
 
-      {/* Global buffs + KP ratio */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Healing Buffs</p>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Healing Speed %</label>
-              <input type="number" placeholder="90" value={healSpd} onChange={e => setHealSpd(e.target.value)}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Cost Reduction %</label>
-              <input type="number" placeholder="10" value={costRed} onChange={e => setCostRed(e.target.value)}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary" />
-            </div>
+      {/* Global buffs only */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Healing Buffs</p>
+        <div className="grid grid-cols-2 gap-3 max-w-sm">
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Healing Speed %</label>
+            <input type="number" placeholder="90" value={healSpd} onChange={e => setHealSpd(e.target.value)}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary" />
           </div>
-        </div>
-        <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Kill:Death Ratio <span className="normal-case font-normal opacity-50">(optional)</span></p>
-          <div className="flex flex-wrap gap-1.5">
-            {RATIO_OPTIONS.map(opt => (
-              <button key={opt.value} onClick={() => setTradeRatio(tradeRatio === opt.value ? null : opt.value)}
-                className={`rounded-lg border px-2.5 py-1 text-sm font-bold transition-all ${tradeRatio === opt.value ? 'border-primary bg-primary/15 text-primary' : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground'}`}>
-                {opt.display}
-              </button>
-            ))}
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Cost Reduction %</label>
+            <input type="number" placeholder="10" value={costRed} onChange={e => setCostRed(e.target.value)}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary" />
           </div>
         </div>
       </div>
@@ -919,6 +1172,22 @@ export function KvkHealingContent() {
       {mode === 'cost'           && <ModeCost           healSpd={healSpd} costRed={costRed} tradeRatio={tradeRatio} />}
       {mode === 'from-speeds'    && <ModeFromSpeeds     healSpd={healSpd} costRed={costRed} tradeRatio={tradeRatio} />}
       {mode === 'from-resources' && <ModeFromResources  healSpd={healSpd} costRed={costRed} tradeRatio={tradeRatio} />}
+      {mode === 'combined'       && <ModeCombined       healSpd={healSpd} costRed={costRed} tradeRatio={tradeRatio} />}
+
+      {/* KD ratio — bottom */}
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+          Kill:Death Ratio <span className="normal-case font-normal opacity-50">— select to see expected KP in results above</span>
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {RATIO_OPTIONS.map(opt => (
+            <button key={opt.value} onClick={() => setTradeRatio(tradeRatio === opt.value ? null : opt.value)}
+              className={`rounded-lg border px-3 py-1.5 text-sm font-bold transition-all ${tradeRatio === opt.value ? 'border-primary bg-primary/15 text-primary' : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground'}`}>
+              {opt.display}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <p className="text-xs text-muted-foreground bg-secondary/30 rounded-lg px-4 py-2.5">
         Healing time shown after 30 alliance helps — each reduces remaining time by the greater of 1% or 3 minutes.
