@@ -133,7 +133,7 @@ function perTroopRates(focus: TroopFocus, t5Pct: number, healSpd: number, costRe
 // Binary search: max troops where applyHelps(N * secsPerTroop) <= speedupSecs
 function maxTroopsFromSpeeds(speedupSecs: number, secsPerTroop: number): number {
   if (secsPerTroop <= 0) return 0
-  let lo = 0, hi = 10_000_000
+  let lo = 0, hi = 100_000_000
   while (lo < hi) {
     const mid = Math.floor((lo + hi + 1) / 2)
     if (applyHelps(mid * secsPerTroop) <= speedupSecs) lo = mid
@@ -376,6 +376,7 @@ function ResultRes({ needed }: { needed: Res }) {
 function ModeFromSpeeds({ healSpd, costRed, tradeRatio }: { healSpd: string; costRed: string; tradeRatio: number | null }) {
   const [speedupVal, setSpeedupVal]   = useState('')
   const [speedupUnit, setSpeedupUnit] = useState<'hours' | 'days'>('hours')
+  const [targetVal, setTargetVal]     = useState('')  // optional target troop goal
   const [t5Pct, setT5Pct]             = useState('30')
   const [focus, setFocus]             = useState<TroopFocus>('infantry')
 
@@ -384,87 +385,124 @@ function ModeFromSpeeds({ healSpd, costRed, tradeRatio }: { healSpd: string; cos
     return (!speedupVal || isNaN(v) || v <= 0) ? null : (speedupUnit === 'days' ? v * 86400 : v * 3600)
   }, [speedupVal, speedupUnit])
 
+  const targetTroops = useMemo(() => {
+    const v = parseNum(targetVal)
+    return v > 0 ? v : null
+  }, [targetVal])
+
   const result = useMemo(() => {
     if (!speedupSecs) return null
     const hs = parseFloat(healSpd) || 0, cr = parseFloat(costRed) || 0
     const { secsPerTroop, costPerTroop } = perTroopRates(focus, parseFloat(t5Pct) || 0, hs, cr)
     const maxTroops = maxTroopsFromSpeeds(speedupSecs, secsPerTroop)
+
+    // Use target if set, otherwise max
+    const displayTroops = targetTroops ?? maxTroops
     const needed: Res = {
-      food:  Math.ceil(maxTroops * costPerTroop.food),
-      wood:  Math.ceil(maxTroops * costPerTroop.wood),
-      stone: Math.ceil(maxTroops * costPerTroop.stone),
-      gold:  Math.ceil(maxTroops * costPerTroop.gold),
+      food:  Math.ceil(displayTroops * costPerTroop.food),
+      wood:  Math.ceil(displayTroops * costPerTroop.wood),
+      stone: Math.ceil(displayTroops * costPerTroop.stone),
+      gold:  Math.ceil(displayTroops * costPerTroop.gold),
     }
-    const baseHealing = maxTroops * secsPerTroop
-    let expectedKills = 0, expectedKP = 0
-    if (tradeRatio) {
-      const t5f = Math.max(0, Math.min(1, (parseFloat(t5Pct) || 0) / 100))
-      const t5troops = Math.round(maxTroops * t5f), t4troops = maxTroops - t5troops
-      expectedKills = Math.floor((t4troops + t5troops) * tradeRatio)
-      expectedKP = Math.floor(t4troops * tradeRatio * KP_PER_UNIT.t4 + t5troops * tradeRatio * KP_PER_UNIT.t5)
-    }
-    return { maxTroops, needed, secsPerTroop, costPerTroop, baseHealing }
-  }, [speedupSecs, healSpd, costRed, focus, t5Pct, tradeRatio])
+    const speedupNeededForTarget = targetTroops
+      ? fmtTime(applyHelps(targetTroops * secsPerTroop))
+      : null
+    const canAffordTarget = targetTroops ? targetTroops <= maxTroops : null
+    const shortByTroops = targetTroops && !canAffordTarget ? targetTroops - maxTroops : 0
+
+    const t5f = Math.max(0, Math.min(1, (parseFloat(t5Pct) || 0) / 100))
+    const t5troops = Math.round(displayTroops * t5f), t4troops = displayTroops - t5troops
+    const expectedKills = tradeRatio ? Math.floor((t4troops + t5troops) * tradeRatio) : 0
+    const expectedKP    = tradeRatio ? Math.floor(t4troops * tradeRatio * KP_PER_UNIT.t4 + t5troops * tradeRatio * KP_PER_UNIT.t5) : 0
+
+    return { maxTroops, displayTroops, needed, secsPerTroop, costPerTroop, speedupNeededForTarget, canAffordTarget, shortByTroops, expectedKills, expectedKP }
+  }, [speedupSecs, healSpd, costRed, focus, t5Pct, tradeRatio, targetTroops])
 
   const chartData = useMemo(() => {
     if (!result || !speedupSecs) return null
-    const domain = result.maxTroops * 1.5 || 100_000
+    const domain = Math.max(result.maxTroops * 1.5, (targetTroops ?? 0) * 1.5, 50_000)
     return buildScalingData(result.secsPerTroop, result.costPerTroop, null, speedupSecs, domain)
-  }, [result, speedupSecs])
+  }, [result, speedupSecs, targetTroops])
 
   return (
     <div className="space-y-4">
-      {/* Inputs */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <div className="rounded-xl border border-border bg-card p-4 space-y-4">
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Speedups Available</p>
           <SpeedupInput val={speedupVal} setVal={setSpeedupVal} unit={speedupUnit} setUnit={setSpeedupUnit} />
+          <div className="space-y-1 pt-1 border-t border-border">
+            <label className="text-xs text-muted-foreground">Target troop count <span className="opacity-50">(optional goal)</span></label>
+            <input type="text" inputMode="numeric" placeholder="e.g. 200,000" value={targetVal}
+              onChange={e => { let v = e.target.value.replace(/,/g,'').replace(/\D/g,''); if (v) v = parseInt(v).toLocaleString(); setTargetVal(v) }}
+              className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary" />
+          </div>
         </div>
         <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Your Troop Composition</p>
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Troop Composition</p>
           <TroopCompositionInputs t5Pct={t5Pct} setT5Pct={setT5Pct} focus={focus} setFocus={setFocus} />
         </div>
       </div>
 
-      {/* Results */}
       {result ? (
         <div className="space-y-4">
-          {/* Hero stats */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-xl border border-primary/25 bg-primary/5 p-4 text-center">
-              <div className="text-2xl font-bold text-primary">{fmt(result.maxTroops)}</div>
-              <div className="text-xs text-muted-foreground mt-1">Max troops you can heal</div>
-            </div>
-            <div className="rounded-xl border border-amber-500/25 bg-card p-4 text-center">
-              <div className="text-2xl font-bold text-amber-400">{fmtTime(Math.ceil(result.baseHealing))}</div>
-              <div className="text-xs text-muted-foreground mt-1">Base healing time</div>
-            </div>
-            <div className="rounded-xl border border-border bg-card p-4 text-center">
-              <div className="text-2xl font-bold text-foreground">{fmtTime(speedupSecs ?? 0)}</div>
-              <div className="text-xs text-muted-foreground mt-1">Speedups you have</div>
-            </div>
-          </div>
-
-          {/* Resources you'll need */}
-          <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Resources You'll Need for {fmt(result.maxTroops)} troops</p>
-            <ResultRes needed={result.needed} />
-          </div>
-
-          {/* Chart: how many troops at different speedup amounts */}
-          {chartData && (
-            <div className="rounded-xl border border-border bg-card p-4">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Speedup Consumption vs Troop Count</p>
-              <p className="text-xs text-muted-foreground mb-3">How much of your speedups get used at each troop count. 100% = fully used.</p>
-              <ScalingChart data={chartData} refTroops={result.maxTroops} />
+          {/* Can you hit your target? */}
+          {targetTroops && (
+            <div className={`rounded-xl border p-4 flex items-center gap-3 ${result.canAffordTarget ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-red-500/30 bg-red-500/5'}`}>
+              {result.canAffordTarget
+                ? <CheckCircle2 className="h-5 w-5 text-emerald-400 flex-shrink-0" />
+                : <AlertTriangle className="h-5 w-5 text-red-400 flex-shrink-0" />
+              }
+              <div>
+                <p className={`text-sm font-semibold ${result.canAffordTarget ? 'text-emerald-300' : 'text-red-300'}`}>
+                  {result.canAffordTarget
+                    ? `Your speedups cover your target of ${fmt(targetTroops)} troops`
+                    : `${fmt(result.shortByTroops)} troops short of your goal`
+                  }
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {result.canAffordTarget
+                    ? `You can heal up to ${fmt(result.maxTroops)} — you have ${fmt(result.maxTroops - targetTroops)} spare`
+                    : `Your speedups only cover ${fmt(result.maxTroops)} troops`
+                  }
+                </p>
+              </div>
             </div>
           )}
 
-          {/* Resource breakdown chart */}
+          {/* Hero stats */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl border border-primary/25 bg-primary/5 p-4 text-center">
+              <div className="text-2xl font-bold text-primary">{fmt(result.maxTroops)}</div>
+              <div className="text-xs text-muted-foreground mt-1">Max you can heal</div>
+            </div>
+            <div className="rounded-xl border border-border bg-card p-4 text-center">
+              <div className="text-2xl font-bold text-foreground">{fmtTime(speedupSecs ?? 0)}</div>
+              <div className="text-xs text-muted-foreground mt-1">Speedups available</div>
+            </div>
+          </div>
+
+          {targetTroops && result.speedupNeededForTarget && (
+            <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
+              <Image src="/images/bundle/healing_speed.png" alt="" width={28} height={28} className="object-contain" />
+              <div>
+                <div className="text-xs text-muted-foreground">Speedups needed for {fmt(targetTroops)} troops</div>
+                <div className="text-lg font-bold text-foreground">{result.speedupNeededForTarget} <span className="text-sm font-normal text-muted-foreground">after 30 helps</span></div>
+              </div>
+            </div>
+          )}
+
+          <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+              Resources Needed for {fmt(result.displayTroops)} troops
+            </p>
+            <ResultRes needed={result.needed} />
+          </div>
+
+          {/* Resource bar chart */}
           <div className="rounded-xl border border-border bg-card p-4">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Resource Cost at {fmt(result.maxTroops)} troops</p>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Resource Cost Breakdown</p>
             <ResponsiveContainer width="100%" height={140}>
-              <BarChart data={RES_META.filter(r => result.needed[r.key] > 0).map(r => ({ name: r.label, value: result.needed[r.key], fill: r.color }))}
+              <BarChart data={RES_META.filter(r => result.needed[r.key] > 0).map(r => ({ name: r.label, value: result.needed[r.key] }))}
                 margin={{ left: 0, right: 8, top: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
                 <XAxis dataKey="name" tick={{ fill: '#9ca3af', fontSize: 11 }} />
@@ -478,15 +516,23 @@ function ModeFromSpeeds({ healSpd, costRed, tradeRatio }: { healSpd: string; cos
             </ResponsiveContainer>
           </div>
 
-          {tradeRatio && result.maxTroops > 0 && (
+          {chartData && (
+            <div className="rounded-xl border border-border bg-card p-4">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Speedup Usage vs Troop Count</p>
+              <p className="text-xs text-muted-foreground mb-3">100% = speedups fully used. Dashed line = your current max.</p>
+              <ScalingChart data={chartData} refTroops={result.maxTroops} />
+            </div>
+          )}
+
+          {tradeRatio && result.expectedKP > 0 && (
             <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-border bg-card p-4 text-center">
-                <div className="text-xl font-bold">{fmt(Math.floor(result.maxTroops * tradeRatio))}</div>
-                <div className="text-xs text-muted-foreground mt-1">Enemy Kills</div>
+              <div className="rounded-xl border border-border bg-card p-3 text-center">
+                <div className="text-xl font-bold">{fmt(result.expectedKills)}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Enemy Kills</div>
               </div>
-              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-center">
-                <div className="text-xl font-bold text-primary">{fmt(Math.floor(result.maxTroops * tradeRatio * (parseFloat(t5Pct)/100 > 0.5 ? KP_PER_UNIT.t5 : KP_PER_UNIT.t4)))}</div>
-                <div className="text-xs text-muted-foreground mt-1">~Kill Points</div>
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-center">
+                <div className="text-xl font-bold text-primary">{fmt(result.expectedKP)}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Kill Points</div>
               </div>
             </div>
           )}
@@ -509,8 +555,6 @@ function ModeFromResources({ healSpd, costRed, tradeRatio }: { healSpd: string; 
   const [sWood, setSWood]   = useState('')
   const [sStone, setSStone] = useState('')
   const [sGold, setSGold]   = useState('')
-  const [speedupVal, setSpeedupVal]   = useState('')
-  const [speedupUnit, setSpeedupUnit] = useState<'hours' | 'days'>('hours')
   const [t5Pct, setT5Pct]   = useState('30')
   const [focus, setFocus]   = useState<TroopFocus>('infantry')
 
@@ -519,42 +563,42 @@ function ModeFromResources({ healSpd, costRed, tradeRatio }: { healSpd: string; 
     stone: parseStockpile(sStone), gold: parseStockpile(sGold),
   }), [sFood, sWood, sStone, sGold])
 
-  const speedupSecs = useMemo(() => {
-    const v = parseFloat(speedupVal)
-    return (!speedupVal || isNaN(v) || v <= 0) ? null : (speedupUnit === 'days' ? v * 86400 : v * 3600)
-  }, [speedupVal, speedupUnit])
-
   const result = useMemo(() => {
     const hasAny = stockpile.food || stockpile.wood || stockpile.stone || stockpile.gold
     if (!hasAny) return null
     const hs = parseFloat(healSpd) || 0, cr = parseFloat(costRed) || 0
     const { secsPerTroop, costPerTroop } = perTroopRates(focus, parseFloat(t5Pct) || 0, hs, cr)
 
-    // How many troops each resource can fund
+    // Only include resources that are actually relevant to this troop type
+    // (e.g. infantry uses food+wood, so stone/gold with 0 balance means those aren't constraints)
     const caps: { key: string; label: string; icon: string; color: string; cap: number }[] = []
     for (const r of RES_META) {
-      if (stockpile[r.key] > 0 && costPerTroop[r.key] > 0) {
-        caps.push({ ...r, cap: maxTroopsFromResource(stockpile[r.key], costPerTroop[r.key]) })
+      if (costPerTroop[r.key] > 0) {
+        // If user entered 0 for a resource that IS needed, that's a real constraint (0 troops)
+        caps.push({ ...r, cap: stockpile[r.key] > 0 ? maxTroopsFromResource(stockpile[r.key], costPerTroop[r.key]) : 0 })
       }
-    }
-    if (speedupSecs && secsPerTroop > 0) {
-      caps.push({ key: 'speedups', label: 'Speedups', icon: '/images/bundle/healing_speed.png', color: '#818cf8', cap: maxTroopsFromSpeeds(speedupSecs, secsPerTroop) })
     }
 
     const finiteCaps = caps.filter(c => isFinite(c.cap))
     const maxTroops = finiteCaps.length > 0 ? Math.min(...finiteCaps.map(c => c.cap)) : 0
     const bottleneck = finiteCaps.length > 0 ? finiteCaps.reduce((a, b) => a.cap < b.cap ? a : b) : null
-
     const speedupNeeded = secsPerTroop > 0 ? fmtTime(applyHelps(maxTroops * secsPerTroop)) : null
 
-    return { maxTroops, caps, bottleneck, secsPerTroop, costPerTroop, speedupNeeded }
-  }, [stockpile, speedupSecs, healSpd, costRed, focus, t5Pct])
+    // KP only makes sense if we have a real constrained result (at least one resource entered for each needed type)
+    const allNeededEntered = RES_META.every(r => costPerTroop[r.key] === 0 || stockpile[r.key] > 0)
+    const t5f = Math.max(0, Math.min(1, (parseFloat(t5Pct) || 0) / 100))
+    const t5troops = Math.round(maxTroops * t5f), t4troops = maxTroops - t5troops
+    const expectedKills = (tradeRatio && allNeededEntered) ? Math.floor((t4troops + t5troops) * tradeRatio) : 0
+    const expectedKP    = (tradeRatio && allNeededEntered) ? Math.floor(t4troops * tradeRatio * KP_PER_UNIT.t4 + t5troops * tradeRatio * KP_PER_UNIT.t5) : 0
+
+    return { maxTroops, caps, bottleneck, secsPerTroop, costPerTroop, speedupNeeded, expectedKills, expectedKP, allNeededEntered }
+  }, [stockpile, healSpd, costRed, focus, t5Pct, tradeRatio])
 
   const chartData = useMemo(() => {
-    if (!result) return null
-    const domain = (result.maxTroops || 0) * 2 || 100_000
-    return buildScalingData(result.secsPerTroop, result.costPerTroop, stockpile, speedupSecs, domain)
-  }, [result, stockpile, speedupSecs])
+    if (!result || result.maxTroops <= 0) return null
+    const domain = result.maxTroops * 2 || 100_000
+    return buildScalingData(result.secsPerTroop, result.costPerTroop, stockpile, null, domain)
+  }, [result, stockpile])
 
   return (
     <div className="space-y-4">
@@ -564,9 +608,6 @@ function ModeFromResources({ healSpd, costRed, tradeRatio }: { healSpd: string; 
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Your Resources</p>
           <div className="grid grid-cols-2 gap-3">
             {RES_META.map(r => <ResInput key={r.key} label={r.label} icon={r.icon} value={r.key === 'food' ? sFood : r.key === 'wood' ? sWood : r.key === 'stone' ? sStone : sGold} onChange={r.key === 'food' ? setSFood : r.key === 'wood' ? setSWood : r.key === 'stone' ? setSStone : setSGold} />)}
-          </div>
-          <div className="pt-1 border-t border-border">
-            <SpeedupInput val={speedupVal} setVal={setSpeedupVal} unit={speedupUnit} setUnit={setSpeedupUnit} />
           </div>
         </div>
         <div className="rounded-xl border border-border bg-card p-4 space-y-3">
@@ -642,6 +683,19 @@ function ModeFromResources({ healSpd, costRed, tradeRatio }: { healSpd: string; 
               <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">% of Stockpile Used vs Troop Count</p>
               <p className="text-xs text-muted-foreground mb-3">Lines show what % of each resource gets consumed. The first line to hit 100% is your limit.</p>
               <ScalingChart data={chartData} refTroops={result.maxTroops} />
+            </div>
+          )}
+
+          {tradeRatio && result.expectedKP > 0 && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl border border-border bg-card p-3 text-center">
+                <div className="text-xl font-bold">{fmt(result.expectedKills)}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Enemy Kills</div>
+              </div>
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-center">
+                <div className="text-xl font-bold text-primary">{fmt(result.expectedKP)}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Kill Points</div>
+              </div>
             </div>
           )}
         </div>
@@ -867,7 +921,7 @@ export function KvkHealingContent() {
       {mode === 'from-resources' && <ModeFromResources  healSpd={healSpd} costRed={costRed} tradeRatio={tradeRatio} />}
 
       <p className="text-xs text-muted-foreground bg-secondary/30 rounded-lg px-4 py-2.5">
-        All calculations use the exact same formulas as Kings Codex. Healing time shown after 30 alliance helps (each reduces remaining time by the greater of 1% or 3 minutes).
+        Healing time shown after 30 alliance helps — each reduces remaining time by the greater of 1% or 3 minutes.
       </p>
     </div>
   )
