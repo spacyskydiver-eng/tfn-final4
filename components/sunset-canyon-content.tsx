@@ -44,7 +44,7 @@ interface CommanderInfo {
 const COMMANDER_DB: CommanderInfo[] = [
   // ── LEGENDARY infantry ──────────────────────────────────────────────
   { name: 'Alexander the Great',     rarity: 'legendary', troopType: 'infantry' },
-  { name: 'Björn Ironside',          rarity: 'legendary', troopType: 'infantry' },
+  { name: 'Björn Ironside',          rarity: 'epic',      troopType: 'infantry' },
   { name: 'Charles Martel',          rarity: 'legendary', troopType: 'infantry' },
   { name: 'Cheok Jun-Gyeong',        rarity: 'legendary', troopType: 'infantry' },
   { name: 'Constantine I',           rarity: 'legendary', troopType: 'infantry' },

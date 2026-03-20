@@ -25,18 +25,16 @@ import {
 } from 'lucide-react'
 
 /* ------------------------------------------------------------------ */
-/*  Data — exact from gathering-of-heroes-calculator-main              */
+/*  Constants — exact from gathering-of-heroes-calculator-main         */
 /* ------------------------------------------------------------------ */
 
-// Token costs per commander by tier
 const T1_COST = 200
 const T2_COST = 500
 const T3_COST = 1000
 
-// Minimum tokens that must be spent in T1 to unlock T2,
-// and minimum T1+T2 combined spend to unlock T3
-const T2_MIN_SPEND = 400   // must spend 400 in T1 first
-const T3_MIN_SPEND = 1400  // must spend 1400 in T1+T2 combined first
+// Minimum tokens that must be spent in lower tiers before unlocking
+const T2_MIN_SPEND = 400   // must spend ≥400 in T1 to unlock T2
+const T3_MIN_SPEND = 1400  // must spend ≥1400 in T1+T2 to unlock T3
 
 const EVENT_DAYS = 5
 
@@ -44,19 +42,29 @@ const EVENT_DAYS = 5
 const DAILY_TOKENS_PER_DAY = 18
 const DAILY_TOKENS = DAILY_TOKENS_PER_DAY * EVENT_DAYS // 90
 
-// Challenge missions (one-time)
 const CHALLENGE_MISSIONS = [
-  { id: 'login5',     label: 'Login 5 Days',                tokens: 10  },
-  { id: 'gems10k',    label: 'Spend 10,000 Gems',           tokens: 20  },
-  { id: 'gems50k',    label: 'Spend 50,000 Gems',           tokens: 100 },
-  { id: 'power600k',  label: 'Increase Troop Power 600K',   tokens: 100 },
+  { id: 'login5',     label: 'Log In 5 Days',                    tokens: 10  },
+  { id: 'gems10k',    label: 'Spend 10,000 Gems',                tokens: 20  },
+  { id: 'gems50k',    label: 'Spend 50,000 Gems',                tokens: 100 },
+  { id: 'power600k',  label: 'Increase Troop Power (600K)',       tokens: 100 },
 ] as const
 
 type ChallengeId = (typeof CHALLENGE_MISSIONS)[number]['id']
 
-// Repeatable missions
-const SPEEDUP_RATE = 480  // 480 min speedups = 2 tokens
+// Repeatable rates
 const GEMS_RATE    = 2000 // 2000 gems = 30 tokens
+const SPEEDUP_RATE = 480  // every 480 minutes of speedups = 2 tokens
+
+type SpeedupMode = 'auto' | 'days' | 'minutes'
+type SpeedupCategory = 'building' | 'research' | 'training' | 'healing' | 'universal'
+
+const SPEEDUP_CATEGORIES: { id: SpeedupCategory; label: string }[] = [
+  { id: 'building',   label: 'Building'   },
+  { id: 'research',   label: 'Research'   },
+  { id: 'training',   label: 'Training'   },
+  { id: 'healing',    label: 'Healing'    },
+  { id: 'universal',  label: 'Universal'  },
+]
 
 type Category = 'Infantry' | 'Archer' | 'Cavalry' | 'Leadership' | 'Engineering'
 
@@ -99,46 +107,46 @@ const TIERS_DATA: TierData[] = [
     borderColor: 'border-blue-500/30',
     bgColor: 'bg-blue-500/10',
     commanders: [
-      // Infantry
-      { name: 'Bai Qi',               category: 'Infantry'    },
-      { name: 'William Wallace',       category: 'Infantry'    },
-      { name: 'Guan Yu',              category: 'Infantry'    },
-      { name: 'Harald Sigurdsson',    category: 'Infantry'    },
-      { name: 'Zenobia',              category: 'Infantry'    },
-      { name: "K'inich Janaab Pakal", category: 'Infantry'    },
-      { name: 'Leonidas I',           category: 'Infantry'    },
-      { name: 'Ivar',                 category: 'Infantry'    },
-      // Archer
-      { name: 'Qin Shi Huang',        category: 'Archer'      },
-      { name: 'Shajar al-Durr',       category: 'Archer'      },
-      { name: 'Ramesses II',          category: 'Archer'      },
-      { name: 'Amanitore',            category: 'Archer'      },
-      { name: 'Gilgamesh',            category: 'Archer'      },
-      { name: 'Nebuchadnezzar II',    category: 'Archer'      },
-      { name: 'Artemisia I',          category: 'Archer'      },
-      // Cavalry
-      { name: 'Arthur Pendragon',     category: 'Cavalry'     },
-      { name: 'Gang Gam-chan',        category: 'Cavalry'     },
-      { name: 'Belisarius',           category: 'Cavalry'     },
-      { name: 'Attila',              category: 'Cavalry'     },
-      { name: 'William I',            category: 'Cavalry'     },
-      { name: 'Xiang Yu',             category: 'Cavalry'     },
-      { name: 'Jadwiga',              category: 'Cavalry'     },
-      { name: 'Chandragupta Maurya',  category: 'Cavalry'     },
-      // Leadership
-      { name: 'Philip II',            category: 'Leadership'  },
-      { name: 'Hector',               category: 'Leadership'  },
-      { name: 'Honda Tadakatsu',      category: 'Leadership'  },
-      { name: 'Yi Sun Sin',           category: 'Leadership'  },
-      { name: 'Trajan',               category: 'Leadership'  },
-      { name: 'Theodora',             category: 'Leadership'  },
-      { name: 'Moctezuma I',          category: 'Leadership'  },
-      { name: 'Suleiman I',           category: 'Leadership'  },
-      // Engineering
-      { name: 'John Hunyadi',         category: 'Engineering' },
-      { name: 'Alfonso de Albuquerque', category: 'Engineering' },
-      { name: 'Mary I',               category: 'Engineering' },
-      { name: 'Archimedes',           category: 'Engineering' },
+      // Infantry (8)
+      { name: 'Bai Qi',                  category: 'Infantry'    },
+      { name: 'William Wallace',          category: 'Infantry'    },
+      { name: 'Guan Yu',                 category: 'Infantry'    },
+      { name: 'Harald Sigurdsson',       category: 'Infantry'    },
+      { name: 'Zenobia',                 category: 'Infantry'    },
+      { name: "K'inich Janaab Pakal",    category: 'Infantry'    },
+      { name: 'Leonidas I',              category: 'Infantry'    },
+      { name: 'Ivar',                    category: 'Infantry'    },
+      // Archer (7)
+      { name: 'Qin Shi Huang',           category: 'Archer'      },
+      { name: 'Shajar al-Durr',          category: 'Archer'      },
+      { name: 'Ramesses II',             category: 'Archer'      },
+      { name: 'Amanitore',               category: 'Archer'      },
+      { name: 'Gilgamesh',               category: 'Archer'      },
+      { name: 'Nebuchadnezzar II',       category: 'Archer'      },
+      { name: 'Artemisia I',             category: 'Archer'      },
+      // Cavalry (8)
+      { name: 'Arthur Pendragon',        category: 'Cavalry'     },
+      { name: 'Gang Gam-chan',           category: 'Cavalry'     },
+      { name: 'Belisarius',              category: 'Cavalry'     },
+      { name: 'Attila',                  category: 'Cavalry'     },
+      { name: 'William I',               category: 'Cavalry'     },
+      { name: 'Xiang Yu',                category: 'Cavalry'     },
+      { name: 'Jadwiga',                 category: 'Cavalry'     },
+      { name: 'Chandragupta Maurya',     category: 'Cavalry'     },
+      // Leadership (8)
+      { name: 'Philip II',               category: 'Leadership'  },
+      { name: 'Hector',                  category: 'Leadership'  },
+      { name: 'Honda Tadakatsu',         category: 'Leadership'  },
+      { name: 'Yi Sun Sin',              category: 'Leadership'  },
+      { name: 'Trajan',                  category: 'Leadership'  },
+      { name: 'Theodora',                category: 'Leadership'  },
+      { name: 'Moctezuma I',             category: 'Leadership'  },
+      { name: 'Suleiman I',              category: 'Leadership'  },
+      // Engineering (4)
+      { name: 'John Hunyadi',            category: 'Engineering' },
+      { name: 'Alfonso de Albuquerque',  category: 'Engineering' },
+      { name: 'Mary I',                  category: 'Engineering' },
+      { name: 'Archimedes',              category: 'Engineering' },
     ],
   },
   {
@@ -150,33 +158,33 @@ const TIERS_DATA: TierData[] = [
     borderColor: 'border-purple-500/30',
     bgColor: 'bg-purple-500/10',
     commanders: [
-      // Infantry
-      { name: 'Liu Che',              category: 'Infantry'    },
-      { name: 'Gorgo',                category: 'Infantry'    },
-      { name: 'Tariq ibn Ziyad',      category: 'Infantry'    },
-      { name: 'Sargon the Great',     category: 'Infantry'    },
-      { name: 'Flavius Aetius',       category: 'Infantry'    },
-      // Archer
-      { name: 'Zhuge Liang',          category: 'Archer'      },
-      { name: 'Hermann',              category: 'Archer'      },
-      { name: 'Ashurbanipal',         category: 'Archer'      },
-      { name: 'Boudica',              category: 'Archer'      },
-      { name: 'Henry V',              category: 'Archer'      },
-      { name: 'Dido',                 category: 'Archer'      },
-      // Cavalry
-      { name: 'Huo Qubing',           category: 'Cavalry'     },
-      { name: 'Joan of Arc',          category: 'Cavalry'     },
-      { name: 'Alexander Nevsky',     category: 'Cavalry'     },
-      { name: 'Justinian I',          category: 'Cavalry'     },
-      { name: 'Jan Zizka',            category: 'Cavalry'     },
-      // Leadership
-      { name: 'Heraclius',            category: 'Leadership'  },
-      { name: 'Lapulapu',             category: 'Leadership'  },
-      // Engineering
-      { name: 'Gonzalo de Córdoba',   category: 'Engineering' },
-      { name: 'Gajah Mada',           category: 'Engineering' },
-      { name: 'Margaret I',           category: 'Engineering' },
-      { name: 'Babur',                category: 'Engineering' },
+      // Infantry (5)
+      { name: 'Liu Che',                 category: 'Infantry'    },
+      { name: 'Gorgo',                   category: 'Infantry'    },
+      { name: 'Tariq ibn Ziyad',         category: 'Infantry'    },
+      { name: 'Sargon the Great',        category: 'Infantry'    },
+      { name: 'Flavius Aetius',          category: 'Infantry'    },
+      // Archer (6)
+      { name: 'Zhuge Liang',             category: 'Archer'      },
+      { name: 'Hermann',                 category: 'Archer'      },
+      { name: 'Ashurbanipal',            category: 'Archer'      },
+      { name: 'Boudica',                 category: 'Archer'      },
+      { name: 'Henry V',                 category: 'Archer'      },
+      { name: 'Dido',                    category: 'Archer'      },
+      // Cavalry (5)
+      { name: 'Huo Qubing',              category: 'Cavalry'     },
+      { name: 'Joan of Arc',             category: 'Cavalry'     },
+      { name: 'Alexander Nevsky',        category: 'Cavalry'     },
+      { name: 'Justinian I',             category: 'Cavalry'     },
+      { name: 'Jan Zizka',               category: 'Cavalry'     },
+      // Leadership (2)
+      { name: 'Heraclius',               category: 'Leadership'  },
+      { name: 'Lapulapu',                category: 'Leadership'  },
+      // Engineering (4)
+      { name: 'Gonzalo de Córdoba',      category: 'Engineering' },
+      { name: 'Gajah Mada',              category: 'Engineering' },
+      { name: 'Margaret I',              category: 'Engineering' },
+      { name: 'Babur',                   category: 'Engineering' },
     ],
   },
   {
@@ -188,66 +196,131 @@ const TIERS_DATA: TierData[] = [
     borderColor: 'border-yellow-500/30',
     bgColor: 'bg-yellow-500/10',
     commanders: [
-      // Infantry
-      { name: 'Scipio Africanus',     category: 'Infantry'    },
-      { name: 'Tokugawa Ieyasu',      category: 'Infantry'    },
-      { name: 'Scipio Aemilianus',    category: 'Infantry'    },
-      { name: 'Sun Tzu Prime',        category: 'Infantry'    },
-      // Archer
-      { name: 'Choe Yeong',           category: 'Archer'      },
-      { name: 'Shapur I',             category: 'Archer'      },
-      // Cavalry
-      { name: 'Achilles',             category: 'Cavalry'     },
-      { name: 'Subutai',              category: 'Cavalry'     },
-      { name: 'David IV',             category: 'Cavalry'     },
-      { name: 'Eleanor of Aquitaine', category: 'Cavalry'     },
-      // Leadership
-      { name: 'Matthias I',           category: 'Leadership'  },
-      // Engineering
-      { name: 'Stephen III',          category: 'Engineering' },
+      // Infantry (4)
+      { name: 'Scipio Africanus',        category: 'Infantry'    },
+      { name: 'Tokugawa Ieyasu',         category: 'Infantry'    },
+      { name: 'Scipio Aemilianus',       category: 'Infantry'    },
+      { name: 'Sun Tzu Prime',           category: 'Infantry'    },
+      // Archer (2)
+      { name: 'Choe Yeong',              category: 'Archer'      },
+      { name: 'Shapur I',                category: 'Archer'      },
+      // Cavalry (4)
+      { name: 'Achilles',                category: 'Cavalry'     },
+      { name: 'Subutai',                 category: 'Cavalry'     },
+      { name: 'David IV',                category: 'Cavalry'     },
+      { name: 'Eleanor of Aquitaine',    category: 'Cavalry'     },
+      // Leadership (1)
+      { name: 'Matthias I',              category: 'Leadership'  },
+      // Engineering (1)
+      { name: 'Stephen III',             category: 'Engineering' },
     ],
   },
 ]
 
 /* ------------------------------------------------------------------ */
-/*  Cost calculation                                                    */
+/*  Speedup time parser — matches original source exactly             */
+/*  Accepts: "1d 2h 30m", "1:30:00", "1:30", "2400", "2.5" (days)   */
 /* ------------------------------------------------------------------ */
 
-function calcCost(selected: Set<string>): {
+function parseSpeedupTime(timeStr: string, mode: SpeedupMode = 'auto'): number {
+  if (!timeStr) return 0
+  const s = timeStr.trim()
+  if (!s) return 0
+
+  if (mode === 'days') {
+    const d = parseFloat(s)
+    return isNaN(d) ? 0 : Math.floor(d * 1440)
+  }
+  if (mode === 'minutes') {
+    const m = parseFloat(s)
+    return isNaN(m) ? 0 : Math.floor(m)
+  }
+
+  // auto mode
+  let total = 0
+
+  // HH:MM or HH:MM:SS
+  const timeMatch = s.match(/(\d+):(\d+)(?::(\d+))?/)
+  if (timeMatch) {
+    total += parseInt(timeMatch[1]) * 60 + parseInt(timeMatch[2])
+    return total
+  }
+
+  const dayMatch  = s.match(/(\d+)\s*d/i)
+  const hourMatch = s.match(/(\d+)\s*h/i)
+  const minMatch  = s.match(/(\d+)\s*m(?!s)/i)
+
+  if (dayMatch)  total += parseInt(dayMatch[1]) * 1440
+  if (hourMatch) total += parseInt(hourMatch[1]) * 60
+  if (minMatch)  total += parseInt(minMatch[1])
+
+  // plain number fallback → treat as minutes
+  if (total === 0 && /^\d+(\.\d+)?$/.test(s)) {
+    total = Math.floor(parseFloat(s))
+  }
+
+  return total
+}
+
+function formatSpeedupValue(val: number, mode: SpeedupMode): string {
+  if (!val) return ''
+  if (mode === 'days') {
+    const d = val / 1440
+    return d % 1 === 0 ? d.toString() : d.toFixed(2)
+  }
+  return val.toString()
+}
+
+/* ------------------------------------------------------------------ */
+/*  Cost calculation — matches original calculateTotalCost exactly    */
+/* ------------------------------------------------------------------ */
+
+interface CostInfo {
+  baseCost: number
+  total: number
+  t1Count: number
+  t2Count: number
+  t3Count: number
   t1Cost: number
   t2Cost: number
   t3Cost: number
-  t1Shortfall: number
-  t2Shortfall: number
-  total: number
-} {
-  const t1Sel = TIERS_DATA[0].commanders.filter((c) => selected.has(c.name)).length
-  const t2Sel = TIERS_DATA[1].commanders.filter((c) => selected.has(c.name)).length
-  const t3Sel = TIERS_DATA[2].commanders.filter((c) => selected.has(c.name)).length
-
-  const t1Cost = t1Sel * T1_COST
-  const t2Cost = t2Sel * T2_COST
-  const t3Cost = t3Sel * T3_COST
-
-  const needT2 = t2Sel > 0 || t3Sel > 0
-  const needT3 = t3Sel > 0
-
-  // If accessing T2, must have spent ≥400 in T1
-  const t1Shortfall = needT2 ? Math.max(0, T2_MIN_SPEND - t1Cost) : 0
-  const effectiveT1 = t1Cost + t1Shortfall
-
-  // If accessing T3, T1+T2 combined must be ≥1400
-  const t1t2Combined = effectiveT1 + t2Cost
-  const t2Shortfall = needT3 ? Math.max(0, T3_MIN_SPEND - t1t2Combined) : 0
-
-  const total = t1t2Combined + t2Shortfall + t3Cost
-
-  return { t1Cost, t2Cost, t3Cost, t1Shortfall, t2Shortfall, total }
+  shortfall: number   // tokens needed beyond selections (to meet minSpend)
 }
 
-function calcSpeedupTokens(minutes: number): number {
-  if (!minutes || minutes < 0) return 0
-  return Math.floor(minutes / SPEEDUP_RATE) * 2
+function calcCost(selected: Set<string>): CostInfo {
+  const t1Cmds = TIERS_DATA[0].commanders.filter((c) => selected.has(c.name))
+  const t2Cmds = TIERS_DATA[1].commanders.filter((c) => selected.has(c.name))
+  const t3Cmds = TIERS_DATA[2].commanders.filter((c) => selected.has(c.name))
+
+  const t1Cost = t1Cmds.length * T1_COST
+  const t2Cost = t2Cmds.length * T2_COST
+  const t3Cost = t3Cmds.length * T3_COST
+  const baseCost = t1Cost + t2Cost + t3Cost
+
+  // Find highest tier selected and its minSpend
+  let maxMinSpend = 0
+  let highestTierId = 0
+  let highestTierCost = 0
+
+  if (t3Cmds.length > 0) { maxMinSpend = T3_MIN_SPEND; highestTierId = 3; highestTierCost = t3Cost }
+  else if (t2Cmds.length > 0) { maxMinSpend = T2_MIN_SPEND; highestTierId = 2; highestTierCost = t2Cost }
+
+  // Total cost = max(baseCost, minSpend + highestTierCost)
+  const total = highestTierId > 0
+    ? Math.max(baseCost, maxMinSpend + highestTierCost)
+    : baseCost
+
+  return {
+    baseCost,
+    total,
+    t1Count: t1Cmds.length,
+    t2Count: t2Cmds.length,
+    t3Count: t3Cmds.length,
+    t1Cost,
+    t2Cost,
+    t3Cost,
+    shortfall: total - baseCost,
+  }
 }
 
 function calcGemTokens(gems: number): number {
@@ -260,26 +333,54 @@ function calcGemTokens(gems: number): number {
 /* ------------------------------------------------------------------ */
 
 export function GatheringOfHeroesContent() {
+  // Challenge missions
   const [checkedChallenges, setCheckedChallenges] = useState<Set<ChallengeId>>(new Set())
-  const [speedupMinutes, setSpeedupMinutes] = useState('')
+
+  // Gems
   const [gemsInput, setGemsInput] = useState('')
+
+  // Speedup per-category (manual entry)
+  const [speedupMode, setSpeedupMode] = useState<SpeedupMode>('auto')
+  const [speedupCats, setSpeedupCats] = useState<Record<SpeedupCategory, number>>({
+    building: 0, research: 0, training: 0, healing: 0, universal: 0,
+  })
+  // Speedup calculator (paste from external tool)
+  const [calcStr, setCalcStr] = useState('')
+
+  // Commander selection
   const [selectedCommanders, setSelectedCommanders] = useState<Set<string>>(new Set())
   const [showChallenges, setShowChallenges] = useState(true)
+  const [showSpeedupCats, setShowSpeedupCats] = useState(false)
   const [expandedTiers, setExpandedTiers] = useState<Set<number>>(new Set([1, 2, 3]))
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set())
 
+  /* ---- derived values ---- */
   const challengeTokens = useMemo(
     () => CHALLENGE_MISSIONS.filter((m) => checkedChallenges.has(m.id)).reduce((s, m) => s + m.tokens, 0),
     [checkedChallenges],
   )
-  const speedupTokens = useMemo(() => calcSpeedupTokens(parseFloat(speedupMinutes) || 0), [speedupMinutes])
-  const gemTokens     = useMemo(() => calcGemTokens(parseFloat(gemsInput) || 0), [gemsInput])
-  const totalTokens   = DAILY_TOKENS + challengeTokens + speedupTokens + gemTokens
+
+  const gemTokens = useMemo(() => calcGemTokens(parseFloat(gemsInput) || 0), [gemsInput])
+
+  // speedup = (sum of per-category minutes + parsed calculator minutes) / 480 * 2
+  const speedupMinutesTotal = useMemo(
+    () => Object.values(speedupCats).reduce((a, b) => a + b, 0),
+    [speedupCats],
+  )
+  const calcMinutes = useMemo(() => parseSpeedupTime(calcStr, speedupMode), [calcStr, speedupMode])
+  const speedupTokens = useMemo(
+    () => Math.floor((speedupMinutesTotal + calcMinutes) / SPEEDUP_RATE) * 2,
+    [speedupMinutesTotal, calcMinutes],
+  )
+
+  const totalTokens = DAILY_TOKENS + challengeTokens + gemTokens + speedupTokens
 
   const costInfo = useMemo(() => calcCost(selectedCommanders), [selectedCommanders])
   const remaining = totalTokens - costInfo.total
   const canAfford = remaining >= 0
+  const progress = costInfo.total > 0 ? Math.min(100, (totalTokens / costInfo.total) * 100) : 0
 
+  /* ---- handlers ---- */
   const toggleChallenge = (id: ChallengeId) => {
     setCheckedChallenges((prev) => {
       const next = new Set(prev)
@@ -294,6 +395,11 @@ export function GatheringOfHeroesContent() {
       next.has(name) ? next.delete(name) : next.add(name)
       return next
     })
+  }
+
+  const updateSpeedupCat = (cat: SpeedupCategory, raw: string) => {
+    const minutes = parseSpeedupTime(raw, speedupMode)
+    setSpeedupCats((prev) => ({ ...prev, [cat]: Math.max(0, minutes) }))
   }
 
   const toggleTier = (tier: number) => {
@@ -344,13 +450,13 @@ export function GatheringOfHeroesContent() {
             <CardContent>
               <div className="flex items-center gap-3 rounded-lg bg-primary/10 border border-primary/20 px-4 py-3">
                 <Info className="h-4 w-4 text-primary shrink-0" />
-                <div className="text-sm">
+                <div className="text-sm flex-1">
                   <span className="text-foreground font-medium">{DAILY_TOKENS} tokens</span>
                   <span className="text-muted-foreground ml-2">
-                    ({EVENT_DAYS} days × {DAILY_TOKENS_PER_DAY}/day — Login, Barbarians, Gather)
+                    ({EVENT_DAYS} days × {DAILY_TOKENS_PER_DAY}/day — Login +2, Barbarians +10, Gather +6)
                   </span>
                 </div>
-                <span className="ml-auto text-primary font-bold tabular-nums">+{DAILY_TOKENS}</span>
+                <span className="text-primary font-bold tabular-nums">+{DAILY_TOKENS}</span>
               </div>
             </CardContent>
           </Card>
@@ -409,32 +515,110 @@ export function GatheringOfHeroesContent() {
               <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                 <Zap className="h-4 w-4 text-blue-400" />
                 Speedups Used
+                {speedupTokens > 0 && (
+                  <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded-full">
+                    +{speedupTokens} tokens
+                  </span>
+                )}
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-end gap-3">
-                <div className="flex-1 space-y-1.5">
-                  <Label htmlFor="speedup-input" className="text-sm text-muted-foreground">
-                    Total speedup minutes
-                  </Label>
-                  <Input
-                    id="speedup-input"
-                    type="number"
-                    min={0}
-                    value={speedupMinutes}
-                    onChange={(e) => setSpeedupMinutes(e.target.value)}
-                    placeholder="e.g. 2400"
-                    className="bg-background border-border"
-                  />
-                </div>
-                <div className="text-right pb-1">
-                  <span className="text-2xl font-bold text-primary tabular-nums">+{speedupTokens}</span>
-                  <p className="text-xs text-muted-foreground">tokens</p>
-                </div>
-              </div>
+            <CardContent className="space-y-4">
+              {/* Rate info */}
               <p className="text-xs text-muted-foreground">
                 Rate: <span className="text-foreground">480 minutes = 2 tokens</span> (repeatable)
               </p>
+
+              {/* Calculator text input */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">
+                    Speedup Time
+                  </Label>
+                  {/* Mode tabs */}
+                  <div className="flex gap-0.5 bg-secondary rounded-md p-0.5">
+                    {(['auto', 'days', 'minutes'] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        onClick={() => setSpeedupMode(mode)}
+                        className={`px-2 py-1 text-[10px] font-bold uppercase rounded transition-all ${
+                          speedupMode === mode
+                            ? 'bg-primary/20 text-primary'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <Input
+                  type="text"
+                  value={calcStr}
+                  onChange={(e) => setCalcStr(e.target.value)}
+                  placeholder={
+                    speedupMode === 'days'    ? 'e.g. 3.5 (days)' :
+                    speedupMode === 'minutes' ? 'e.g. 2400 (minutes)' :
+                    'e.g. 1d 2h 30m  or  2400  or  1:30:00'
+                  }
+                  className="bg-background border-border font-mono text-sm"
+                />
+                {calcMinutes > 0 && (
+                  <p className="text-xs text-blue-400">
+                    = {calcMinutes.toLocaleString()} minutes parsed
+                  </p>
+                )}
+              </div>
+
+              {/* Per-category breakdown (collapsible) */}
+              <div>
+                <button
+                  onClick={() => setShowSpeedupCats((v) => !v)}
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showSpeedupCats ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                  Per-category breakdown (building, research, training…)
+                </button>
+                {showSpeedupCats && (
+                  <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {SPEEDUP_CATEGORIES.map(({ id, label }) => (
+                      <div key={id} className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground uppercase font-semibold">
+                          {label}
+                        </Label>
+                        <Input
+                          type="text"
+                          value={formatSpeedupValue(speedupCats[id], speedupMode)}
+                          onChange={(e) => updateSpeedupCat(id, e.target.value)}
+                          placeholder={speedupMode === 'days' ? '0d' : '0'}
+                          className="h-8 bg-background border-border font-mono text-xs"
+                        />
+                      </div>
+                    ))}
+                    {speedupMinutesTotal > 0 && (
+                      <div className="col-span-full rounded-md bg-blue-500/10 border border-blue-500/20 px-3 py-2 flex justify-between items-center">
+                        <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                          Category total
+                        </span>
+                        <span className="text-xs font-bold text-blue-400">
+                          {speedupMinutesTotal.toLocaleString()}m
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Summary */}
+              {(speedupMinutesTotal + calcMinutes) > 0 && (
+                <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 px-4 py-3 flex justify-between items-center">
+                  <div className="text-xs text-muted-foreground">
+                    Total: {(speedupMinutesTotal + calcMinutes).toLocaleString()} minutes
+                  </div>
+                  <span className="text-lg font-bold text-blue-400 tabular-nums">
+                    +{speedupTokens} tokens
+                  </span>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -444,6 +628,11 @@ export function GatheringOfHeroesContent() {
               <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                 <Coins className="h-4 w-4 text-yellow-400" />
                 Gems Spent
+                {gemTokens > 0 && (
+                  <span className="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full">
+                    +{gemTokens} tokens
+                  </span>
+                )}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -463,7 +652,7 @@ export function GatheringOfHeroesContent() {
                   />
                 </div>
                 <div className="text-right pb-1">
-                  <span className="text-2xl font-bold text-primary tabular-nums">+{gemTokens}</span>
+                  <span className="text-2xl font-bold text-yellow-400 tabular-nums">+{gemTokens}</span>
                   <p className="text-xs text-muted-foreground">tokens</p>
                 </div>
               </div>
@@ -490,15 +679,15 @@ export function GatheringOfHeroesContent() {
               {TIERS_DATA.map((tier) => {
                 const tierExpanded = expandedTiers.has(tier.tier)
                 const categories = Array.from(new Set(tier.commanders.map((c) => c.category))) as Category[]
+                const tierSelCount = tier.commanders.filter((c) => selectedCommanders.has(c.name)).length
 
                 return (
                   <div key={tier.tier} className={`rounded-lg border ${tier.borderColor} ${tier.bgColor}`}>
-                    {/* Tier header */}
                     <button
                       onClick={() => toggleTier(tier.tier)}
                       className="flex w-full items-center justify-between px-3 py-2"
                     >
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className={`text-xs font-bold uppercase tracking-wider ${tier.color}`}>
                           {tier.label}
                         </span>
@@ -507,14 +696,14 @@ export function GatheringOfHeroesContent() {
                         </span>
                         {tier.minSpend > 0 && (
                           <span className="text-xs text-muted-foreground/70">
-                            · unlocks after {tier.minSpend} spent
+                            · requires {tier.minSpend.toLocaleString()} spent first
                           </span>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        {tier.commanders.some((c) => selectedCommanders.has(c.name)) && (
+                        {tierSelCount > 0 && (
                           <span className={`text-xs font-medium tabular-nums ${tier.color}`}>
-                            {tier.commanders.filter((c) => selectedCommanders.has(c.name)).length} selected
+                            {tierSelCount} selected
                           </span>
                         )}
                         {tierExpanded
@@ -542,6 +731,9 @@ export function GatheringOfHeroesContent() {
                                 <span className={`text-xs font-semibold uppercase tracking-wider ${CATEGORY_COLORS[cat]}`}>
                                   {cat}
                                 </span>
+                                <span className="text-xs text-muted-foreground/60 ml-1">
+                                  ({catCommanders.length})
+                                </span>
                                 {catExpanded
                                   ? <ChevronUp className="h-3 w-3 text-muted-foreground ml-auto" />
                                   : <ChevronDown className="h-3 w-3 text-muted-foreground ml-auto" />
@@ -552,7 +744,7 @@ export function GatheringOfHeroesContent() {
                                   {catCommanders.map((c) => (
                                     <label
                                       key={c.name}
-                                      className="flex items-center gap-2 cursor-pointer rounded-md px-1 py-1 hover:bg-secondary/50 transition-colors group"
+                                      className="flex items-center gap-2 cursor-pointer rounded-md px-1 py-1 hover:bg-secondary/50 transition-colors"
                                     >
                                       <Checkbox
                                         checked={selectedCommanders.has(c.name)}
@@ -560,7 +752,7 @@ export function GatheringOfHeroesContent() {
                                       />
                                       <span className={`text-sm flex-1 transition-colors ${
                                         selectedCommanders.has(c.name) ? tier.color : 'text-foreground'
-                                      } group-hover:${tier.color}`}>
+                                      }`}>
                                         {c.name}
                                       </span>
                                     </label>
@@ -593,7 +785,8 @@ export function GatheringOfHeroesContent() {
         {/* ============================================================ */}
         {/*  Right column: Results summary                               */}
         {/* ============================================================ */}
-        <div>
+        <div className="space-y-4">
+          {/* Token summary card */}
           <Card className="bg-card border-border">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
@@ -621,43 +814,37 @@ export function GatheringOfHeroesContent() {
                   <span className="tabular-nums text-foreground">+{gemTokens}</span>
                 </div>
                 <div className="border-t border-border pt-2 flex justify-between font-semibold text-foreground">
-                  <span>Total earned</span>
+                  <span>Total tokens</span>
                   <span className="tabular-nums text-primary text-lg">{totalTokens.toLocaleString()}</span>
                 </div>
               </div>
 
-              {/* Cost breakdown (only when commanders are selected) */}
+              {/* Cost breakdown */}
               {selCount > 0 && (
                 <>
-                  <div className="border-t border-border pt-3 space-y-2 text-sm">
-                    {costInfo.t1Cost > 0 && (
+                  <div className="border-t border-border pt-3 space-y-1.5 text-sm">
+                    {costInfo.t1Count > 0 && (
                       <div className="flex justify-between text-muted-foreground">
-                        <span>Tier 1 ×{TIERS_DATA[0].commanders.filter((c) => selectedCommanders.has(c.name)).length} @200</span>
+                        <span>T1 ×{costInfo.t1Count} @ 200</span>
                         <span className="tabular-nums">{costInfo.t1Cost.toLocaleString()}</span>
                       </div>
                     )}
-                    {costInfo.t1Shortfall > 0 && (
-                      <div className="flex justify-between text-yellow-400/80">
-                        <span className="text-xs">T1 unlock shortfall</span>
-                        <span className="tabular-nums text-xs">+{costInfo.t1Shortfall.toLocaleString()}</span>
-                      </div>
-                    )}
-                    {costInfo.t2Cost > 0 && (
+                    {costInfo.t2Count > 0 && (
                       <div className="flex justify-between text-muted-foreground">
-                        <span>Tier 2 ×{TIERS_DATA[1].commanders.filter((c) => selectedCommanders.has(c.name)).length} @500</span>
+                        <span>T2 ×{costInfo.t2Count} @ 500</span>
                         <span className="tabular-nums">{costInfo.t2Cost.toLocaleString()}</span>
                       </div>
                     )}
-                    {costInfo.t2Shortfall > 0 && (
-                      <div className="flex justify-between text-yellow-400/80">
-                        <span className="text-xs">T2 unlock shortfall</span>
-                        <span className="tabular-nums text-xs">+{costInfo.t2Shortfall.toLocaleString()}</span>
+                    {costInfo.t3Count > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>T3 ×{costInfo.t3Count} @ 1000</span>
+                        <span className="tabular-nums">{costInfo.t3Cost.toLocaleString()}</span>
                       </div>
                     )}
-                    {costInfo.t3Cost > 0 && (
-                      <div className="flex justify-between text-muted-foreground">
-                        <span>Tier 3 ×{TIERS_DATA[2].commanders.filter((c) => selectedCommanders.has(c.name)).length} @1000</span>
-                        <span className="tabular-nums">{costInfo.t3Cost.toLocaleString()}</span>
+                    {costInfo.shortfall > 0 && (
+                      <div className="flex justify-between text-yellow-400/80 text-xs">
+                        <span>Tier unlock cost</span>
+                        <span className="tabular-nums">+{costInfo.shortfall.toLocaleString()}</span>
                       </div>
                     )}
                     <div className="flex justify-between font-semibold text-foreground border-t border-border pt-2">
@@ -666,6 +853,21 @@ export function GatheringOfHeroesContent() {
                     </div>
                   </div>
 
+                  {/* Progress bar */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Progress</span>
+                      <span className="tabular-nums">{Math.round(progress)}%</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-secondary overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${canAfford ? 'bg-green-500' : 'bg-primary'}`}
+                        style={{ width: `${Math.min(100, progress)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Can afford / shortfall */}
                   <div
                     className={`rounded-lg px-4 py-3 flex items-center gap-3 border ${
                       canAfford ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'
@@ -689,9 +891,37 @@ export function GatheringOfHeroesContent() {
                             Need {Math.abs(remaining).toLocaleString()} more
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            Deselect some commanders or earn more tokens
+                            Deselect commanders or earn more tokens
                           </p>
                         </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Selected commanders list */}
+                  <div className="border-t border-border pt-3 space-y-1">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                      Selected ({selCount})
+                    </p>
+                    <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
+                      {TIERS_DATA.map((tier) =>
+                        tier.commanders
+                          .filter((c) => selectedCommanders.has(c.name))
+                          .map((c) => {
+                            const CatIcon = CATEGORY_ICONS[c.category]
+                            return (
+                              <div
+                                key={c.name}
+                                className="flex items-center gap-2 text-xs rounded px-2 py-1 bg-secondary/30"
+                              >
+                                <CatIcon className={`h-3 w-3 shrink-0 ${CATEGORY_COLORS[c.category]}`} />
+                                <span className="flex-1 truncate text-foreground">{c.name}</span>
+                                <span className={`tabular-nums font-medium ${tier.color}`}>
+                                  {tier.cost}
+                                </span>
+                              </div>
+                            )
+                          })
                       )}
                     </div>
                   </div>
@@ -704,9 +934,11 @@ export function GatheringOfHeroesContent() {
                 </p>
               )}
 
-              {/* Tier info */}
+              {/* Tier requirements */}
               <div className="border-t border-border pt-3 space-y-1.5">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tier Unlock Requirements</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Tier Unlock Requirements
+                </p>
                 {TIERS_DATA.map((t) => (
                   <div key={t.tier} className="flex items-center gap-2 text-xs text-muted-foreground">
                     <span className={`font-medium ${t.color}`}>{t.label}</span>
@@ -714,7 +946,7 @@ export function GatheringOfHeroesContent() {
                     <span>
                       {t.minSpend === 0
                         ? 'available immediately'
-                        : `spend ${t.minSpend.toLocaleString()} tokens first`}
+                        : `spend ${t.minSpend.toLocaleString()} tokens in lower tiers first`}
                     </span>
                   </div>
                 ))}
