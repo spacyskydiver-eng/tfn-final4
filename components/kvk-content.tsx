@@ -39,6 +39,7 @@ import {
 } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { BundlePlannerCard } from '@/components/bundle-planner-card'
+import { CrystalTechContent } from '@/components/crystal-tech-content'
 import {
   KVK_TYPES,
   type KvkTypeId,
@@ -97,12 +98,13 @@ import {
 /* ================================================================ */
 
 const SECTIONS = [
-  { id: 'honor', label: 'Honor Calculator', icon: Trophy },
-  { id: 'kp', label: 'Kill Points', icon: Swords },
-  { id: 'timeline', label: 'Event Timeline', icon: Calendar },
-  { id: 'monument', label: 'Monument', icon: Milestone },
-  { id: 'ruins', label: 'Ruins & Altar', icon: Castle },
-  { id: 'extras', label: 'More', icon: Settings2 },
+  { id: 'honor',        label: 'Honor Calculator',  icon: Trophy,    socOnly: false },
+  { id: 'kp',           label: 'Kill Points',        icon: Swords,    socOnly: false },
+  { id: 'timeline',     label: 'Event Timeline',     icon: Calendar,  socOnly: false },
+  { id: 'monument',     label: 'Monument',           icon: Milestone, socOnly: false },
+  { id: 'ruins',        label: 'Ruins & Altar',      icon: Castle,    socOnly: false },
+  { id: 'crystal-tech', label: 'Crystal Tech',       icon: Gem,       socOnly: true  },
+  { id: 'extras',       label: 'More',               icon: Settings2, socOnly: false },
 ] as const
 
 type SectionId = (typeof SECTIONS)[number]['id']
@@ -336,7 +338,7 @@ function KvkRunView({ run, onUpdate }: { run: KvkRun; onUpdate: (r: KvkRun) => v
 
       {/* Section tabs */}
       <div className="flex flex-wrap gap-2">
-        {SECTIONS.map((s) => {
+        {SECTIONS.filter(s => !s.socOnly || showSoC).map((s) => {
           const Icon = s.icon
           const active = activeSection === s.id
           return (
@@ -351,17 +353,19 @@ function KvkRunView({ run, onUpdate }: { run: KvkRun; onUpdate: (r: KvkRun) => v
             >
               <Icon className="h-4 w-4" />
               {s.label}
+              {s.socOnly && <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[9px] font-bold text-primary uppercase leading-none">SoC</span>}
             </button>
           )
         })}
       </div>
 
-      {activeSection === 'honor' && <HonorSection run={run} onUpdate={onUpdate} />}
-      {activeSection === 'kp' && <KpSection run={run} onUpdate={onUpdate} />}
-      {activeSection === 'timeline' && <TimelineSection run={run} onUpdate={onUpdate} />}
-      {activeSection === 'monument' && <MonumentSection run={run} onUpdate={onUpdate} />}
-      {activeSection === 'ruins' && <RuinsAltarSection run={run} onUpdate={onUpdate} />}
-      {activeSection === 'extras' && <ExtrasSection run={run} onUpdate={onUpdate} />}
+      {activeSection === 'honor'        && <HonorSection run={run} onUpdate={onUpdate} />}
+      {activeSection === 'kp'           && <KpSection run={run} onUpdate={onUpdate} />}
+      {activeSection === 'timeline'     && <TimelineSection run={run} onUpdate={onUpdate} />}
+      {activeSection === 'monument'     && <MonumentSection run={run} onUpdate={onUpdate} />}
+      {activeSection === 'ruins'        && <RuinsAltarSection run={run} onUpdate={onUpdate} />}
+      {activeSection === 'crystal-tech' && <CrystalTechContent />}
+      {activeSection === 'extras'       && <ExtrasSection run={run} onUpdate={onUpdate} />}
     </div>
   )
 }
