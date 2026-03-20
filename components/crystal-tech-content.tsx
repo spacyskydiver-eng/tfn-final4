@@ -340,6 +340,43 @@ const CAT_COLOR: Record<string,string> = {
   infantry:'#E63946', archer:'#2A9D8F', cavalry:'#E9C46A', siege:'#9B59B6', utility:'#3498DB',
 }
 
+/* Info tooltip shown on hover */
+function InfoTooltip({ tech, cur, accent }: { tech: TechDef; cur: number; accent: string }) {
+  const nextLd = tech.levels[cur]
+  return (
+    <div style={{
+      position:'absolute', bottom:'calc(100% + 6px)', left:'50%', transform:'translateX(-50%)',
+      zIndex:999, width:220, borderRadius:10, padding:'10px 12px',
+      background:'#071828', border:'1px solid rgba(100,200,255,0.25)',
+      boxShadow:'0 8px 32px rgba(0,0,0,0.7)',
+      pointerEvents:'none',
+    }}>
+      <p style={{ color:'#c8e4ff', fontSize:11, fontWeight:700, marginBottom:4 }}>{tech.name}</p>
+      <p style={{ color:'rgba(180,220,255,0.55)', fontSize:9.5, lineHeight:1.4, marginBottom:6 }}>{tech.description}</p>
+      {cur > 0 && (
+        <div style={{ marginBottom: nextLd ? 6 : 0 }}>
+          <p style={{ fontSize:9, color:'rgba(100,200,255,0.5)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:2 }}>Current (Lv {cur})</p>
+          <p style={{ color:accent, fontSize:10.5, fontWeight:600 }}>{tech.levels[cur-1]?.buff}</p>
+        </div>
+      )}
+      {nextLd && (
+        <div>
+          <p style={{ fontSize:9, color:'rgba(100,200,255,0.5)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:2 }}>Next (Lv {cur+1})</p>
+          <p style={{ color:'rgba(180,220,255,0.8)', fontSize:10 }}>{nextLd.buff}</p>
+          <div style={{ display:'flex', gap:8, marginTop:4, flexWrap:'wrap' }}>
+            <span style={{ fontSize:9, color:'rgba(160,200,255,0.5)' }}>⏱ {nextLd.time}</span>
+            <span style={{ fontSize:9, color:'rgba(0,229,255,0.7)' }}>💎 {nextLd.crystals.toLocaleString()}</span>
+            {nextLd.seasonCoins > 0 && <span style={{ fontSize:9, color:'rgba(251,191,36,0.8)' }}>🪙 {nextLd.seasonCoins}</span>}
+          </div>
+        </div>
+      )}
+      {cur === tech.maxLevel && (
+        <p style={{ color:'#00e5ff', fontSize:10, fontWeight:700 }}>✓ Maxed out</p>
+      )}
+    </div>
+  )
+}
+
 function TechNode({ techKey, levels, rc, onSet }: {
   techKey: string
   levels: Levels
@@ -353,9 +390,9 @@ function TechNode({ techKey, levels, rc, onSet }: {
   const cur    = levels[techKey] ?? 0
   const maxed  = cur === tech.maxLevel
   const locked = cur === 0 && !canUpgradeTo(techKey, 1, levels, rc)
-  const canAdd = !maxed && canUpgradeTo(techKey, cur+1, levels, rc)
   const pct    = (cur / tech.maxLevel) * 100
   const accent = CAT_COLOR[tech.category] ?? '#3498DB'
+  const [showInfo, setShowInfo] = useState(false)
 
   // Drag to scrub level
   const dragRef = useRef<{startX:number; startLv:number} | null>(null)
@@ -403,6 +440,9 @@ function TechNode({ techKey, levels, rc, onSet }: {
       onMouseDown={handleMouseDown}
       onContextMenu={e => { e.preventDefault(); if (!locked && cur>0 && canRemove(techKey,cur-1,levels)) onSet(techKey,cur-1) }}
     >
+      {/* Info tooltip */}
+      {showInfo && <InfoTooltip tech={tech} cur={cur} accent={accent} />}
+
       {/* Card */}
       <div style={{
         width:'100%', height:'100%', borderRadius:8, overflow:'hidden',
@@ -444,23 +484,36 @@ function TechNode({ techKey, levels, rc, onSet }: {
             )}
           </div>
 
-          {/* Max button */}
-          {!maxed && !locked && (
+          {/* Info + Max buttons */}
+          <div style={{ display:'flex', flexDirection:'column', gap:2, flexShrink:0 }}>
+            {/* Info button */}
             <button
-              onClick={handleMax}
+              onMouseDown={e => e.stopPropagation()}
+              onMouseEnter={() => setShowInfo(true)}
+              onMouseLeave={() => setShowInfo(false)}
               style={{
-                background:'rgba(0,180,255,0.18)', border:'1px solid rgba(0,180,255,0.35)',
-                borderRadius:4, color:'#7dd3fc', fontSize:9, fontWeight:700,
-                padding:'2px 5px', cursor:'pointer', flexShrink:0, lineHeight:1,
+                background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.15)',
+                borderRadius:4, color:'rgba(180,220,255,0.7)', fontSize:9, fontWeight:700,
+                width:18, height:18, cursor:'pointer', lineHeight:1, padding:0,
+                display:'flex', alignItems:'center', justifyContent:'center',
               }}
-              title="Max out this tech"
-            >
-              MAX
-            </button>
-          )}
-          {maxed && (
-            <span style={{ color:'#00e5ff', fontSize:9, fontWeight:700, flexShrink:0 }}>MAX</span>
-          )}
+            >i</button>
+            {/* Max button */}
+            {!maxed && !locked && (
+              <button
+                onMouseDown={e => e.stopPropagation()}
+                onClick={handleMax}
+                style={{
+                  background:'rgba(0,180,255,0.18)', border:'1px solid rgba(0,180,255,0.35)',
+                  borderRadius:4, color:'#7dd3fc', fontSize:8, fontWeight:700,
+                  padding:'1px 3px', cursor:'pointer', lineHeight:1,
+                }}
+              >MAX</button>
+            )}
+            {maxed && (
+              <span style={{ color:'#00e5ff', fontSize:8, fontWeight:700 }}>MAX</span>
+            )}
+          </div>
         </div>
 
         {/* Bottom bar */}
@@ -614,7 +667,7 @@ export function CrystalTechContent() {
       {/* Canvas */}
       <div
         ref={canvasRef}
-        style={{ overflowX:'auto', overflowY:'hidden', borderRadius:12, border:'1px solid rgba(100,200,255,0.15)', cursor:'grab' }}
+        style={{ overflowX:'auto', overflowY:'hidden', borderRadius:12, border:'1px solid rgba(100,200,255,0.15)', cursor:'grab', minWidth:0, width:'100%' }}
         onMouseDown={e => {
           if ((e.target as HTMLElement).closest('[data-tech]')) return
           const el = canvasRef.current; if(!el) return
