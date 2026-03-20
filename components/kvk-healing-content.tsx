@@ -2,13 +2,13 @@
 
 import { useMemo, useState } from 'react'
 import Image from 'next/image'
-import { AlertTriangle, CheckCircle2, ChevronRight } from 'lucide-react'
+import { AlertTriangle, CheckCircle2 } from 'lucide-react'
 
 /* ------------------------------------------------------------------ */
 /*  Constants — BASE_TIME in SECONDS per troop (exact from codex)      */
 /* ------------------------------------------------------------------ */
 
-const BASE_TIME_T4 = 3.0
+const BASE_TIME_T4 = 3.0   // seconds per troop
 const BASE_TIME_T5 = 4.0
 const HELP_COUNT   = 30
 
@@ -34,6 +34,7 @@ const RATIO_OPTIONS = [
   { value: 4,    display: '4:1'   },
   { value: 3,    display: '3:1'   },
   { value: 2,    display: '2:1'   },
+  { value: 1.5,  display: '1.5:1' },
   { value: 1,    display: '1:1'   },
   { value: 0.5,  display: '0.5:1' },
   { value: 0.25, display: '0.25:1'},
@@ -41,10 +42,7 @@ const RATIO_OPTIONS = [
 
 type TroopType = 'infantry' | 'cavalry' | 'archer' | 'siege'
 const TROOP_TYPES: TroopType[] = ['infantry', 'cavalry', 'archer', 'siege']
-
-const TROOP_EMOJI: Record<TroopType, string> = {
-  infantry: '⚔️', cavalry: '🐴', archer: '🏹', siege: '💣',
-}
+type Res = { food: number; wood: number; stone: number; gold: number }
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                             */
@@ -89,12 +87,9 @@ function parseCount(s: string): number {
 function parseStockpile(s: string): number {
   const clean = s.trim().toLowerCase().replace(/,/g, '')
   if (!clean) return 0
-  const bMatch = clean.match(/^([\d.]+)\s*b$/)
-  if (bMatch) return parseFloat(bMatch[1]) * 1_000_000_000
-  const mMatch = clean.match(/^([\d.]+)\s*m$/)
-  if (mMatch) return parseFloat(mMatch[1]) * 1_000_000
-  const kMatch = clean.match(/^([\d.]+)\s*k$/)
-  if (kMatch) return parseFloat(kMatch[1]) * 1_000
+  const b = clean.match(/^([\d.]+)\s*b$/); if (b) return parseFloat(b[1]) * 1e9
+  const m = clean.match(/^([\d.]+)\s*m$/); if (m) return parseFloat(m[1]) * 1e6
+  const k = clean.match(/^([\d.]+)\s*k$/); if (k) return parseFloat(k[1]) * 1e3
   return parseFloat(clean) || 0
 }
 
@@ -104,34 +99,36 @@ function parseStockpile(s: string): number {
 
 type Counts = Record<'t4' | 't5', Record<TroopType, string>>
 
-interface Res { food: number; wood: number; stone: number; gold: number }
-
-interface Result {
-  totalTroops: number; t4Total: number; t5Total: number
-  baseSeconds: number; finalSeconds: number
+interface CalcResult {
+  totalTroops: number
+  t4Total: number
+  t5Total: number
+  baseSeconds: number
+  finalSeconds: number
   needed: Res
-  // balance (null if no stockpile entered)
-  speedupCap: number | null       // troops affordable by speedups
-  resCap: Partial<Record<keyof Res, number>>  // troops affordable by each resource
+  // balance
+  speedupCap: number | null      // max troops coverable by speedups
+  resCap: Partial<Record<keyof Res, number>>  // max troops per resource
   bottleneck: 'speedups' | keyof Res | 'none' | null
   // KP
-  expectedKills: number; expectedKP: number
+  expectedKills: number
+  expectedKP: number
 }
 
-function calcResult(
+function calculate(
   counts: Counts,
   healingSpeed: number,
   costReduction: number,
   stockpile: Res | null,
   speedupSeconds: number | null,
   tradeRatio: number | null,
-): Result | null {
+): CalcResult | null {
   const speedMult = 1 + healingSpeed / 100
   const costMult  = 1 - costReduction / 100
 
   let baseSeconds = 0
   const needed: Res = { food: 0, wood: 0, stone: 0, gold: 0 }
-  let t4Total = 0; let t5Total = 0; let hasInput = false
+  let t4Total = 0, t5Total = 0, hasInput = false
 
   for (const type of TROOP_TYPES) {
     const c4 = parseCount(counts.t4[type])
@@ -156,40 +153,35 @@ function calcResult(
 
   if (!hasInput) return null
 
-  const finalSeconds = applyHelps(baseSeconds)
-  const totalTroops  = t4Total + t5Total
-
   needed.food  = Math.ceil(needed.food)
   needed.wood  = Math.ceil(needed.wood)
   needed.stone = Math.ceil(needed.stone)
   needed.gold  = Math.ceil(needed.gold)
 
-  // Balance analysis
+  const finalSeconds = applyHelps(baseSeconds)
+  const totalTroops  = t4Total + t5Total
+
+  // Balance — how many troops can each resource/speedup afford?
   let speedupCap: number | null = null
   const resCap: Partial<Record<keyof Res, number>> = {}
-  let bottleneck: Result['bottleneck'] = null
+  let bottleneck: CalcResult['bottleneck'] = null
 
   if (totalTroops > 0) {
-    const avgSecs = baseSeconds / totalTroops  // seconds per troop (before helps)
+    const avgSecs = baseSeconds / totalTroops
 
     if (speedupSeconds !== null && avgSecs > 0) {
-      // speedupSeconds available → apply speedMult to get raw healing time covered
       speedupCap = Math.floor((speedupSeconds * speedMult) / avgSecs)
     }
 
     if (stockpile !== null) {
-      const RES_KEYS: (keyof Res)[] = ['food', 'wood', 'stone', 'gold']
-      for (const key of RES_KEYS) {
+      for (const key of ['food', 'wood', 'stone', 'gold'] as (keyof Res)[]) {
         const avgCost = needed[key] / totalTroops
-        resCap[key] = avgCost > 0
-          ? Math.floor(stockpile[key] / avgCost)
-          : Infinity
+        resCap[key] = avgCost > 0 ? Math.floor(stockpile[key] / avgCost) : Infinity
       }
 
-      // Bottleneck = whichever cap is tightest relative to totalTroops
-      const caps: { key: Result['bottleneck']; cap: number }[] = [
+      const caps = [
         ...(speedupCap !== null ? [{ key: 'speedups' as const, cap: speedupCap }] : []),
-        ...(Object.entries(resCap) as [keyof Res, number][]).map(([key, cap]) => ({ key: key as Result['bottleneck'], cap })),
+        ...(['food', 'wood', 'stone', 'gold'] as (keyof Res)[]).map(k => ({ key: k as CalcResult['bottleneck'], cap: resCap[k] ?? Infinity })),
       ]
       const binding = caps.filter(c => (c.cap ?? Infinity) < totalTroops)
       bottleneck = binding.length > 0
@@ -198,8 +190,7 @@ function calcResult(
     }
   }
 
-  // KP
-  let expectedKills = 0; let expectedKP = 0
+  let expectedKills = 0, expectedKP = 0
   if (tradeRatio !== null) {
     const k4 = t4Total * tradeRatio
     const k5 = t5Total * tradeRatio
@@ -211,7 +202,7 @@ function calcResult(
 }
 
 /* ------------------------------------------------------------------ */
-/*  Sub-components                                                      */
+/*  UI helpers                                                          */
 /* ------------------------------------------------------------------ */
 
 function RokImg({ src, alt, size = 22 }: { src: string; alt: string; size?: number }) {
@@ -219,14 +210,14 @@ function RokImg({ src, alt, size = 22 }: { src: string; alt: string; size?: numb
 }
 
 function TroopInput({ tier, type, value, onChange }: {
-  tier: 't4' | 't5'; type: TroopType; value: string
-  onChange: (v: string) => void
+  tier: 't4' | 't5'; type: TroopType; value: string; onChange: (v: string) => void
 }) {
+  const emoji = { infantry: '⚔️', cavalry: '🐴', archer: '🏹', siege: '💣' }
   const isT5 = tier === 't5'
   return (
-    <div className={`flex flex-col items-center gap-1.5 rounded-xl p-2 border ${isT5 ? 'border-violet-500/30 bg-violet-500/5' : 'border-amber-500/20 bg-amber-500/5'}`}>
-      <span className="text-base">{TROOP_EMOJI[type]}</span>
-      <span className="text-[10px] text-muted-foreground">{type.charAt(0).toUpperCase() + type.slice(1)}</span>
+    <div className={`flex flex-col items-center gap-1.5 rounded-xl p-2.5 border ${isT5 ? 'border-violet-500/30 bg-violet-500/5' : 'border-amber-500/20 bg-amber-500/5'}`}>
+      <span className="text-base leading-none">{emoji[type]}</span>
+      <span className="text-[10px] text-muted-foreground capitalize">{type}</span>
       <input
         type="text" inputMode="numeric" placeholder="0" value={value}
         onChange={e => {
@@ -240,90 +231,57 @@ function TroopInput({ tier, type, value, onChange }: {
   )
 }
 
-function StockpileInput({ icon, alt, label, value, onChange }: {
-  icon: string; alt: string; label: string; value: string; onChange: (v: string) => void
+function BalanceRow({ icon, label, available, needed, isSpeedup }: {
+  icon: string; label: string; available: number; needed: number; isSpeedup?: boolean
 }) {
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center gap-1.5">
-        <RokImg src={icon} alt={alt} size={18} />
-        <label className="text-xs text-muted-foreground">{label}</label>
-      </div>
-      <input
-        type="text" placeholder="e.g. 50M or 50000000" value={value}
-        onChange={e => onChange(e.target.value)}
-        className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary"
-      />
-    </div>
-  )
-}
-
-function BalanceBar({ label, icon, available, needed, cap, totalTroops, isSpeedup }: {
-  label: string; icon?: string; available: number; needed: number
-  cap: number | null | undefined; totalTroops: number; isSpeedup?: boolean
-}) {
-  if (needed <= 0 && !isSpeedup) return null
-  const pct = needed > 0 ? Math.min(100, (available / needed) * 100) : 100
-  const ok  = cap == null || cap >= totalTroops
-  const capPct = isSpeedup && cap != null && totalTroops > 0
-    ? Math.min(100, (cap / totalTroops) * 100)
-    : pct
+  if (needed <= 0) return null
+  const pct = Math.min(100, (available / needed) * 100)
+  const ok  = available >= needed
+  const shortBy = needed - available
 
   return (
-    <div className="flex items-center gap-2.5">
-      {icon
-        ? <RokImg src={icon} alt={label} size={20} />
-        : <span className="text-sm">⚡</span>
-      }
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-xs text-muted-foreground">{label}</span>
-          <span className={`text-xs font-semibold tabular-nums ${ok ? 'text-emerald-400' : 'text-red-400'}`}>
-            {fmt(available)} / {fmt(needed)}
-          </span>
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-xs">
+        <div className="flex items-center gap-1.5">
+          <RokImg src={icon} alt={label} size={18} />
+          <span className="text-muted-foreground">{label}</span>
         </div>
-        <div className="h-2 rounded-full bg-secondary/60 overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all duration-500 ${ok ? 'bg-emerald-500' : 'bg-red-500'}`}
-            style={{ width: `${capPct}%` }}
-          />
+        <div className="flex items-center gap-2">
+          {ok
+            ? <span className="text-emerald-400 font-medium">+{fmt(available - needed)} spare</span>
+            : <span className="text-red-400 font-medium">−{fmt(shortBy)} short</span>
+          }
+          {ok
+            ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+            : <AlertTriangle className="h-3.5 w-3.5 text-red-400" />
+          }
         </div>
       </div>
-      {ok
-        ? <CheckCircle2 className="h-4 w-4 text-emerald-400 flex-shrink-0" />
-        : <AlertTriangle className="h-4 w-4 text-red-400 flex-shrink-0" />
-      }
+      <div className="h-1.5 rounded-full bg-secondary/50 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${ok ? 'bg-emerald-500' : 'bg-red-500'}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <div className="flex justify-between text-[10px] text-muted-foreground">
+        <span>Have: {fmt(available)}</span>
+        <span>Need: {fmt(needed)}</span>
+      </div>
     </div>
   )
 }
 
 /* ------------------------------------------------------------------ */
-/*  Main component                                                      */
+/*  Component                                                           */
 /* ------------------------------------------------------------------ */
 
-type InputTab = 'direct' | 'estimate'
-type SpeedupUnit = 'hours' | 'days'
-type TroopFocus = 'infantry' | 'cavalry' | 'archer' | 'mixed'
-
-const EMPTY_COUNTS: Counts = {
+const EMPTY: Counts = {
   t4: { infantry: '', cavalry: '', archer: '', siege: '' },
   t5: { infantry: '', cavalry: '', archer: '', siege: '' },
 }
 
 export function KvkHealingContent() {
-  // Mode
-  const [inputTab, setInputTab] = useState<InputTab>('direct')
-
-  // Direct inputs
-  const [counts, setCounts] = useState<Counts>(EMPTY_COUNTS)
-
-  // Estimator
-  const [marchSize,  setMarchSize]  = useState('')
-  const [woundRate,  setWoundRate]  = useState('25')
-  const [tierSplit,  setTierSplit]  = useState('30')  // % T5
-  const [troopFocus, setTroopFocus] = useState<TroopFocus>('infantry')
-
-  // Buffs
+  const [counts, setCounts]             = useState<Counts>(EMPTY)
   const [healingSpeed, setHealingSpeed] = useState('90')
   const [costReduction, setCostReduction] = useState('10')
 
@@ -333,61 +291,33 @@ export function KvkHealingContent() {
   const [sStone, setSStone] = useState('')
   const [sGold,  setSGold]  = useState('')
   const [speedupVal,  setSpeedupVal]  = useState('')
-  const [speedupUnit, setSpeedupUnit] = useState<SpeedupUnit>('hours')
+  const [speedupUnit, setSpeedupUnit] = useState<'hours' | 'days'>('hours')
 
-  // Trade ratio
   const [tradeRatio, setTradeRatio] = useState<number | null>(null)
 
-  /* Derived wounded counts from estimator */
-  const estimatedCounts = useMemo((): Counts => {
-    const march = parseCount(marchSize)
-    if (march <= 0) return EMPTY_COUNTS
-    const totalWounded = Math.round(march * (parseFloat(woundRate) || 25) / 100)
-    const t5Pct = (parseFloat(tierSplit) || 0) / 100
-    const t5w = Math.round(totalWounded * t5Pct)
-    const t4w = totalWounded - t5w
-
-    const split = (n: number, focus: TroopFocus): Record<TroopType, string> => {
-      if (focus === 'infantry') return { infantry: n.toLocaleString(), cavalry: '', archer: '', siege: '' }
-      if (focus === 'cavalry')  return { infantry: '', cavalry: n.toLocaleString(), archer: '', siege: '' }
-      if (focus === 'archer')   return { infantry: '', cavalry: '', archer: n.toLocaleString(), siege: '' }
-      // mixed — equal split
-      const q = Math.floor(n / 4)
-      const r = n - q * 3
-      return { infantry: r.toLocaleString(), cavalry: q.toLocaleString(), archer: q.toLocaleString(), siege: q.toLocaleString() }
-    }
-
-    return { t4: split(t4w, troopFocus), t5: split(t5w, troopFocus) }
-  }, [marchSize, woundRate, tierSplit, troopFocus])
-
-  const activeCounts = inputTab === 'estimate' ? estimatedCounts : counts
   const setCount = (tier: 't4' | 't5', type: TroopType, v: string) =>
     setCounts(prev => ({ ...prev, [tier]: { ...prev[tier], [type]: v } }))
 
-  /* Stockpile & speedup parsing */
-  const stockpile = useMemo((): typeof import('./kvk-healing-content') extends never ? never : {food:number,wood:number,stone:number,gold:number} | null => {
-    const f = parseStockpile(sFood)
-    const w = parseStockpile(sWood)
-    const s = parseStockpile(sStone)
-    const g = parseStockpile(sGold)
-    if (f === 0 && w === 0 && s === 0 && g === 0) return null
-    return { food: f, wood: w, stone: s, gold: g }
+  const stockpile = useMemo((): Res | null => {
+    const f = parseStockpile(sFood), w = parseStockpile(sWood)
+    const s = parseStockpile(sStone), g = parseStockpile(sGold)
+    return (f || w || s || g) ? { food: f, wood: w, stone: s, gold: g } : null
   }, [sFood, sWood, sStone, sGold])
 
   const speedupSeconds = useMemo(() => {
     const v = parseFloat(speedupVal)
-    if (!speedupVal || isNaN(v)) return null
+    if (!speedupVal || isNaN(v) || v <= 0) return null
     return speedupUnit === 'days' ? v * 86400 : v * 3600
   }, [speedupVal, speedupUnit])
 
-  const result = useMemo(() => calcResult(
-    activeCounts,
+  const result = useMemo(() => calculate(
+    counts,
     parseFloat(healingSpeed) || 0,
     parseFloat(costReduction) || 0,
     stockpile,
     speedupSeconds,
     tradeRatio,
-  ), [activeCounts, healingSpeed, costReduction, stockpile, speedupSeconds, tradeRatio])
+  ), [counts, healingSpeed, costReduction, stockpile, speedupSeconds, tradeRatio])
 
   const hasStockpile = stockpile !== null || speedupSeconds !== null
 
@@ -401,26 +331,26 @@ export function KvkHealingContent() {
             <Image src="/images/bundle/healing_speed.png" alt="" width={28} height={28} className="object-contain" />
             KvK Healing Calculator
           </h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
-            Know exactly how much resources and speedups you need — and whether they're balanced.
+          <p className="text-sm text-muted-foreground mt-0.5">
+            See exactly what your wounds will cost — and whether your resources and speedups balance out.
           </p>
         </div>
         <button
-          onClick={() => { setCounts(EMPTY_COUNTS); setMarchSize(''); setSFood(''); setSWood(''); setSStone(''); setSGold(''); setSpeedupVal(''); setTradeRatio(null) }}
+          onClick={() => { setCounts(EMPTY); setSFood(''); setSWood(''); setSStone(''); setSGold(''); setSpeedupVal(''); setTradeRatio(null) }}
           className="text-xs text-muted-foreground hover:text-red-400 transition-colors"
         >
-          Reset all
+          Reset
         </button>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
 
-        {/* ===== LEFT INPUTS ===== */}
+        {/* ===== INPUTS ===== */}
         <div className="xl:col-span-3 space-y-4">
 
           {/* Buffs */}
           <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Your Healing Buffs</p>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Healing Buffs</p>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Healing Speed %</label>
@@ -435,142 +365,88 @@ export function KvkHealingContent() {
             </div>
           </div>
 
-          {/* Wounded troops */}
-          <div className="rounded-xl border border-border bg-card p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Wounded Troops</p>
-              <div className="flex rounded-lg border border-border overflow-hidden text-xs">
-                <button onClick={() => setInputTab('direct')}
-                  className={`px-3 py-1.5 transition-colors ${inputTab === 'direct' ? 'bg-primary/20 text-primary font-medium' : 'text-muted-foreground hover:bg-secondary'}`}>
-                  Enter directly
-                </button>
-                <button onClick={() => setInputTab('estimate')}
-                  className={`px-3 py-1.5 transition-colors border-l border-border ${inputTab === 'estimate' ? 'bg-primary/20 text-primary font-medium' : 'text-muted-foreground hover:bg-secondary'}`}>
-                  Estimate from army
-                </button>
-              </div>
+          {/* T4 */}
+          <div className="rounded-xl border border-amber-500/25 bg-card p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+              <p className="text-[11px] font-semibold text-amber-400 uppercase tracking-wider">Tier 4 Wounded</p>
             </div>
+            <div className="grid grid-cols-4 gap-2">
+              {TROOP_TYPES.map(t => (
+                <TroopInput key={t} tier="t4" type={t} value={counts.t4[t]} onChange={v => setCount('t4', t, v)} />
+              ))}
+            </div>
+          </div>
 
-            {inputTab === 'estimate' ? (
-              <div className="space-y-3">
-                <div className="rounded-lg bg-secondary/30 px-3 py-2 text-xs text-muted-foreground">
-                  Not sure how many get wounded? Enter your march size and estimate based on a typical fight.
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">March / Army Size</label>
-                    <input type="text" placeholder="e.g. 280,000" value={marchSize}
-                      onChange={e => { let v = e.target.value.replace(/,/g, '').replace(/\D/g, ''); if (v) v = parseInt(v).toLocaleString(); setMarchSize(v) }}
-                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary" />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">Wound Rate % <span className="text-muted-foreground/50">(avg per battle)</span></label>
-                    <input type="number" placeholder="25" value={woundRate} onChange={e => setWoundRate(e.target.value)}
-                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary" />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">T5 % of wounded</label>
-                    <input type="number" placeholder="30" value={tierSplit} onChange={e => setTierSplit(e.target.value)}
-                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary" />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">Troop focus</label>
-                    <select value={troopFocus} onChange={e => setTroopFocus(e.target.value as TroopFocus)}
-                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary">
-                      <option value="infantry">Infantry</option>
-                      <option value="cavalry">Cavalry</option>
-                      <option value="archer">Archer</option>
-                      <option value="mixed">Mixed (equal split)</option>
-                    </select>
-                  </div>
-                </div>
-                {/* Preview of estimated counts */}
-                {parseCount(marchSize) > 0 && (
-                  <div className="rounded-lg bg-secondary/20 px-3 py-2 text-xs text-muted-foreground space-y-1">
-                    <span className="font-medium text-foreground">Estimated: </span>
-                    {(['t4', 't5'] as const).map(tier => {
-                      const total = TROOP_TYPES.reduce((s, t) => s + parseCount(estimatedCounts[tier][t]), 0)
-                      return total > 0 ? (
-                        <span key={tier} className={`ml-2 ${tier === 't5' ? 'text-violet-400' : 'text-amber-400'}`}>
-                          {total.toLocaleString()} {tier.toUpperCase()}
-                        </span>
-                      ) : null
-                    })}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {/* T4 */}
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-                    <span className="text-[11px] font-semibold text-amber-400 uppercase tracking-wider">Tier 4</span>
-                  </div>
-                  <div className="grid grid-cols-4 gap-2">
-                    {TROOP_TYPES.map(t => (
-                      <TroopInput key={t} tier="t4" type={t} value={counts.t4[t]} onChange={v => setCount('t4', t, v)} />
-                    ))}
-                  </div>
-                </div>
-                {/* T5 */}
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="h-1.5 w-1.5 rounded-full bg-violet-400" />
-                    <span className="text-[11px] font-semibold text-violet-400 uppercase tracking-wider">Tier 5</span>
-                  </div>
-                  <div className="grid grid-cols-4 gap-2">
-                    {TROOP_TYPES.map(t => (
-                      <TroopInput key={t} tier="t5" type={t} value={counts.t5[t]} onChange={v => setCount('t5', t, v)} />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
+          {/* T5 */}
+          <div className="rounded-xl border border-violet-500/25 bg-card p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="h-1.5 w-1.5 rounded-full bg-violet-400" />
+              <p className="text-[11px] font-semibold text-violet-400 uppercase tracking-wider">Tier 5 Wounded</p>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {TROOP_TYPES.map(t => (
+                <TroopInput key={t} tier="t5" type={t} value={counts.t5[t]} onChange={v => setCount('t5', t, v)} />
+              ))}
+            </div>
           </div>
 
           {/* Stockpile */}
-          <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+          <div className="rounded-xl border border-border bg-card p-4 space-y-4">
             <div className="flex items-center justify-between">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Your Stockpile</p>
-              <span className="text-[10px] text-muted-foreground">Supports M/B suffixes (e.g. 50M)</span>
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Your Stockpile <span className="normal-case font-normal opacity-60">(optional)</span></p>
+              <span className="text-[10px] text-muted-foreground">Supports M / B (e.g. 50M, 1.2B)</span>
             </div>
+
             <div className="grid grid-cols-2 gap-3">
-              <StockpileInput icon="/images/bundle/food.png"  alt="Food"  label="Food"  value={sFood}  onChange={setSFood}  />
-              <StockpileInput icon="/images/bundle/wood.png"  alt="Wood"  label="Wood"  value={sWood}  onChange={setSWood}  />
-              <StockpileInput icon="/images/bundle/stone.png" alt="Stone" label="Stone" value={sStone} onChange={setSStone} />
-              <StockpileInput icon="/images/bundle/gold.png"  alt="Gold"  label="Gold"  value={sGold}  onChange={setSGold}  />
+              {[
+                { icon: '/images/bundle/food.png',  alt: 'Food',  val: sFood,  set: setSFood  },
+                { icon: '/images/bundle/wood.png',  alt: 'Wood',  val: sWood,  set: setSWood  },
+                { icon: '/images/bundle/stone.png', alt: 'Stone', val: sStone, set: setSStone },
+                { icon: '/images/bundle/gold.png',  alt: 'Gold',  val: sGold,  set: setSGold  },
+              ].map(r => (
+                <div key={r.alt} className="space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <RokImg src={r.icon} alt={r.alt} size={16} />
+                    <label className="text-xs text-muted-foreground">{r.alt}</label>
+                  </div>
+                  <input type="text" placeholder="0" value={r.val} onChange={e => r.set(e.target.value)}
+                    className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary" />
+                </div>
+              ))}
             </div>
-            <div className="space-y-1 pt-1 border-t border-border">
+
+            {/* Speedups */}
+            <div className="space-y-1.5 pt-1 border-t border-border">
               <div className="flex items-center gap-1.5">
-                <Image src="/images/bundle/healing_speed.png" alt="Speedups" width={18} height={18} className="object-contain" />
-                <label className="text-xs text-muted-foreground">Healing Speedups available</label>
+                <Image src="/images/bundle/healing_speed.png" alt="Speedups" width={16} height={16} className="object-contain" />
+                <label className="text-xs text-muted-foreground">Healing speedups available</label>
               </div>
               <div className="flex gap-2">
                 <input type="number" placeholder="0" value={speedupVal} onChange={e => setSpeedupVal(e.target.value)}
                   className="flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:ring-1 focus:ring-primary" />
-                <div className="flex rounded-lg border border-border overflow-hidden text-xs">
-                  <button onClick={() => setSpeedupUnit('hours')}
-                    className={`px-3 py-1.5 transition-colors ${speedupUnit === 'hours' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-secondary'}`}>
-                    Hours
-                  </button>
-                  <button onClick={() => setSpeedupUnit('days')}
-                    className={`px-3 py-1.5 border-l border-border transition-colors ${speedupUnit === 'days' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-secondary'}`}>
-                    Days
-                  </button>
+                <div className="flex rounded-lg border border-border text-xs overflow-hidden">
+                  {(['hours', 'days'] as const).map(u => (
+                    <button key={u} onClick={() => setSpeedupUnit(u)}
+                      className={`px-3 py-1.5 capitalize transition-colors border-l border-border first:border-0 ${speedupUnit === u ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-secondary'}`}>
+                      {u}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Trade ratio */}
+          {/* KP ratio */}
           <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Kill:Death Ratio <span className="normal-case font-normal text-muted-foreground/60">(optional — for KP estimate)</span></p>
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+              Kill:Death Ratio <span className="normal-case font-normal opacity-60">(optional)</span>
+            </p>
             <div className="flex flex-wrap gap-2">
               {RATIO_OPTIONS.map(opt => (
                 <button key={opt.value}
                   onClick={() => setTradeRatio(tradeRatio === opt.value ? null : opt.value)}
-                  className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition-all ${
+                  className={`rounded-lg border px-3 py-1.5 text-sm font-bold transition-all ${
                     tradeRatio === opt.value ? 'border-primary bg-primary/15 text-primary' : 'border-border hover:border-primary/40 text-muted-foreground hover:text-foreground'
                   }`}>
                   {opt.display}
@@ -580,112 +456,95 @@ export function KvkHealingContent() {
           </div>
         </div>
 
-        {/* ===== RIGHT RESULTS ===== */}
+        {/* ===== RESULTS ===== */}
         <div className="xl:col-span-2 space-y-4">
-
           {result ? (
             <>
-              {/* Hero stat — healing time */}
-              <div className="rounded-xl border border-primary/25 bg-primary/5 p-4 space-y-1">
-                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Speedups Needed</p>
+              {/* Speedup needed */}
+              <div className="rounded-xl border border-primary/25 bg-primary/5 p-4">
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">Speedups Needed</p>
                 <div className="flex items-center gap-3">
-                  <Image src="/images/bundle/healing_speed.png" alt="" width={36} height={36} className="object-contain" />
+                  <Image src="/images/bundle/healing_speed.png" alt="" width={38} height={38} className="object-contain" />
                   <div>
                     <div className="text-2xl font-bold text-primary leading-none">{fmtTime(result.finalSeconds)}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">after 30 alliance helps</div>
+                    <div className="text-xs text-muted-foreground mt-1">after 30 alliance helps</div>
+                    <div className="text-xs text-muted-foreground">base: {fmtTime(Math.ceil(result.baseSeconds))}</div>
                   </div>
                 </div>
-                {result.baseSeconds > 0 && (
-                  <p className="text-xs text-muted-foreground">Base (no helps): {fmtTime(Math.ceil(result.baseSeconds))}</p>
-                )}
-                <div className="flex gap-2 pt-1 text-xs text-muted-foreground">
-                  <span>{result.totalTroops.toLocaleString()} troops total</span>
-                  {result.t4Total > 0 && <span className="text-amber-400">· {result.t4Total.toLocaleString()} T4</span>}
-                  {result.t5Total > 0 && <span className="text-violet-400">· {result.t5Total.toLocaleString()} T5</span>}
+                <div className="flex gap-3 mt-3 text-xs text-muted-foreground border-t border-border/50 pt-3">
+                  <span>{result.totalTroops.toLocaleString()} troops</span>
+                  {result.t4Total > 0 && <span className="text-amber-400">{result.t4Total.toLocaleString()} T4</span>}
+                  {result.t5Total > 0 && <span className="text-violet-400">{result.t5Total.toLocaleString()} T5</span>}
                 </div>
               </div>
 
               {/* Resources needed */}
-              <div className="rounded-xl border border-border bg-card p-4 space-y-2.5">
+              <div className="rounded-xl border border-border bg-card p-4 space-y-3">
                 <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Resources Needed</p>
-                {[
-                  { icon: '/images/bundle/food.png',  alt: 'Food',  key: 'food'  as const },
-                  { icon: '/images/bundle/wood.png',  alt: 'Wood',  key: 'wood'  as const },
-                  { icon: '/images/bundle/stone.png', alt: 'Stone', key: 'stone' as const },
-                  { icon: '/images/bundle/gold.png',  alt: 'Gold',  key: 'gold'  as const },
-                ].filter(r => result.needed[r.key] > 0).map(r => (
+                {([
+                  { icon: '/images/bundle/food.png',  alt: 'Food',  key: 'food'  },
+                  { icon: '/images/bundle/wood.png',  alt: 'Wood',  key: 'wood'  },
+                  { icon: '/images/bundle/stone.png', alt: 'Stone', key: 'stone' },
+                  { icon: '/images/bundle/gold.png',  alt: 'Gold',  key: 'gold'  },
+                ] as const).filter(r => result.needed[r.key] > 0).map(r => (
                   <div key={r.key} className="flex items-center gap-2.5">
-                    <RokImg src={r.icon} alt={r.alt} size={24} />
-                    <span className="text-base font-bold tabular-nums text-foreground">{fmt(result.needed[r.key])}</span>
+                    <RokImg src={r.icon} alt={r.alt} size={26} />
+                    <span className="text-lg font-bold tabular-nums text-foreground">{fmt(result.needed[r.key])}</span>
                     <span className="text-xs text-muted-foreground">{r.alt}</span>
                   </div>
                 ))}
               </div>
 
-              {/* Balance check — the key feature */}
+              {/* Balance check */}
               {hasStockpile && (
-                <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+                <div className="rounded-xl border border-border bg-card p-4 space-y-4">
                   <div className="flex items-center justify-between">
                     <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Resource vs Speedup Balance</p>
                     {result.bottleneck === 'none' && (
-                      <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-medium">
-                        <CheckCircle2 className="h-3.5 w-3.5" /> All covered
+                      <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-semibold">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Balanced
                       </span>
                     )}
                     {result.bottleneck && result.bottleneck !== 'none' && (
-                      <span className="flex items-center gap-1 text-[11px] text-red-400 font-medium">
+                      <span className="flex items-center gap-1 text-[11px] text-red-400 font-semibold">
                         <AlertTriangle className="h-3.5 w-3.5" />
-                        Short on {result.bottleneck}
+                        {result.bottleneck === 'speedups' ? 'Short on speedups' : `Short on ${result.bottleneck}`}
                       </span>
                     )}
                   </div>
 
-                  <div className="space-y-3">
-                    {/* Speedups */}
+                  <div className="space-y-4">
                     {speedupSeconds !== null && (
-                      <BalanceBar
-                        label="Healing Speedups"
+                      <BalanceRow
+                        icon="/images/bundle/healing_speed.png"
+                        label="Speedups"
                         available={speedupSeconds / 3600}
                         needed={result.finalSeconds / 3600}
-                        cap={result.speedupCap}
-                        totalTroops={result.totalTroops}
                         isSpeedup
                       />
                     )}
-                    {/* Resources */}
-                    {stockpile !== null && [
-                      { icon: '/images/bundle/food.png',  alt: 'Food',  key: 'food'  as const },
-                      { icon: '/images/bundle/wood.png',  alt: 'Wood',  key: 'wood'  as const },
-                      { icon: '/images/bundle/stone.png', alt: 'Stone', key: 'stone' as const },
-                      { icon: '/images/bundle/gold.png',  alt: 'Gold',  key: 'gold'  as const },
-                    ].filter(r => result.needed[r.key] > 0).map(r => (
-                      <BalanceBar
+                    {stockpile !== null && ([
+                      { icon: '/images/bundle/food.png',  alt: 'Food',  key: 'food'  },
+                      { icon: '/images/bundle/wood.png',  alt: 'Wood',  key: 'wood'  },
+                      { icon: '/images/bundle/stone.png', alt: 'Stone', key: 'stone' },
+                      { icon: '/images/bundle/gold.png',  alt: 'Gold',  key: 'gold'  },
+                    ] as const).filter(r => result.needed[r.key] > 0).map(r => (
+                      <BalanceRow
                         key={r.key}
-                        label={r.alt}
                         icon={r.icon}
+                        label={r.alt}
                         available={stockpile[r.key]}
                         needed={result.needed[r.key]}
-                        cap={result.resCap[r.key]}
-                        totalTroops={result.totalTroops}
                       />
                     ))}
                   </div>
 
-                  {/* Balance insight */}
-                  {result.bottleneck !== null && result.bottleneck !== 'none' && (
-                    <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2 text-xs text-red-300">
-                      <strong>{result.bottleneck === 'speedups' ? 'Speedups' : result.bottleneck.charAt(0).toUpperCase() + result.bottleneck.slice(1)}</strong> is your bottleneck.
-                      {result.bottleneck !== 'speedups' && result.speedupCap != null && result.resCap[result.bottleneck as keyof Res] != null && (
-                        <span> Your speedups could heal {fmt(result.speedupCap ?? 0)} troops but {result.bottleneck} only covers {fmt(result.resCap[result.bottleneck as keyof Res] ?? 0)}.</span>
-                      )}
-                      {result.bottleneck === 'speedups' && (
-                        <span> Your resources could heal more troops than your speedups allow.</span>
-                      )}
-                    </div>
-                  )}
-                  {result.bottleneck === 'none' && (
-                    <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 text-xs text-emerald-300">
-                      You have enough of everything to fully heal your troops.
+                  {result.bottleneck && result.bottleneck !== 'none' && (
+                    <div className="rounded-lg px-3 py-2.5 text-xs bg-amber-500/10 border border-amber-500/20 text-amber-300">
+                      {result.bottleneck === 'speedups'
+                        ? 'Your resources can cover more troops than your speedups allow. Save those resources — you\'ll run out of speedups first.'
+                        : `Your speedups can cover more troops than your ${result.bottleneck} allows. Stock up on ${result.bottleneck} or you'll waste speedups.`
+                      }
                     </div>
                   )}
                 </div>
@@ -693,11 +552,13 @@ export function KvkHealingContent() {
 
               {/* KP */}
               {tradeRatio !== null && result.expectedKills > 0 && (
-                <div className="rounded-xl border border-border bg-card p-4 space-y-2.5">
-                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Expected KP at {RATIO_OPTIONS.find(r => r.value === tradeRatio)?.display} ratio</p>
+                <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    Expected KP <span className="normal-case font-normal opacity-60">at {RATIO_OPTIONS.find(r => r.value === tradeRatio)?.display}</span>
+                  </p>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-lg bg-secondary/40 p-3 text-center">
-                      <div className="text-xl font-bold text-foreground">{fmt(result.expectedKills)}</div>
+                      <div className="text-xl font-bold">{fmt(result.expectedKills)}</div>
                       <div className="text-[11px] text-muted-foreground mt-0.5">Enemy Kills</div>
                     </div>
                     <div className="rounded-lg bg-primary/10 border border-primary/20 p-3 text-center">
@@ -709,19 +570,19 @@ export function KvkHealingContent() {
               )}
             </>
           ) : (
-            <div className="rounded-xl border border-border bg-card p-8 flex flex-col items-center justify-center text-center gap-3">
-              <Image src="/images/bundle/healing_speed.png" alt="" width={44} height={44} className="object-contain opacity-60" />
-              <div>
-                <p className="text-sm font-medium text-foreground">Enter your wounded troops above</p>
-                <p className="text-xs text-muted-foreground mt-1">Add stockpile to check if resources and speedups are balanced</p>
-              </div>
+            <div className="rounded-xl border border-border bg-card p-10 flex flex-col items-center justify-center text-center gap-3">
+              <Image src="/images/bundle/healing_speed.png" alt="" width={44} height={44} className="object-contain opacity-50" />
+              <p className="text-sm font-medium text-foreground">Enter your wounded troops</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Add your stockpile to see if your resources and speedups are balanced for KvK.
+              </p>
             </div>
           )}
         </div>
       </div>
 
       <p className="text-xs text-muted-foreground bg-secondary/30 rounded-lg px-4 py-2.5">
-        Time shown is after 30 alliance helps (each reduces remaining time by the greater of 1% or 3 minutes). Healing speed and cost reduction buffs apply before helps.
+        Time is calculated after 30 alliance helps — each help reduces remaining time by the greater of 1% or 3 minutes. Healing speed and cost reduction apply before helps.
       </p>
     </div>
   )
