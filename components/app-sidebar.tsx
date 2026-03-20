@@ -121,6 +121,7 @@ const strategyNavItems = [
   { id: "general-tools",      label: "General Tools",     icon: Wrench },
   { id: "sunset-canyon",      label: "Sunset Canyon",     icon: Mountain },
   { id: "gathering-of-heroes", label: "Gathering of Heroes", icon: Gift },
+  { id: "kvk-healing",        label: "KvK Healing Calc",  icon: CrosshairIcon },
 ];
 
 // Account & Progression section

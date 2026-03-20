@@ -50,6 +50,7 @@ import { RokMailContent } from "@/components/rok-mail-content";
 import { FlagCalculatorContent } from "@/components/flag-calculator-content";
 import { SunsetCanyonContent } from "@/components/sunset-canyon-content";
 import { GatheringOfHeroesContent } from "@/components/gathering-of-heroes-content";
+import { KvkHealingContent } from "@/components/kvk-healing-content";
 import { useAuth } from "@/lib/auth-context";
 
 const tabMeta: Record<string, { label: string; description: string; icon: React.ElementType }> = {
@@ -183,6 +184,11 @@ const tabMeta: Record<string, { label: string; description: string; icon: React.
     description: "Plan tokens, missions, and commander unlocks for GoH events",
     icon: Crown,
   },
+  "kvk-healing": {
+    label: "KvK Healing Calc",
+    description: "Calculate healing costs, resource needs, and speedup requirements for KvK",
+    icon: CrosshairIcon,
+  },
   "project-tools-home": {
     label: "Project Tools",
     description: "Ark of Osiris, Territory Planner, and RoK Mail",
@@ -303,6 +309,8 @@ export function ContentPanel({
           <SunsetCanyonContent />
         ) : activeTab === "gathering-of-heroes" ? (
           <GatheringOfHeroesContent />
+        ) : activeTab === "kvk-healing" ? (
+          <KvkHealingContent />
         ) : (
           <HomeContent onTabChange={onTabChange} />
         )}
