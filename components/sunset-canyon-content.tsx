@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -533,16 +533,158 @@ function ArmySlot({ army, position, index }: { army: Army | null; position: 'fro
 }
 
 /* ------------------------------------------------------------------ */
-/*  Commander Form with searchable dropdown                             */
+/*  Commander Form with full visual browser                             */
 /* ------------------------------------------------------------------ */
 
 const EMPTY_FORM = {
   name:      '',
-  rarity:    'epic' as Rarity,
+  rarity:    'legendary' as Rarity,
   troopType: 'infantry' as TroopType,
   level:     40,
   stars:     3,
   skills:    [3, 3, 3, 3] as [number, number, number, number],
+}
+
+type RarityFilter  = 'all' | Rarity
+type TroopFilter   = 'all' | TroopType
+
+function CommanderPicker({ selected, onPick }: { selected: string; onPick: (c: CommanderInfo) => void }) {
+  const [search,       setSearch]       = useState('')
+  const [rarityFilter, setRarityFilter] = useState<RarityFilter>('all')
+  const [troopFilter,  setTroopFilter]  = useState<TroopFilter>('all')
+
+  const results = useMemo(() => {
+    const q = search.toLowerCase()
+    return COMMANDER_DB.filter((c) => {
+      if (q && !c.name.toLowerCase().includes(q)) return false
+      if (rarityFilter !== 'all' && c.rarity !== rarityFilter) return false
+      if (troopFilter  !== 'all' && c.troopType !== troopFilter) return false
+      return true
+    })
+  }, [search, rarityFilter, troopFilter])
+
+  // Group by rarity for display when not searching
+  const legendary = results.filter((c) => c.rarity === 'legendary')
+  const epic       = results.filter((c) => c.rarity === 'epic')
+
+  const FilterBtn = ({ active, onClick, children, className = '' }: {
+    active: boolean; onClick: () => void; children: React.ReactNode; className?: string
+  }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-md transition-all ${
+        active ? `bg-primary/20 text-primary ring-1 ring-primary/40 ${className}` : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
+      }`}
+    >
+      {children}
+    </button>
+  )
+
+  return (
+    <div className="space-y-3">
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search all commanders…"
+          className="w-full pl-8 pr-3 py-2 text-sm rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+        />
+        {search && (
+          <button type="button" onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-1.5">
+        <FilterBtn active={rarityFilter === 'all'}       onClick={() => setRarityFilter('all')}>All</FilterBtn>
+        <FilterBtn active={rarityFilter === 'legendary'} onClick={() => setRarityFilter('legendary')} className="text-yellow-400">⭐ Legendary</FilterBtn>
+        <FilterBtn active={rarityFilter === 'epic'}      onClick={() => setRarityFilter('epic')} className="text-purple-400">💜 Epic</FilterBtn>
+        <span className="w-px bg-border self-stretch mx-0.5" />
+        <FilterBtn active={troopFilter === 'all'}       onClick={() => setTroopFilter('all')}>All Troops</FilterBtn>
+        <FilterBtn active={troopFilter === 'infantry'}  onClick={() => setTroopFilter('infantry')}>🛡 Infantry</FilterBtn>
+        <FilterBtn active={troopFilter === 'cavalry'}   onClick={() => setTroopFilter('cavalry')}>⚔ Cavalry</FilterBtn>
+        <FilterBtn active={troopFilter === 'archer'}    onClick={() => setTroopFilter('archer')}>🏹 Archer</FilterBtn>
+        <FilterBtn active={troopFilter === 'mixed'}     onClick={() => setTroopFilter('mixed')}>🔀 Mixed</FilterBtn>
+      </div>
+
+      {/* Commander grid */}
+      <div className="max-h-56 overflow-y-auto rounded-lg border border-border bg-background space-y-0.5 p-1.5">
+        {results.length === 0 ? (
+          <p className="text-xs text-muted-foreground text-center py-6">No commanders match these filters.</p>
+        ) : (
+          <>
+            {/* Legendary group */}
+            {legendary.length > 0 && rarityFilter !== 'epic' && (
+              <>
+                <p className="text-[10px] font-bold text-yellow-500/70 uppercase tracking-wider px-2 py-1">
+                  Legendary ({legendary.length})
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-0.5">
+                  {legendary.map((c) => (
+                    <button
+                      key={c.name}
+                      type="button"
+                      onClick={() => onPick(c)}
+                      className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md text-left transition-all hover:bg-yellow-500/10 ${
+                        selected === c.name ? 'bg-yellow-500/20 ring-1 ring-yellow-500/40' : ''
+                      }`}
+                    >
+                      <span className={`shrink-0 ${TROOP_COLORS[c.troopType]}`}>{TROOP_ICONS[c.troopType]}</span>
+                      <span className="text-xs font-medium text-yellow-300 flex-1 truncate">{c.name}</span>
+                      {CANYON_SYNERGIES[c.name] && (
+                        <span className={`text-[9px] font-bold ${
+                          CANYON_SYNERGIES[c.name].tier === 'S' ? 'text-yellow-400' :
+                          CANYON_SYNERGIES[c.name].tier === 'A' ? 'text-orange-400' : 'text-muted-foreground'
+                        }`}>{CANYON_SYNERGIES[c.name].tier}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+            {/* Epic group */}
+            {epic.length > 0 && rarityFilter !== 'legendary' && (
+              <>
+                <p className="text-[10px] font-bold text-purple-500/70 uppercase tracking-wider px-2 py-1 mt-1">
+                  Epic ({epic.length})
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-0.5">
+                  {epic.map((c) => (
+                    <button
+                      key={c.name}
+                      type="button"
+                      onClick={() => onPick(c)}
+                      className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md text-left transition-all hover:bg-purple-500/10 ${
+                        selected === c.name ? 'bg-purple-500/20 ring-1 ring-purple-500/40' : ''
+                      }`}
+                    >
+                      <span className={`shrink-0 ${TROOP_COLORS[c.troopType]}`}>{TROOP_ICONS[c.troopType]}</span>
+                      <span className="text-xs font-medium text-purple-300 flex-1 truncate">{c.name}</span>
+                      {CANYON_SYNERGIES[c.name] && (
+                        <span className={`text-[9px] font-bold ${
+                          CANYON_SYNERGIES[c.name].tier === 'S' ? 'text-yellow-400' :
+                          CANYON_SYNERGIES[c.name].tier === 'A' ? 'text-orange-400' : 'text-muted-foreground'
+                        }`}>{CANYON_SYNERGIES[c.name].tier}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </div>
+
+      <p className="text-[10px] text-muted-foreground">
+        {results.length} of {COMMANDER_DB.length} commanders shown
+      </p>
+    </div>
+  )
 }
 
 function CommanderForm({ initial, onSave, onCancel }: {
@@ -551,19 +693,9 @@ function CommanderForm({ initial, onSave, onCancel }: {
   onCancel: () => void
 }) {
   const [form, setForm] = useState(initial ? { ...initial } : { ...EMPTY_FORM })
-  const [search, setSearch] = useState(initial?.name ?? '')
-  const [dropOpen, setDropOpen] = useState(false)
-  const searchRef = useRef<HTMLInputElement>(null)
-
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase()
-    return COMMANDER_DB.filter((c) => c.name.toLowerCase().includes(q)).slice(0, 30)
-  }, [search])
 
   function pickCommander(info: CommanderInfo) {
     setForm((f) => ({ ...f, name: info.name, rarity: info.rarity, troopType: info.troopType }))
-    setSearch(info.name)
-    setDropOpen(false)
   }
 
   function setSkill(index: number, val: string) {
@@ -581,48 +713,16 @@ function CommanderForm({ initial, onSave, onCancel }: {
     <div className="rounded-xl border border-border bg-card p-5 space-y-4">
       <h3 className="font-semibold text-foreground text-sm">{initial ? 'Edit Commander' : 'Add Commander'}</h3>
 
-      {/* Searchable dropdown */}
+      {/* Commander browser */}
       <div>
-        <Label className="mb-1.5 block text-xs text-muted-foreground">Commander</Label>
-        <div className="relative">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-            <input
-              ref={searchRef}
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value)
-                setForm((f) => ({ ...f, name: e.target.value }))
-                setDropOpen(true)
-              }}
-              onFocus={() => setDropOpen(true)}
-              onBlur={() => setTimeout(() => setDropOpen(false), 150)}
-              placeholder="Search commanders..."
-              className="w-full pl-8 pr-3 py-2 text-sm rounded-lg border border-border bg-secondary text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-            />
-          </div>
-          {dropOpen && filtered.length > 0 && (
-            <div className="absolute z-30 mt-1 w-full rounded-lg border border-border bg-card shadow-xl max-h-64 overflow-y-auto">
-              {filtered.map((c) => (
-                <button
-                  key={c.name}
-                  type="button"
-                  onMouseDown={() => pickCommander(c)}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-secondary transition-colors"
-                >
-                  <span className={`shrink-0 ${TROOP_COLORS[c.troopType]}`}>{TROOP_ICONS[c.troopType]}</span>
-                  <span className={`text-sm font-medium flex-1 ${RARITY_COLORS[c.rarity]}`}>{c.name}</span>
-                  <span className={`text-[10px] font-semibold uppercase tracking-wider ${RARITY_BADGE[c.rarity]} rounded px-1.5 py-0.5`}>{c.rarity}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        {/* Selected commander preview */}
-        {COMMANDER_MAP.has(form.name) && (
-          <div className={`mt-2 flex items-center gap-2 rounded-lg border px-3 py-2 ${RARITY_BG[form.rarity]}`}>
-            <span className={`${TROOP_COLORS[form.troopType]}`}>{TROOP_ICONS[form.troopType]}</span>
-            <span className={`text-sm font-semibold ${RARITY_COLORS[form.rarity]}`}>{form.name}</span>
+        <Label className="mb-1.5 block text-xs text-muted-foreground">Select Commander</Label>
+        <CommanderPicker selected={form.name} onPick={pickCommander} />
+
+        {/* Selected preview */}
+        {form.name && (
+          <div className={`mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 ${RARITY_BG[form.rarity]}`}>
+            <span className={TROOP_COLORS[form.troopType]}>{TROOP_ICONS[form.troopType]}</span>
+            <span className={`text-sm font-semibold flex-1 ${RARITY_COLORS[form.rarity]}`}>{form.name}</span>
             <RarityBadge rarity={form.rarity} />
             <TroopBadge type={form.troopType} />
           </div>
