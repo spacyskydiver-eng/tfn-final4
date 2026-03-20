@@ -1,6 +1,12 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import {
+  RadialBarChart, RadialBar, PolarAngleAxis,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Cell, Legend,
+  PieChart, Pie,
+} from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -533,6 +539,136 @@ function ArmySlot({ army, position, index }: { army: Army | null; position: 'fro
 }
 
 /* ------------------------------------------------------------------ */
+/*  Formation Analytics Charts                                          */
+/* ------------------------------------------------------------------ */
+
+function WinRateGauge({ winRate }: { winRate: number }) {
+  const color = winRate > 65 ? '#4ade80' : winRate >= 50 ? '#facc15' : '#f87171'
+  const pct = (winRate - 30) / (82 - 30)
+
+  // Two-segment pie: filled + empty, rendered as semicircle
+  const gaugeData = [
+    { value: pct * 100 },
+    { value: (1 - pct) * 100 },
+  ]
+  const bgData = [{ value: 100 }]
+
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <div className="relative">
+        <PieChart width={180} height={100} margin={{ top: 0, right: 0, bottom: 0, left: 0 }}
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          // @ts-ignore – recharts PieChart doesn't need width/height typing fix here
+        >
+          {/* background track */}
+          <Pie
+            data={bgData}
+            dataKey="value"
+            startAngle={180}
+            endAngle={0}
+            innerRadius={52}
+            outerRadius={76}
+            stroke="none"
+            fill="#27272a"
+            isAnimationActive={false}
+          />
+          {/* filled arc */}
+          <Pie
+            data={gaugeData}
+            dataKey="value"
+            startAngle={180}
+            endAngle={0}
+            innerRadius={52}
+            outerRadius={76}
+            stroke="none"
+            isAnimationActive
+          >
+            <Cell fill={color} />
+            <Cell fill="transparent" />
+          </Pie>
+        </PieChart>
+        <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center">
+          <span className="text-2xl font-bold tabular-nums" style={{ color }}>{winRate.toFixed(1)}%</span>
+          <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Est. Win Rate</span>
+        </div>
+      </div>
+      <div className="flex justify-between w-full max-w-[180px] text-[9px] text-muted-foreground/60">
+        <span>30%</span>
+        <span>82%</span>
+      </div>
+    </div>
+  )
+}
+
+function ArmyScoresChart({ armies }: { armies: Army[] }) {
+  if (armies.length === 0) return null
+  const data = armies.map((a, i) => {
+    const primaryName  = a.primary.name.split(' ').slice(0, 2).join(' ')
+    const secondName   = a.secondary.name.split(' ').slice(0, 2).join(' ')
+    return {
+      name: `${primaryName} + ${secondName}`,
+      power: Math.round(calcPower(a.primary) + calcPower(a.secondary)),
+      synergy: Math.max(0, Math.round(a.score - (calcPower(a.primary) / 10 + calcPower(a.secondary) / 15))),
+    }
+  })
+
+  return (
+    <ResponsiveContainer width="100%" height={Math.max(120, armies.length * 44)}>
+      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 12, bottom: 4, left: 8 }}>
+        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#3f3f46" />
+        <XAxis type="number" tick={{ fontSize: 10, fill: '#71717a' }} tickLine={false} axisLine={false} />
+        <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 9, fill: '#a1a1aa' }} tickLine={false} axisLine={false} />
+        <Tooltip
+          contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8, fontSize: 11 }}
+          labelStyle={{ color: '#e4e4e7' }}
+          formatter={(value: number, name: string) => [value.toLocaleString(), name === 'power' ? 'Base Power' : 'Synergy Bonus']}
+        />
+        <Bar dataKey="power"   name="power"   stackId="a" fill="#7c3aed" radius={[0, 0, 0, 0]} />
+        <Bar dataKey="synergy" name="synergy" stackId="a" fill="#a855f7" radius={[0, 4, 4, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
+function CommanderPowerChart({ commanders }: { commanders: Commander[] }) {
+  if (commanders.length === 0) return null
+
+  const data = commanders.map((c) => {
+    const skillSum   = c.skills.reduce((a, b) => a + b, 0)
+    const skillRatio = skillSum / 20
+    const rarityBonus = c.rarity === 'legendary' ? 300 : c.rarity === 'epic' ? 150 : 50
+    const firstName = c.name.split(' ')[0]
+    return {
+      name: firstName,
+      Level:  Math.round(c.level * c.level * 2),
+      Skills: Math.round(skillSum * 100 * (1 + skillRatio)),
+      Stars:  c.stars * 400,
+      Rarity: rarityBonus,
+    }
+  })
+
+  return (
+    <ResponsiveContainer width="100%" height={Math.max(120, commanders.length * 40)}>
+      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 12, bottom: 4, left: 8 }}>
+        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#3f3f46" />
+        <XAxis type="number" tick={{ fontSize: 10, fill: '#71717a' }} tickLine={false} axisLine={false} />
+        <YAxis type="category" dataKey="name" width={68} tick={{ fontSize: 10, fill: '#a1a1aa' }} tickLine={false} axisLine={false} />
+        <Tooltip
+          contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8, fontSize: 11 }}
+          labelStyle={{ color: '#e4e4e7' }}
+          formatter={(value: number) => [value.toLocaleString()]}
+        />
+        <Legend iconSize={8} wrapperStyle={{ fontSize: 10, paddingTop: 4 }} />
+        <Bar dataKey="Level"  stackId="a" fill="#3b82f6" />
+        <Bar dataKey="Skills" stackId="a" fill="#8b5cf6" />
+        <Bar dataKey="Stars"  stackId="a" fill="#f59e0b" />
+        <Bar dataKey="Rarity" stackId="a" fill="#10b981" radius={[0, 4, 4, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
+/* ------------------------------------------------------------------ */
 /*  Commander Form with full visual browser                             */
 /* ------------------------------------------------------------------ */
 
@@ -943,6 +1079,42 @@ export function SunsetCanyonContent() {
                       <p className="text-sm text-muted-foreground">{note}</p>
                     </div>
                   ))}
+                </CardContent>
+              </Card>
+
+              {/* Analytics charts */}
+              <Card className="border-border">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                    <Zap className="h-4 w-4 text-purple-400" />
+                    Formation Analytics
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Win rate gauge */}
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-3">Projected Win Rate</p>
+                    <WinRateGauge winRate={formation.winRate} />
+                    <p className="text-[10px] text-muted-foreground/60 text-center mt-2">
+                      Formula: 35 + totalPower ÷ 15,000 · capped 30–82%
+                    </p>
+                  </div>
+
+                  <div className="border-t border-border pt-4">
+                    <p className="text-xs text-muted-foreground mb-3">Army Pair Power + Synergy</p>
+                    <ArmyScoresChart armies={formation.armies} />
+                  </div>
+
+                  <div className="border-t border-border pt-4">
+                    <p className="text-xs text-muted-foreground mb-3">Commander Power Breakdown</p>
+                    <CommanderPowerChart commanders={commanders} />
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted-foreground/70">
+                      <span><span className="inline-block w-2 h-2 rounded-sm bg-blue-500 mr-1" />Level²×2</span>
+                      <span><span className="inline-block w-2 h-2 rounded-sm bg-violet-500 mr-1" />Skill×100×(1+ratio)</span>
+                      <span><span className="inline-block w-2 h-2 rounded-sm bg-amber-500 mr-1" />Stars×400</span>
+                      <span><span className="inline-block w-2 h-2 rounded-sm bg-emerald-500 mr-1" />Rarity bonus</span>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </>

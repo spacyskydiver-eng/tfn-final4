@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -326,6 +327,83 @@ function calcCost(selected: Set<string>): CostInfo {
 function calcGemTokens(gems: number): number {
   if (!gems || gems < 0) return 0
   return Math.floor(gems / GEMS_RATE) * 30
+}
+
+/* ------------------------------------------------------------------ */
+/*  Token sources donut chart                                           */
+/* ------------------------------------------------------------------ */
+
+const TOKEN_COLORS = {
+  Daily:      '#4ade80',
+  Challenges: '#60a5fa',
+  Speedups:   '#a78bfa',
+  Gems:       '#facc15',
+}
+
+function TokenDonut({
+  daily, challenges, speedups, gems, total,
+}: { daily: number; challenges: number; speedups: number; gems: number; total: number }) {
+  const raw = [
+    { name: 'Daily',      value: daily      },
+    { name: 'Challenges', value: challenges },
+    { name: 'Speedups',   value: speedups   },
+    { name: 'Gems',       value: gems       },
+  ].filter((d) => d.value > 0)
+
+  if (raw.length === 0 || total === 0) {
+    return (
+      <div className="flex items-center justify-center h-32 text-muted-foreground/40 text-xs">
+        No tokens yet
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative">
+      <ResponsiveContainer width="100%" height={180}>
+        <PieChart>
+          <Pie
+            data={raw}
+            dataKey="value"
+            innerRadius={52}
+            outerRadius={76}
+            paddingAngle={2}
+            startAngle={90}
+            endAngle={-270}
+          >
+            {raw.map((entry) => (
+              <Cell key={entry.name} fill={TOKEN_COLORS[entry.name as keyof typeof TOKEN_COLORS]} stroke="transparent" />
+            ))}
+          </Pie>
+          <Tooltip
+            contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8, fontSize: 11 }}
+            formatter={(value: number, name: string) => [
+              `${value} (${Math.round((value / total) * 100)}%)`,
+              name,
+            ]}
+          />
+        </PieChart>
+      </ResponsiveContainer>
+      {/* Center label */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <span className="text-xl font-bold text-foreground tabular-nums">{total.toLocaleString()}</span>
+        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">tokens</span>
+      </div>
+      {/* Legend */}
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-1">
+        {raw.map((entry) => (
+          <div key={entry.name} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span
+              className="inline-block h-2 w-2 rounded-full shrink-0"
+              style={{ background: TOKEN_COLORS[entry.name as keyof typeof TOKEN_COLORS] }}
+            />
+            <span>{entry.name}</span>
+            <span className="ml-auto font-medium text-foreground tabular-nums">{entry.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 /* ------------------------------------------------------------------ */
@@ -795,8 +873,17 @@ export function GatheringOfHeroesContent() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              {/* Token donut chart */}
+              <TokenDonut
+                daily={DAILY_TOKENS}
+                challenges={challengeTokens}
+                speedups={speedupTokens}
+                gems={gemTokens}
+                total={totalTokens}
+              />
+
               {/* Token breakdown */}
-              <div className="space-y-2 text-sm">
+              <div className="space-y-2 text-sm border-t border-border pt-3">
                 <div className="flex justify-between text-muted-foreground">
                   <span>Daily missions</span>
                   <span className="tabular-nums text-foreground">+{DAILY_TOKENS}</span>
