@@ -8,13 +8,13 @@ import techTreeData from '@/lib/data/crystal-tech-tree.json'
 /*  Layout — scaled down from codexhelper originals                    */
 /* ------------------------------------------------------------------ */
 
-const NW = 160   // node width  (codex: 230)
-const NH = 64    // node height (codex: 80)
-const HG = 44    // horizontal gap (codex: 70)
-const LS = 104   // line spacing (codex: 140)
+const NW = 200   // node width
+const NH = 86    // node height
+const HG = 48    // horizontal gap
+const LS = 126   // line spacing
 const PL = 24    // padding left
 const PT = 70    // padding top
-const PB = 70    // padding bottom
+const PB = 220   // padding bottom (extra room for info tooltips)
 
 const COL_PATTERN = [4,4,1,3,3,2,4,4,4,1,3,2,4,4,1,2,4,1] as const
 
@@ -345,7 +345,7 @@ function InfoTooltip({ tech, cur, accent }: { tech: TechDef; cur: number; accent
   const nextLd = tech.levels[cur]
   return (
     <div style={{
-      position:'absolute', bottom:'calc(100% + 6px)', left:'50%', transform:'translateX(-50%)',
+      position:'absolute', top:'calc(100% + 6px)', left:0,
       zIndex:999, width:220, borderRadius:10, padding:'10px 12px',
       background:'#071828', border:'1px solid rgba(100,200,255,0.25)',
       boxShadow:'0 8px 32px rgba(0,0,0,0.7)',
@@ -453,83 +453,81 @@ function TechNode({ techKey, levels, rc, onSet }: {
         boxShadow: maxed ? '0 0 10px rgba(0,229,255,0.25)' : undefined,
         display:'flex', flexDirection:'column',
       }}>
+        {/* Info button — absolute top-right */}
+        <button
+          onMouseDown={e => e.stopPropagation()}
+          onMouseEnter={() => setShowInfo(true)}
+          onMouseLeave={() => setShowInfo(false)}
+          style={{
+            position:'absolute', top:4, right:4, zIndex:2,
+            background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.18)',
+            borderRadius:'50%', color:'rgba(180,220,255,0.8)', fontSize:9, fontWeight:700,
+            width:16, height:16, cursor:'pointer', lineHeight:1, padding:0,
+            display:'flex', alignItems:'center', justifyContent:'center',
+          }}
+        >i</button>
+
         {/* Body row */}
-        <div style={{ display:'flex', alignItems:'center', flex:1, overflow:'hidden', padding:'4px 6px 2px 4px', gap:6 }}>
+        <div style={{ display:'flex', alignItems:'center', flex:1, overflow:'hidden', padding:'6px 8px 2px 6px', gap:8 }}>
           {/* Icon */}
           <div style={{
-            width:38, height:38, flexShrink:0, borderRadius:6,
-            background:'rgba(0,0,0,0.3)', border:'1px solid rgba(255,255,255,0.08)',
+            width:44, height:44, flexShrink:0, borderRadius:8,
+            background:'rgba(0,0,0,0.3)', border:'1px solid rgba(255,255,255,0.1)',
             display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden',
           }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={iconSrc(techKey)}
               alt=""
-              width={32} height={32}
+              width={36} height={36}
               style={{ objectFit:'contain', display:'block' }}
               draggable={false}
             />
           </div>
 
-          {/* Text */}
-          <div style={{ flex:1, minWidth:0 }}>
-            <p style={{ color:'#c8e4ff', fontSize:10, fontWeight:600, lineHeight:1.2, marginBottom:1,
-              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+          {/* Text + MAX */}
+          <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', gap:2 }}>
+            <p style={{ color:'#c8e4ff', fontSize:10.5, fontWeight:600, lineHeight:1.2,
+              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', paddingRight:20 }}>
               {tech.name}
             </p>
             {cur > 0 && (
-              <p style={{ color:accent, fontSize:9, opacity:0.85, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+              <p style={{ color:accent, fontSize:9.5, opacity:0.85, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
                 {tech.levels[cur-1]?.buff}
               </p>
             )}
-          </div>
-
-          {/* Info + Max buttons */}
-          <div style={{ display:'flex', flexDirection:'column', gap:2, flexShrink:0 }}>
-            {/* Info button */}
-            <button
-              onMouseDown={e => e.stopPropagation()}
-              onMouseEnter={() => setShowInfo(true)}
-              onMouseLeave={() => setShowInfo(false)}
-              style={{
-                background:'rgba(255,255,255,0.08)', border:'1px solid rgba(255,255,255,0.15)',
-                borderRadius:4, color:'rgba(180,220,255,0.7)', fontSize:9, fontWeight:700,
-                width:18, height:18, cursor:'pointer', lineHeight:1, padding:0,
-                display:'flex', alignItems:'center', justifyContent:'center',
-              }}
-            >i</button>
-            {/* Max button */}
+            {/* MAX button inline below text */}
             {!maxed && !locked && (
               <button
                 onMouseDown={e => e.stopPropagation()}
                 onClick={handleMax}
                 style={{
+                  alignSelf:'flex-start', marginTop:1,
                   background:'rgba(0,180,255,0.18)', border:'1px solid rgba(0,180,255,0.35)',
-                  borderRadius:4, color:'#7dd3fc', fontSize:8, fontWeight:700,
-                  padding:'1px 3px', cursor:'pointer', lineHeight:1,
+                  borderRadius:4, color:'#7dd3fc', fontSize:9, fontWeight:700,
+                  padding:'2px 7px', cursor:'pointer', lineHeight:1,
                 }}
               >MAX</button>
             )}
             {maxed && (
-              <span style={{ color:'#00e5ff', fontSize:8, fontWeight:700 }}>MAX</span>
+              <span style={{ color:'#00e5ff', fontSize:9, fontWeight:700 }}>✓ MAX</span>
             )}
           </div>
         </div>
 
         {/* Bottom bar */}
-        <div style={{ padding:'0 4px 4px' }}>
+        <div style={{ padding:'0 6px 5px' }}>
           {/* Progress bar */}
-          <div style={{ background:'rgba(255,255,255,0.07)', borderRadius:3, height:4, overflow:'hidden', marginBottom:2 }}>
+          <div style={{ background:'rgba(255,255,255,0.07)', borderRadius:3, height:5, overflow:'hidden', marginBottom:3 }}>
             <div style={{
               width:`${pct}%`, height:'100%', borderRadius:3,
               background: maxed ? '#00e5ff' : accent,
               transition:'width 0.15s',
             }} />
           </div>
-          {/* Level + accent strip row */}
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-            <div style={{ height:2, width:`${(cur/tech.maxLevel)*100}%`, background:accent, borderRadius:1, opacity:0.4 }} />
-            <p style={{ color:'rgba(180,210,255,0.45)', fontSize:8.5, tabularNums:true } as React.CSSProperties}>
+          {/* Level counter */}
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'flex-end' }}>
+            <p style={{ color:'rgba(180,210,255,0.45)', fontSize:9, tabularNums:true } as React.CSSProperties}>
               {cur}/{tech.maxLevel}
             </p>
           </div>
@@ -556,14 +554,9 @@ export function CrystalTechContent() {
   const [helps, setHelps]   = useState(30)
   const [confirmClear, setConfirmClear] = useState(false)
 
-  const canvasRef = useRef<HTMLDivElement>(null)
-
   const handleSet = useCallback((key: string, lv: number) => {
     setLevels(prev => ({ ...prev, [key]: lv }))
   }, [])
-
-  // Horizontal drag-to-scroll on canvas (but not on nodes)
-  const scrollDrag = useRef<{x:number; sl:number}|null>(null)
 
   const totals = useMemo(() => {
     const rcRed = rcReduction(rc)
@@ -597,7 +590,7 @@ export function CrystalTechContent() {
   }, [])
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+    <div className="w-full" style={{ display:'grid', gap:12 }}>
       {/* Settings */}
       <div style={{
         background:'linear-gradient(to right,#0a1929,#0f2030)',
@@ -666,20 +659,8 @@ export function CrystalTechContent() {
 
       {/* Canvas */}
       <div
-        ref={canvasRef}
-        style={{ overflowX:'auto', overflowY:'hidden', borderRadius:12, border:'1px solid rgba(100,200,255,0.15)', cursor:'grab', minWidth:0, width:'100%' }}
-        onMouseDown={e => {
-          if ((e.target as HTMLElement).closest('[data-tech]')) return
-          const el = canvasRef.current; if(!el) return
-          scrollDrag.current = { x: e.pageX, sl: el.scrollLeft }
-          const move = (ev: MouseEvent) => {
-            if (!scrollDrag.current || !el) return
-            el.scrollLeft = scrollDrag.current.sl - (ev.pageX - scrollDrag.current.x)
-          }
-          const up = () => { scrollDrag.current=null; document.removeEventListener('mousemove',move); document.removeEventListener('mouseup',up) }
-          document.addEventListener('mousemove', move)
-          document.addEventListener('mouseup', up)
-        }}
+        className="w-full overflow-x-auto"
+        style={{ borderRadius:12, border:'1px solid rgba(100,200,255,0.15)' }}
       >
         <div style={{
           position:'relative', width:CANVAS_W, height:CANVAS_H,
