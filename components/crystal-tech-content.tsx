@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback, useRef } from 'react'
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { RotateCcw } from 'lucide-react'
 import techTreeData from '@/lib/data/crystal-tech-tree.json'
 
@@ -14,7 +14,7 @@ const HG = 48    // horizontal gap
 const LS = 126   // line spacing
 const PL = 24    // padding left
 const PT = 70    // padding top
-const PB = 170   // padding bottom (room for info tooltips below bottom-row nodes)
+const PB = 28    // padding bottom
 
 const COL_PATTERN = [4,4,1,3,3,2,4,4,4,1,3,2,4,4,1,2,4,1] as const
 
@@ -340,51 +340,100 @@ const CAT_COLOR: Record<string,string> = {
   infantry:'#E63946', archer:'#2A9D8F', cavalry:'#E9C46A', siege:'#9B59B6', utility:'#3498DB',
 }
 
-/* Info tooltip shown on hover */
-function InfoTooltip({ tech, cur, accent }: { tech: TechDef; cur: number; accent: string }) {
-  const nextLd = tech.levels[cur]
+/* Draggable info card — opens on clicking the i button */
+function TechInfoCard({ techKey, onClose, initX, initY }: {
+  techKey: string; onClose: () => void; initX: number; initY: number
+}) {
+  const tech = TECH_MAP[techKey]
+  if (!tech) return null
+  const accent = CAT_COLOR[tech.category] ?? '#3498DB'
+  const [pos, setPos] = useState({ x: initX, y: initY })
+  const dragRef = useRef<{sx:number; sy:number; ox:number; oy:number} | null>(null)
+
+  const startDrag = (e: React.MouseEvent) => {
+    e.preventDefault(); e.stopPropagation()
+    dragRef.current = { sx: e.clientX, sy: e.clientY, ox: pos.x, oy: pos.y }
+    const move = (ev: MouseEvent) => {
+      if (!dragRef.current) return
+      setPos({ x: dragRef.current.ox + ev.clientX - dragRef.current.sx, y: dragRef.current.oy + ev.clientY - dragRef.current.sy })
+    }
+    const up = () => { dragRef.current = null; document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up) }
+    document.addEventListener('mousemove', move)
+    document.addEventListener('mouseup', up)
+  }
+
   return (
     <div style={{
-      position:'absolute', top:'calc(100% + 6px)', left:0,
-      zIndex:999, width:220, borderRadius:10, padding:'10px 12px',
-      background:'#071828', border:'1px solid rgba(100,200,255,0.25)',
-      boxShadow:'0 8px 32px rgba(0,0,0,0.7)',
-      pointerEvents:'none',
+      position:'fixed', left:pos.x, top:pos.y, zIndex:9999,
+      width:310, background:'#071828',
+      border:`1px solid ${accent}55`, borderRadius:12,
+      boxShadow:'0 8px 40px rgba(0,0,0,0.85)',
+      overflow:'hidden',
     }}>
-      <p style={{ color:'#c8e4ff', fontSize:11, fontWeight:700, marginBottom:4 }}>{tech.name}</p>
-      <p style={{ color:'rgba(180,220,255,0.55)', fontSize:9.5, lineHeight:1.4, marginBottom:6 }}>{tech.description}</p>
-      {cur > 0 && (
-        <div style={{ marginBottom: nextLd ? 6 : 0 }}>
-          <p style={{ fontSize:9, color:'rgba(100,200,255,0.5)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:2 }}>Current (Lv {cur})</p>
-          <p style={{ color:accent, fontSize:10.5, fontWeight:600 }}>{tech.levels[cur-1]?.buff}</p>
-        </div>
-      )}
-      {nextLd && (
-        <div>
-          <p style={{ fontSize:9, color:'rgba(100,200,255,0.5)', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:2 }}>Next (Lv {cur+1})</p>
-          <p style={{ color:'rgba(180,220,255,0.8)', fontSize:10 }}>{nextLd.buff}</p>
-          <div style={{ display:'flex', gap:8, marginTop:4, flexWrap:'wrap' }}>
-            <span style={{ fontSize:9, color:'rgba(160,200,255,0.5)' }}>⏱ {nextLd.time}</span>
-            <span style={{ fontSize:9, color:'rgba(0,229,255,0.7)' }}>💎 {nextLd.crystals.toLocaleString()}</span>
-            {nextLd.seasonCoins > 0 && <span style={{ fontSize:9, color:'rgba(251,191,36,0.8)' }}>🪙 {nextLd.seasonCoins}</span>}
-          </div>
-        </div>
-      )}
-      {cur === tech.maxLevel && (
-        <p style={{ color:'#00e5ff', fontSize:10, fontWeight:700 }}>✓ Maxed out</p>
-      )}
+      {/* Header / drag handle */}
+      <div onMouseDown={startDrag} style={{
+        cursor:'grab', display:'flex', alignItems:'center', gap:8,
+        padding:'10px 12px', background:`${accent}18`,
+        borderBottom:`1px solid ${accent}22`, userSelect:'none',
+      }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={iconSrc(techKey)} width={22} height={22} style={{ objectFit:'contain', flexShrink:0 }} alt="" draggable={false} />
+        <span style={{ color:'#c8e4ff', fontWeight:700, fontSize:12, flex:1 }}>{tech.name}</span>
+        <span style={{ color:'rgba(180,220,255,0.3)', fontSize:9, marginRight:6 }}>drag</span>
+        <button
+          onMouseDown={e => e.stopPropagation()}
+          onClick={onClose}
+          style={{
+            background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.15)',
+            borderRadius:4, color:'rgba(200,220,255,0.7)', fontSize:12, fontWeight:700,
+            width:22, height:22, cursor:'pointer', padding:0,
+            display:'flex', alignItems:'center', justifyContent:'center',
+          }}
+        >✕</button>
+      </div>
+
+      {/* Description */}
+      <p style={{ padding:'8px 12px 4px', fontSize:10.5, color:'rgba(180,220,255,0.5)', lineHeight:1.5 }}>
+        {tech.description}
+      </p>
+
+      {/* All-levels table */}
+      <div style={{ padding:'4px 12px 12px', overflowY:'auto', maxHeight:320 }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:10 }}>
+          <thead>
+            <tr>
+              {['Lv','Buff','Time','💎','🪙'].map(h => (
+                <th key={h} style={{
+                  textAlign:'left', padding:'4px 6px 6px',
+                  color:'rgba(100,200,255,0.45)', fontSize:9, fontWeight:700,
+                  textTransform:'uppercase', borderBottom:'1px solid rgba(255,255,255,0.07)',
+                  whiteSpace:'nowrap',
+                }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {tech.levels.map(ld => (
+              <tr key={ld.level} style={{ background: ld.level % 2 === 0 ? 'rgba(255,255,255,0.02)' : undefined }}>
+                <td style={{ padding:'3px 6px', color:accent, fontWeight:700, fontSize:11 }}>{ld.level}</td>
+                <td style={{ padding:'3px 6px', color:'rgba(200,230,255,0.75)' }}>{ld.buff}</td>
+                <td style={{ padding:'3px 6px', color:'rgba(120,200,255,0.6)', whiteSpace:'nowrap' }}>{ld.time}</td>
+                <td style={{ padding:'3px 6px', color:'#00e5ff', whiteSpace:'nowrap' }}>{ld.crystals.toLocaleString()}</td>
+                <td style={{ padding:'3px 6px', color:'rgba(251,191,36,0.8)' }}>{ld.seasonCoins > 0 ? ld.seasonCoins : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
 
 function TechNode({ techKey, levels, rc, onSet }: {
-  techKey: string
-  levels: Levels
-  rc: number
-  onSet: (key: string, lv: number) => void
+  techKey: string; levels: Levels; rc: number; onSet: (key: string, lv: number) => void
 }) {
-  const tech  = TECH_MAP[techKey]
-  const pos   = SLOT_POS[TECH_SLOT[techKey]]
+  const tech = TECH_MAP[techKey]
+  const pos  = SLOT_POS[TECH_SLOT[techKey]]
   if (!tech || !pos) return null
 
   const cur    = levels[techKey] ?? 0
@@ -392,11 +441,11 @@ function TechNode({ techKey, levels, rc, onSet }: {
   const locked = cur === 0 && !canUpgradeTo(techKey, 1, levels, rc)
   const pct    = (cur / tech.maxLevel) * 100
   const accent = CAT_COLOR[tech.category] ?? '#3498DB'
-  const [showInfo, setShowInfo] = useState(false)
-  const [hovered, setHovered] = useState(false)
-
-  // Drag to scrub level
-  const dragRef = useRef<{startX:number; startLv:number} | null>(null)
+  const [hovered, setHovered]   = useState(false)
+  const [cardOpen, setCardOpen] = useState(false)
+  const [cardPos, setCardPos]   = useState({ x: 0, y: 0 })
+  const infoBtnRef = useRef<HTMLButtonElement>(null)
+  const dragRef    = useRef<{startX:number; startLv:number} | null>(null)
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button === 2) { e.preventDefault(); return }
@@ -404,24 +453,25 @@ function TechNode({ techKey, levels, rc, onSet }: {
     dragRef.current = { startX: e.clientX, startLv: cur }
     const move = (ev: MouseEvent) => {
       if (!dragRef.current) return
-      const delta = Math.round((ev.clientX - dragRef.current.startX) / 18)
+      const delta   = Math.round((ev.clientX - dragRef.current.startX) / 18)
       const desired = Math.max(0, Math.min(tech.maxLevel, dragRef.current.startLv + delta))
-      // Find highest level we can actually reach
       let lv = dragRef.current.startLv
-      if (desired > lv) {
-        while (lv < desired && canUpgradeTo(techKey, lv+1, levels, rc)) lv++
-      } else {
-        while (lv > desired && canRemove(techKey, lv-1, levels)) lv--
-      }
+      if (desired > lv) { while (lv < desired && canUpgradeTo(techKey, lv+1, levels, rc)) lv++ }
+      else               { while (lv > desired && canRemove(techKey, lv-1, levels)) lv-- }
       if (lv !== cur) onSet(techKey, lv)
     }
-    const up = () => {
-      dragRef.current = null
-      document.removeEventListener('mousemove', move)
-      document.removeEventListener('mouseup', up)
-    }
+    const up = () => { dragRef.current = null; document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up) }
     document.addEventListener('mousemove', move)
     document.addEventListener('mouseup', up)
+  }
+
+  const handleInfoClick = (e: React.MouseEvent) => {
+    e.stopPropagation(); e.preventDefault()
+    if (!cardOpen && infoBtnRef.current) {
+      const r = infoBtnRef.current.getBoundingClientRect()
+      setCardPos({ x: Math.min(r.right + 8, window.innerWidth - 320), y: Math.max(8, r.top - 20) })
+    }
+    setCardOpen(v => !v)
   }
 
   const handleMax = (e: React.MouseEvent) => {
@@ -431,126 +481,91 @@ function TechNode({ techKey, levels, rc, onSet }: {
   }
 
   return (
-    <div
-      style={{
-        position:'absolute', left:pos.x, top:pos.y, width:NW, height:NH,
-        cursor: locked ? 'not-allowed' : 'ew-resize',
-        userSelect:'none',
-        opacity: locked ? 0.35 : 1,
-        transform: hovered && !locked ? 'scale(1.04)' : 'scale(1)',
-        transition: 'transform 0.12s ease, opacity 0.12s',
-        zIndex: hovered ? 10 : 1,
-      }}
-      onMouseDown={handleMouseDown}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => { setHovered(false); setShowInfo(false) }}
-      onContextMenu={e => { e.preventDefault(); if (!locked && cur>0 && canRemove(techKey,cur-1,levels)) onSet(techKey,cur-1) }}
-    >
-      {/* Info tooltip */}
-      {showInfo && <InfoTooltip tech={tech} cur={cur} accent={accent} />}
+    <>
+      {cardOpen && <TechInfoCard techKey={techKey} onClose={() => setCardOpen(false)} initX={cardPos.x} initY={cardPos.y} />}
+      <div
+        style={{
+          position:'absolute', left:pos.x, top:pos.y, width:NW, height:NH,
+          cursor: locked ? 'not-allowed' : 'ew-resize',
+          userSelect:'none', opacity: locked ? 0.35 : 1,
+          transform: hovered && !locked ? 'scale(1.04)' : 'scale(1)',
+          transition:'transform 0.12s ease',
+          zIndex: hovered ? 10 : 1,
+        }}
+        onMouseDown={handleMouseDown}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onContextMenu={e => { e.preventDefault(); if (!locked && cur>0 && canRemove(techKey,cur-1,levels)) onSet(techKey,cur-1) }}
+      >
+        {/* Card face */}
+        <div style={{
+          width:'100%', height:'100%', borderRadius:8, overflow:'hidden',
+          background: maxed ? 'linear-gradient(135deg,#0c3040,#082030)' : 'linear-gradient(135deg,#162d45,#0e2035)',
+          border:`1.5px solid ${maxed ? 'rgba(0,229,255,0.7)' : hovered ? accent : locked ? 'rgba(255,255,255,0.06)' : 'rgba(80,160,255,0.25)'}`,
+          boxShadow: maxed ? '0 0 14px rgba(0,229,255,0.35)' : hovered && !locked ? `0 0 16px ${accent}55, 0 4px 20px rgba(0,0,0,0.5)` : '0 2px 8px rgba(0,0,0,0.3)',
+          display:'flex', flexDirection:'column',
+          transition:'border-color 0.12s, box-shadow 0.12s',
+        }}>
+          {/* i button — top-right */}
+          <button
+            ref={infoBtnRef}
+            onMouseDown={e => e.stopPropagation()}
+            onClick={handleInfoClick}
+            style={{
+              position:'absolute', top:4, right:4, zIndex:2,
+              background: cardOpen ? `${accent}33` : 'rgba(255,255,255,0.1)',
+              border:`1px solid ${cardOpen ? accent : 'rgba(255,255,255,0.18)'}`,
+              borderRadius:'50%', color: cardOpen ? accent : 'rgba(180,220,255,0.8)',
+              fontSize:9, fontWeight:700, width:16, height:16, cursor:'pointer',
+              lineHeight:1, padding:0, display:'flex', alignItems:'center', justifyContent:'center',
+            }}
+          >i</button>
 
-      {/* Card */}
-      <div style={{
-        width:'100%', height:'100%', borderRadius:8, overflow:'hidden',
-        background: maxed
-          ? 'linear-gradient(135deg,#0c3040 0%,#082030 100%)'
-          : 'linear-gradient(135deg,#162d45 0%,#0e2035 100%)',
-        border:`1.5px solid ${maxed ? 'rgba(0,229,255,0.7)' : hovered ? accent : locked ? 'rgba(255,255,255,0.06)' : 'rgba(80,160,255,0.25)'}`,
-        boxShadow: maxed
-          ? '0 0 14px rgba(0,229,255,0.35)'
-          : hovered && !locked
-            ? `0 0 16px ${accent}55, 0 4px 20px rgba(0,0,0,0.5)`
-            : '0 2px 8px rgba(0,0,0,0.3)',
-        display:'flex', flexDirection:'column',
-        transition: 'border-color 0.12s, box-shadow 0.12s',
-      }}>
-        {/* Info button — absolute top-right */}
-        <button
-          onMouseDown={e => e.stopPropagation()}
-          onMouseEnter={() => setShowInfo(true)}
-          onMouseLeave={() => setShowInfo(false)}
-          style={{
-            position:'absolute', top:4, right:4, zIndex:2,
-            background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.18)',
-            borderRadius:'50%', color:'rgba(180,220,255,0.8)', fontSize:9, fontWeight:700,
-            width:16, height:16, cursor:'pointer', lineHeight:1, padding:0,
-            display:'flex', alignItems:'center', justifyContent:'center',
-          }}
-        >i</button>
+          {/* Body */}
+          <div style={{ display:'flex', alignItems:'center', flex:1, overflow:'hidden', padding:'6px 28px 2px 6px', gap:8 }}>
+            {/* Icon */}
+            <div style={{
+              width:44, height:44, flexShrink:0, borderRadius:8,
+              background:'rgba(0,0,0,0.3)', border:'1px solid rgba(255,255,255,0.1)',
+              display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden',
+            }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={iconSrc(techKey)} alt="" width={36} height={36} style={{ objectFit:'contain', display:'block' }} draggable={false} />
+            </div>
 
-        {/* Body row */}
-        <div style={{ display:'flex', alignItems:'center', flex:1, overflow:'hidden', padding:'6px 8px 2px 6px', gap:8 }}>
-          {/* Icon */}
-          <div style={{
-            width:44, height:44, flexShrink:0, borderRadius:8,
-            background:'rgba(0,0,0,0.3)', border:'1px solid rgba(255,255,255,0.1)',
-            display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden',
-          }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={iconSrc(techKey)}
-              alt=""
-              width={36} height={36}
-              style={{ objectFit:'contain', display:'block' }}
-              draggable={false}
-            />
-          </div>
-
-          {/* Text + MAX */}
-          <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', gap:2 }}>
-            <p style={{ color:'#c8e4ff', fontSize:10.5, fontWeight:600, lineHeight:1.2,
-              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', paddingRight:20 }}>
-              {tech.name}
-            </p>
-            {cur > 0 && (
-              <p style={{ color:accent, fontSize:9.5, opacity:0.85, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-                {tech.levels[cur-1]?.buff}
+            {/* Name + MAX only — no buff stats */}
+            <div style={{ flex:1, minWidth:0, display:'flex', flexDirection:'column', gap:3 }}>
+              <p style={{ color:'#c8e4ff', fontSize:10.5, fontWeight:600, lineHeight:1.2,
+                overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                {tech.name}
               </p>
-            )}
-            {/* MAX button inline below text */}
-            {!maxed && !locked && (
-              <button
-                onMouseDown={e => e.stopPropagation()}
-                onClick={handleMax}
-                style={{
-                  alignSelf:'flex-start', marginTop:1,
+              {!maxed && !locked && (
+                <button onMouseDown={e => e.stopPropagation()} onClick={handleMax} style={{
+                  alignSelf:'flex-start',
                   background:'rgba(0,180,255,0.18)', border:'1px solid rgba(0,180,255,0.35)',
                   borderRadius:4, color:'#7dd3fc', fontSize:9, fontWeight:700,
                   padding:'2px 7px', cursor:'pointer', lineHeight:1,
-                }}
-              >MAX</button>
-            )}
-            {maxed && (
-              <span style={{ color:'#00e5ff', fontSize:9, fontWeight:700 }}>✓ MAX</span>
-            )}
+                }}>MAX</button>
+              )}
+              {maxed && <span style={{ color:'#00e5ff', fontSize:9, fontWeight:700 }}>✓ MAX</span>}
+            </div>
+          </div>
+
+          {/* Progress bar + level */}
+          <div style={{ padding:'0 6px 5px' }}>
+            <div style={{ background:'rgba(255,255,255,0.07)', borderRadius:3, height:5, overflow:'hidden', marginBottom:3 }}>
+              <div style={{ width:`${pct}%`, height:'100%', borderRadius:3, background: maxed ? '#00e5ff' : accent, transition:'width 0.15s' }} />
+            </div>
+            <div style={{ display:'flex', justifyContent:'flex-end' }}>
+              <p style={{ color:'rgba(180,210,255,0.45)', fontSize:9, tabularNums:true } as React.CSSProperties}>{cur}/{tech.maxLevel}</p>
+            </div>
           </div>
         </div>
 
-        {/* Bottom bar */}
-        <div style={{ padding:'0 6px 5px' }}>
-          {/* Progress bar */}
-          <div style={{ background:'rgba(255,255,255,0.07)', borderRadius:3, height:5, overflow:'hidden', marginBottom:3 }}>
-            <div style={{
-              width:`${pct}%`, height:'100%', borderRadius:3,
-              background: maxed ? '#00e5ff' : accent,
-              transition:'width 0.15s',
-            }} />
-          </div>
-          {/* Level counter */}
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'flex-end' }}>
-            <p style={{ color:'rgba(180,210,255,0.45)', fontSize:9, tabularNums:true } as React.CSSProperties}>
-              {cur}/{tech.maxLevel}
-            </p>
-          </div>
-        </div>
+        {/* Left accent stripe */}
+        <div style={{ position:'absolute', left:0, top:0, bottom:0, width:3, background:accent, borderRadius:'8px 0 0 8px' }} />
       </div>
-
-      {/* Left accent */}
-      <div style={{
-        position:'absolute', left:0, top:0, bottom:0, width:3,
-        background:accent, borderRadius:'8px 0 0 8px',
-      }} />
-    </div>
+    </>
   )
 }
 
@@ -559,11 +574,19 @@ function TechNode({ techKey, levels, rc, onSet }: {
 /* ------------------------------------------------------------------ */
 
 export function CrystalTechContent() {
-  const [levels, setLevels] = useState<Levels>({})
-  const [rc, setRc]         = useState(25)
-  const [speed, setSpeed]   = useState(0)
-  const [helps, setHelps]   = useState(30)
+  const [levels, setLevels] = useState<Levels>(() => {
+    if (typeof window === 'undefined') return {}
+    try { return JSON.parse(localStorage.getItem('ct:levels') ?? '{}') } catch { return {} }
+  })
+  const [rc, setRc]   = useState(() => typeof window !== 'undefined' ? Number(localStorage.getItem('ct:rc') ?? '25') : 25)
+  const [speed, setSpeed] = useState(() => typeof window !== 'undefined' ? Number(localStorage.getItem('ct:speed') ?? '0') : 0)
+  const [helps, setHelps] = useState(() => typeof window !== 'undefined' ? Number(localStorage.getItem('ct:helps') ?? '30') : 30)
   const [confirmClear, setConfirmClear] = useState(false)
+
+  useEffect(() => { localStorage.setItem('ct:levels', JSON.stringify(levels)) }, [levels])
+  useEffect(() => { localStorage.setItem('ct:rc', String(rc)) }, [rc])
+  useEffect(() => { localStorage.setItem('ct:speed', String(speed)) }, [speed])
+  useEffect(() => { localStorage.setItem('ct:helps', String(helps)) }, [helps])
 
   // Momentum drag-to-scroll
   const scrollRef  = useRef<HTMLDivElement>(null)
