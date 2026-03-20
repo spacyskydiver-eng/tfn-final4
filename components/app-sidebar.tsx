@@ -163,6 +163,8 @@ function SectionHeader({
   open,
   onToggle,
   collapsed,
+  accentColor = 'text-primary',
+  accentBg = 'bg-primary/10',
 }: {
   icon: React.ElementType;
   label: string;
@@ -170,19 +172,22 @@ function SectionHeader({
   open: boolean;
   onToggle: () => void;
   collapsed: boolean;
+  accentColor?: string;
+  accentBg?: string;
 }) {
   return (
     <button
       onClick={onToggle}
       className={cn(
         "flex w-full items-center gap-2 rounded-lg px-3 py-2 transition-colors hover:bg-secondary/50",
-        collapsed ? "justify-center" : "justify-between"
+        collapsed ? "justify-center" : "justify-between",
+        isActive && accentBg
       )}
     >
       <div className="flex items-center gap-2">
-        <Icon className={cn("h-4 w-4 shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
+        <Icon className={cn("h-4 w-4 shrink-0 opacity-70", accentColor, isActive && "opacity-100")} />
         {!collapsed && (
-          <span className={cn("text-xs font-semibold uppercase tracking-wider", isActive ? "text-primary" : "text-muted-foreground")}>
+          <span className={cn("text-xs font-semibold uppercase tracking-wider opacity-60", accentColor, isActive && "opacity-100")}>
             {label}
           </span>
         )}
@@ -302,6 +307,8 @@ export function AppSidebar({
             open={strategyOpen}
             onToggle={() => setStrategyOpen(o => !o)}
             collapsed={collapsed}
+            accentColor="text-violet-400"
+            accentBg="bg-violet-500/10"
           />
           {(strategyOpen || collapsed) && (
             <div className={cn("space-y-0.5", !collapsed && "pl-2 mt-0.5")}>
@@ -321,6 +328,8 @@ export function AppSidebar({
             open={accountOpen}
             onToggle={() => setAccountOpen(o => !o)}
             collapsed={collapsed}
+            accentColor="text-emerald-400"
+            accentBg="bg-emerald-500/10"
           />
           {(accountOpen || collapsed) && (
             <div className={cn("space-y-0.5", !collapsed && "pl-2 mt-0.5")}>
@@ -340,6 +349,8 @@ export function AppSidebar({
             open={projectToolsOpen}
             onToggle={() => setProjectToolsOpen(o => !o)}
             collapsed={collapsed}
+            accentColor="text-sky-400"
+            accentBg="bg-sky-500/10"
           />
           {(projectToolsOpen || collapsed) && (
             <div className={cn("space-y-0.5", !collapsed && "pl-2 mt-0.5")}>
@@ -359,6 +370,8 @@ export function AppSidebar({
             open={botsOpen}
             onToggle={() => setBotsOpen(o => !o)}
             collapsed={collapsed}
+            accentColor="text-orange-400"
+            accentBg="bg-orange-500/10"
           />
           {(botsOpen || collapsed) && (
             <div className={cn("space-y-0.5", !collapsed && "pl-2 mt-0.5")}>
@@ -379,6 +392,8 @@ export function AppSidebar({
               open={staffOpen}
               onToggle={() => setStaffOpen(o => !o)}
               collapsed={collapsed}
+              accentColor="text-rose-400"
+              accentBg="bg-rose-500/10"
             />
             {(staffOpen || collapsed) && (
               <div className={cn("space-y-0.5", !collapsed && "pl-2 mt-0.5")}>

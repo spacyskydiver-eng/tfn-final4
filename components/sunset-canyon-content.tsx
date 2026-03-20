@@ -35,32 +35,111 @@ import {
 /*  Constants & Types                                                   */
 /* ------------------------------------------------------------------ */
 
+// Full commander list from sunset-canyon meta (rok-suite KNOWN_SYNERGIES, 2025)
 const KNOWN_COMMANDERS = [
+  // S-Tier Canyon commanders
   'Constantine I',
   'Wu Zetian',
   'Theodora',
   'Richard I',
-  'Charles Martel',
   'Sun Tzu',
   'Yi Seong-Gye',
-  'Aethelflaed',
   'Joan of Arc',
+  'William I',
+  'Aethelflaed',
+  // Infantry
   'Guan Yu',
-  'Alexander the Great',
-  'Genghis Khan',
-  'Ramesses II',
-  'Scipio Africanus',
-  'Eulji Mundeok',
-  'Björn Ironside',
-  'Hermann',
-  'Saladin',
-  'El Cid',
-  'Cao Cao',
-  'Minamoto',
   'Harald Sigurdsson',
+  'Charles Martel',
+  'Scipio Africanus',
+  'Scipio Prime',
+  'Liu Che',
+  'Björn Ironside',
+  'Eulji Mundeok',
+  'Alexander the Great',
+  // Archer
+  'Hermann Prime',
+  'Ashurbanipal',
+  'Ramesses II',
+  'Kusunoki Masashige',
+  'Hermann',
+  'Thutmose III',
+  // Cavalry (weaker in Canyon)
+  'Alexander Nevsky',
+  'Xiang Yu',
+  'Attila',
+  'Takeda Shingen',
+  'Cao Cao',
+  'Minamoto no Yoshitsune',
+  'Genghis Khan',
   'Baibars',
+  'Saladin',
+  'Osman I',
+  'Pelagius',
+  'Belisarius',
+  'Tomoe Gozen',
+  // Support / Mixed
+  'Joan of Arc Prime',
+  'Mulan',
+  'Boudica',
+  'Lohar',
   'Mehmed II',
+  'Wak Chanil Ajaw',
+  // Garrison specialists
+  'El Cid',
+  'Bertrand',
+  'Amanitore',
 ]
+
+// Canyon synergy data: partners and canyon bonus per commander
+const CANYON_SYNERGIES: Record<string, { partners: string[]; canyonBonus: number; preferredRow: 'front' | 'back' | 'center'; tier: 'S' | 'A' | 'B' }> = {
+  'Constantine I':         { partners: ['Wu Zetian', 'Charles Martel', 'Richard I', 'Joan of Arc'], canyonBonus: 50, preferredRow: 'front', tier: 'S' },
+  'Wu Zetian':             { partners: ['Constantine I', 'Theodora', 'Charles Martel'], canyonBonus: 45, preferredRow: 'front', tier: 'S' },
+  'Theodora':              { partners: ['Wu Zetian', 'Constantine I', 'Yi Seong-Gye'], canyonBonus: 40, preferredRow: 'back', tier: 'S' },
+  'Richard I':             { partners: ['Charles Martel', 'Sun Tzu', 'Scipio Africanus', 'Yi Seong-Gye', 'Guan Yu', 'Constantine I'], canyonBonus: 45, preferredRow: 'front', tier: 'S' },
+  'Sun Tzu':               { partners: ['Charles Martel', 'Guan Yu', 'Harald Sigurdsson', 'Richard I', 'Scipio Africanus', 'Yi Seong-Gye', 'Alexander the Great', 'Björn Ironside', 'Eulji Mundeok', 'Mehmed II', 'Baibars', 'Joan of Arc'], canyonBonus: 50, preferredRow: 'center', tier: 'S' },
+  'Yi Seong-Gye':          { partners: ['Sun Tzu', 'Aethelflaed', 'Kusunoki Masashige', 'Mehmed II', 'Richard I', 'Hermann Prime', 'Ramesses II', 'Theodora'], canyonBonus: 50, preferredRow: 'center', tier: 'S' },
+  'Joan of Arc':           { partners: ['Charles Martel', 'Scipio Africanus', 'Boudica', 'Sun Tzu', 'Mulan', 'Constantine I'], canyonBonus: 40, preferredRow: 'back', tier: 'S' },
+  'William I':             { partners: ['Charles Martel', 'Richard I', 'Guan Yu', 'Genghis Khan'], canyonBonus: 45, preferredRow: 'front', tier: 'S' },
+  'Aethelflaed':           { partners: ['Yi Seong-Gye', 'Sun Tzu', 'Lohar', 'Boudica', 'Baibars', 'Kusunoki Masashige'], canyonBonus: 40, preferredRow: 'center', tier: 'S' },
+  'Guan Yu':               { partners: ['Sun Tzu', 'Alexander the Great', 'Richard I', 'Harald Sigurdsson', 'William I'], canyonBonus: 35, preferredRow: 'front', tier: 'S' },
+  'Harald Sigurdsson':     { partners: ['Guan Yu', 'Sun Tzu', 'Charles Martel'], canyonBonus: 30, preferredRow: 'front', tier: 'S' },
+  'Charles Martel':        { partners: ['Sun Tzu', 'Richard I', 'Scipio Africanus', 'Joan of Arc', 'Eulji Mundeok', 'Björn Ironside', 'Harald Sigurdsson', 'Constantine I', 'Wu Zetian'], canyonBonus: 40, preferredRow: 'front', tier: 'S' },
+  'Scipio Africanus':      { partners: ['Sun Tzu', 'Charles Martel', 'Björn Ironside', 'Joan of Arc', 'Richard I'], canyonBonus: 25, preferredRow: 'front', tier: 'A' },
+  'Scipio Prime':          { partners: ['Liu Che', 'Sun Tzu'], canyonBonus: 30, preferredRow: 'front', tier: 'S' },
+  'Liu Che':               { partners: ['Scipio Prime', 'Sun Tzu'], canyonBonus: 30, preferredRow: 'front', tier: 'S' },
+  'Björn Ironside':        { partners: ['Sun Tzu', 'Eulji Mundeok', 'Charles Martel', 'Scipio Africanus'], canyonBonus: 20, preferredRow: 'front', tier: 'A' },
+  'Eulji Mundeok':         { partners: ['Sun Tzu', 'Björn Ironside', 'Osman I', 'Charles Martel'], canyonBonus: 10, preferredRow: 'front', tier: 'B' },
+  'Alexander the Great':   { partners: ['Guan Yu', 'Sun Tzu', 'Richard I'], canyonBonus: 25, preferredRow: 'front', tier: 'A' },
+  'Hermann Prime':         { partners: ['Ashurbanipal', 'Yi Seong-Gye'], canyonBonus: 35, preferredRow: 'back', tier: 'S' },
+  'Ashurbanipal':          { partners: ['Hermann Prime', 'Yi Seong-Gye', 'Ramesses II'], canyonBonus: 35, preferredRow: 'center', tier: 'S' },
+  'Ramesses II':           { partners: ['Ashurbanipal', 'Yi Seong-Gye'], canyonBonus: 30, preferredRow: 'back', tier: 'S' },
+  'Kusunoki Masashige':    { partners: ['Sun Tzu', 'Yi Seong-Gye', 'Aethelflaed', 'Hermann'], canyonBonus: 20, preferredRow: 'back', tier: 'A' },
+  'Hermann':               { partners: ['Kusunoki Masashige', 'Yi Seong-Gye', 'El Cid'], canyonBonus: 15, preferredRow: 'back', tier: 'B' },
+  'Thutmose III':          { partners: ['Yi Seong-Gye', 'Kusunoki Masashige', 'Aethelflaed'], canyonBonus: 10, preferredRow: 'back', tier: 'B' },
+  'Alexander Nevsky':      { partners: ['Joan of Arc Prime', 'Xiang Yu', 'Attila', 'Takeda Shingen', 'Bertrand'], canyonBonus: -10, preferredRow: 'front', tier: 'A' },
+  'Xiang Yu':              { partners: ['Alexander Nevsky', 'Saladin', 'Cao Cao'], canyonBonus: -10, preferredRow: 'front', tier: 'A' },
+  'Attila':                { partners: ['Takeda Shingen', 'Alexander Nevsky'], canyonBonus: -15, preferredRow: 'front', tier: 'A' },
+  'Takeda Shingen':        { partners: ['Attila', 'Alexander Nevsky'], canyonBonus: -15, preferredRow: 'front', tier: 'A' },
+  'Cao Cao':               { partners: ['Minamoto no Yoshitsune', 'Pelagius', 'Belisarius', 'Baibars', 'Osman I', 'Tomoe Gozen', 'Genghis Khan'], canyonBonus: -10, preferredRow: 'front', tier: 'B' },
+  'Minamoto no Yoshitsune':{ partners: ['Cao Cao', 'Pelagius', 'Baibars', 'Osman I', 'Genghis Khan'], canyonBonus: -10, preferredRow: 'front', tier: 'B' },
+  'Genghis Khan':          { partners: ['Cao Cao', 'Minamoto no Yoshitsune', 'Baibars', 'William I'], canyonBonus: -5, preferredRow: 'front', tier: 'B' },
+  'Baibars':               { partners: ['Osman I', 'Cao Cao', 'Sun Tzu', 'Aethelflaed', 'Saladin', 'Minamoto no Yoshitsune'], canyonBonus: 15, preferredRow: 'center', tier: 'A' },
+  'Saladin':               { partners: ['Baibars', 'Cao Cao', 'Minamoto no Yoshitsune', 'Xiang Yu'], canyonBonus: 5, preferredRow: 'front', tier: 'A' },
+  'Osman I':               { partners: ['Baibars', 'Eulji Mundeok', 'Cao Cao', 'Minamoto no Yoshitsune'], canyonBonus: -5, preferredRow: 'front', tier: 'B' },
+  'Pelagius':              { partners: ['Minamoto no Yoshitsune', 'Cao Cao'], canyonBonus: -10, preferredRow: 'front', tier: 'B' },
+  'Belisarius':            { partners: ['Cao Cao', 'Baibars'], canyonBonus: -15, preferredRow: 'front', tier: 'B' },
+  'Tomoe Gozen':           { partners: ['Cao Cao'], canyonBonus: -5, preferredRow: 'front', tier: 'B' },
+  'Joan of Arc Prime':     { partners: ['Alexander Nevsky', 'Mulan'], canyonBonus: 20, preferredRow: 'back', tier: 'A' },
+  'Mulan':                 { partners: ['Joan of Arc Prime', 'Joan of Arc'], canyonBonus: 25, preferredRow: 'back', tier: 'A' },
+  'Boudica':               { partners: ['Lohar', 'Aethelflaed', 'Sun Tzu', 'Joan of Arc'], canyonBonus: 10, preferredRow: 'back', tier: 'B' },
+  'Lohar':                 { partners: ['Boudica', 'Aethelflaed', 'Joan of Arc'], canyonBonus: 5, preferredRow: 'back', tier: 'B' },
+  'Mehmed II':             { partners: ['Yi Seong-Gye', 'Sun Tzu', 'Aethelflaed'], canyonBonus: 20, preferredRow: 'back', tier: 'A' },
+  'Wak Chanil Ajaw':       { partners: ['Aethelflaed', 'Boudica', 'Lohar'], canyonBonus: 0, preferredRow: 'back', tier: 'B' },
+  'El Cid':                { partners: ['Hermann', 'Yi Seong-Gye'], canyonBonus: 20, preferredRow: 'back', tier: 'A' },
+  'Bertrand':              { partners: ['Alexander Nevsky'], canyonBonus: 15, preferredRow: 'front', tier: 'A' },
+  'Amanitore':             { partners: ['Yi Seong-Gye', 'Sun Tzu', 'Theodora'], canyonBonus: 25, preferredRow: 'back', tier: 'A' },
+}
 
 type TroopType = 'infantry' | 'cavalry' | 'archer' | 'mixed'
 
@@ -132,10 +211,26 @@ function pairingScore(primary: Commander, secondary: Commander): number {
   const sp = calcPower(secondary)
   let score = pp / 10 + sp / 15
 
+  // Canyon synergy bonus from meta data
+  const pSyn = CANYON_SYNERGIES[primary.name]
+  const sSyn = CANYON_SYNERGIES[secondary.name]
+  if (pSyn) score += pSyn.canyonBonus * 0.5
+  if (sSyn) score += sSyn.canyonBonus * 0.3
+
+  // Partner bonus: commanders that are known good pairs get a big boost
+  if (pSyn?.partners.includes(secondary.name)) score += 40
+  if (sSyn?.partners.includes(primary.name))   score += 20
+
+  // Tier bonus from synergy data
+  if (pSyn?.tier === 'S') score += 15
+  if (pSyn?.tier === 'A') score += 8
+  if (sSyn?.tier === 'S') score += 10
+  if (sSyn?.tier === 'A') score += 5
+
   // Same troop type bonus
   if (primary.troopType === secondary.troopType) score += 30
 
-  // Cavalry penalty
+  // Cavalry penalty (cavalry is weak in Canyon)
   if (primary.troopType === 'cavalry') score -= 25
   if (secondary.troopType === 'cavalry') score -= 25
 
@@ -201,22 +296,35 @@ function optimizeFormation(commanders: Commander[]): Formation | null {
   const winRate = Math.min(82, Math.max(30, 35 + totalPower / 15000))
 
   const notes: string[] = []
+
+  // Check for known S-tier pairs
+  let foundSynergyPair = false
+  for (const army of armies) {
+    const pSyn = CANYON_SYNERGIES[army.primary.name]
+    if (pSyn?.partners.includes(army.secondary.name) && pSyn.tier === 'S') {
+      notes.push(`${army.primary.name} + ${army.secondary.name} is an S-tier Canyon pair.`)
+      foundSynergyPair = true
+      break
+    }
+  }
+
   const hasInfantryFront = armies
     .slice(0, Math.min(2, armies.length))
     .some((a) => a.primary.troopType === 'infantry')
-  if (!hasInfantryFront) notes.push('Consider adding an infantry commander for better front row tanking.')
+  if (!hasInfantryFront) notes.push('Add an infantry tank (Richard I, Charles Martel, Constantine I) to the front row.')
 
   const nonViable = armies.filter((a) => !isViable(a.primary) || !isViable(a.secondary))
   if (nonViable.length > 0)
-    notes.push(`${nonViable.length} army pair(s) include under-leveled commanders. Level up for better results.`)
+    notes.push(`${nonViable.length} pair(s) include under-leveled commanders. Aim for level 50+ with skill 1 maxed.`)
 
   const cavalryCount = armies.filter(
     (a) => a.primary.troopType === 'cavalry' || a.secondary.troopType === 'cavalry'
   ).length
   if (cavalryCount > 1)
-    notes.push('Multiple cavalry commanders detected. Cavalry is penalized in Sunset Canyon defense.')
+    notes.push('Cavalry commanders are countered by infantry in Canyon. Swap for infantry or archer commanders.')
 
-  if (notes.length === 0) notes.push('Formation looks solid! Focus on skill upgrades for incremental gains.')
+  if (!foundSynergyPair && notes.length === 0)
+    notes.push('Formation looks solid! Focus on skill upgrades and try Constantine I + Wu Zetian for the front line.')
 
   return { armies, winRate, totalPower, notes }
 }

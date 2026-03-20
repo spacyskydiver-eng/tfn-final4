@@ -17,127 +17,242 @@ import {
   Info,
   ChevronDown,
   ChevronUp,
+  Sword,
+  Target,
+  Crosshair,
+  Crown,
+  Wrench,
 } from 'lucide-react'
 
 /* ------------------------------------------------------------------ */
-/*  Data                                                                */
+/*  Data — exact from gathering-of-heroes-calculator-main              */
 /* ------------------------------------------------------------------ */
 
-const DAILY_TOKENS = 90 // 5 days × 18/day (fixed)
+// Token costs per commander by tier
+const T1_COST = 200
+const T2_COST = 500
+const T3_COST = 1000
 
+// Minimum tokens that must be spent in T1 to unlock T2,
+// and minimum T1+T2 combined spend to unlock T3
+const T2_MIN_SPEND = 400   // must spend 400 in T1 first
+const T3_MIN_SPEND = 1400  // must spend 1400 in T1+T2 combined first
+
+const EVENT_DAYS = 5
+
+// Daily missions: Login(2) + Defeat Barbarians(10) + Gather 2M Resources(6) = 18/day
+const DAILY_TOKENS_PER_DAY = 18
+const DAILY_TOKENS = DAILY_TOKENS_PER_DAY * EVENT_DAYS // 90
+
+// Challenge missions (one-time)
 const CHALLENGE_MISSIONS = [
-  { id: 'login1',      label: 'Login 1 day',              tokens: 10, group: 'Login' },
-  { id: 'login3',      label: 'Login 3 days',             tokens: 20, group: 'Login' },
-  { id: 'login5',      label: 'Login 5 days',             tokens: 30, group: 'Login' },
-  { id: 'gems2000',    label: 'Spend 2,000 gems',         tokens: 30, group: 'Gems' },
-  { id: 'gems5000',    label: 'Spend 5,000 gems',         tokens: 50, group: 'Gems' },
-  { id: 'gems10000',   label: 'Spend 10,000 gems',        tokens: 80, group: 'Gems' },
-  { id: 'power500k',   label: 'Reach 500K troop power',   tokens: 20, group: 'Power' },
-  { id: 'power1m',     label: 'Reach 1M troop power',     tokens: 40, group: 'Power' },
-  { id: 'power2m',     label: 'Reach 2M troop power',     tokens: 60, group: 'Power' },
-  { id: 'daily5',      label: 'Complete 5 daily missions',  tokens: 15, group: 'Daily' },
-  { id: 'daily10',     label: 'Complete 10 daily missions', tokens: 25, group: 'Daily' },
-  { id: 'daily20',     label: 'Complete 20 daily missions', tokens: 40, group: 'Daily' },
+  { id: 'login5',     label: 'Login 5 Days',                tokens: 10  },
+  { id: 'gems10k',    label: 'Spend 10,000 Gems',           tokens: 20  },
+  { id: 'gems50k',    label: 'Spend 50,000 Gems',           tokens: 100 },
+  { id: 'power600k',  label: 'Increase Troop Power 600K',   tokens: 100 },
 ] as const
 
 type ChallengeId = (typeof CHALLENGE_MISSIONS)[number]['id']
 
-const TIERS = [
+// Repeatable missions
+const SPEEDUP_RATE = 480  // 480 min speedups = 2 tokens
+const GEMS_RATE    = 2000 // 2000 gems = 30 tokens
+
+type Category = 'Infantry' | 'Archer' | 'Cavalry' | 'Leadership' | 'Engineering'
+
+interface CommanderEntry { name: string; category: Category }
+
+const CATEGORY_ICONS: Record<Category, React.ElementType> = {
+  Infantry:    Sword,
+  Archer:      Crosshair,
+  Cavalry:     Target,
+  Leadership:  Crown,
+  Engineering: Wrench,
+}
+
+const CATEGORY_COLORS: Record<Category, string> = {
+  Infantry:    'text-blue-400',
+  Archer:      'text-green-400',
+  Cavalry:     'text-orange-400',
+  Leadership:  'text-purple-400',
+  Engineering: 'text-yellow-400',
+}
+
+interface TierData {
+  tier: number
+  label: string
+  cost: number
+  minSpend: number
+  color: string
+  borderColor: string
+  bgColor: string
+  commanders: CommanderEntry[]
+}
+
+const TIERS_DATA: TierData[] = [
   {
     tier: 1,
     label: 'Tier 1',
-    minSpend: 3000,
+    cost: T1_COST,
+    minSpend: 0,
     color: 'text-blue-400',
     borderColor: 'border-blue-500/30',
     bgColor: 'bg-blue-500/10',
     commanders: [
-      'Minamoto no Yoshitsune',
-      'Ramesses II',
-      'Artemisia I',
-      'Scipio Africanus Prime',
+      // Infantry
+      { name: 'Bai Qi',               category: 'Infantry'    },
+      { name: 'William Wallace',       category: 'Infantry'    },
+      { name: 'Guan Yu',              category: 'Infantry'    },
+      { name: 'Harald Sigurdsson',    category: 'Infantry'    },
+      { name: 'Zenobia',              category: 'Infantry'    },
+      { name: "K'inich Janaab Pakal", category: 'Infantry'    },
+      { name: 'Leonidas I',           category: 'Infantry'    },
+      { name: 'Ivar',                 category: 'Infantry'    },
+      // Archer
+      { name: 'Qin Shi Huang',        category: 'Archer'      },
+      { name: 'Shajar al-Durr',       category: 'Archer'      },
+      { name: 'Ramesses II',          category: 'Archer'      },
+      { name: 'Amanitore',            category: 'Archer'      },
+      { name: 'Gilgamesh',            category: 'Archer'      },
+      { name: 'Nebuchadnezzar II',    category: 'Archer'      },
+      { name: 'Artemisia I',          category: 'Archer'      },
+      // Cavalry
+      { name: 'Arthur Pendragon',     category: 'Cavalry'     },
+      { name: 'Gang Gam-chan',        category: 'Cavalry'     },
+      { name: 'Belisarius',           category: 'Cavalry'     },
+      { name: 'Attila',              category: 'Cavalry'     },
+      { name: 'William I',            category: 'Cavalry'     },
+      { name: 'Xiang Yu',             category: 'Cavalry'     },
+      { name: 'Jadwiga',              category: 'Cavalry'     },
+      { name: 'Chandragupta Maurya',  category: 'Cavalry'     },
+      // Leadership
+      { name: 'Philip II',            category: 'Leadership'  },
+      { name: 'Hector',               category: 'Leadership'  },
+      { name: 'Honda Tadakatsu',      category: 'Leadership'  },
+      { name: 'Yi Sun Sin',           category: 'Leadership'  },
+      { name: 'Trajan',               category: 'Leadership'  },
+      { name: 'Theodora',             category: 'Leadership'  },
+      { name: 'Moctezuma I',          category: 'Leadership'  },
+      { name: 'Suleiman I',           category: 'Leadership'  },
+      // Engineering
+      { name: 'John Hunyadi',         category: 'Engineering' },
+      { name: 'Alfonso de Albuquerque', category: 'Engineering' },
+      { name: 'Mary I',               category: 'Engineering' },
+      { name: 'Archimedes',           category: 'Engineering' },
     ],
   },
   {
     tier: 2,
     label: 'Tier 2',
-    minSpend: 5000,
+    cost: T2_COST,
+    minSpend: T2_MIN_SPEND,
     color: 'text-purple-400',
     borderColor: 'border-purple-500/30',
     bgColor: 'bg-purple-500/10',
     commanders: [
-      'Saladin',
-      'Chandragupta Maurya',
-      'Harald Sigurdsson',
-      'Seondeok',
+      // Infantry
+      { name: 'Liu Che',              category: 'Infantry'    },
+      { name: 'Gorgo',                category: 'Infantry'    },
+      { name: 'Tariq ibn Ziyad',      category: 'Infantry'    },
+      { name: 'Sargon the Great',     category: 'Infantry'    },
+      { name: 'Flavius Aetius',       category: 'Infantry'    },
+      // Archer
+      { name: 'Zhuge Liang',          category: 'Archer'      },
+      { name: 'Hermann',              category: 'Archer'      },
+      { name: 'Ashurbanipal',         category: 'Archer'      },
+      { name: 'Boudica',              category: 'Archer'      },
+      { name: 'Henry V',              category: 'Archer'      },
+      { name: 'Dido',                 category: 'Archer'      },
+      // Cavalry
+      { name: 'Huo Qubing',           category: 'Cavalry'     },
+      { name: 'Joan of Arc',          category: 'Cavalry'     },
+      { name: 'Alexander Nevsky',     category: 'Cavalry'     },
+      { name: 'Justinian I',          category: 'Cavalry'     },
+      { name: 'Jan Zizka',            category: 'Cavalry'     },
+      // Leadership
+      { name: 'Heraclius',            category: 'Leadership'  },
+      { name: 'Lapulapu',             category: 'Leadership'  },
+      // Engineering
+      { name: 'Gonzalo de Córdoba',   category: 'Engineering' },
+      { name: 'Gajah Mada',           category: 'Engineering' },
+      { name: 'Margaret I',           category: 'Engineering' },
+      { name: 'Babur',                category: 'Engineering' },
     ],
   },
   {
     tier: 3,
     label: 'Tier 3',
-    minSpend: 8000,
+    cost: T3_COST,
+    minSpend: T3_MIN_SPEND,
     color: 'text-yellow-400',
     borderColor: 'border-yellow-500/30',
     bgColor: 'bg-yellow-500/10',
     commanders: [
-      'Guan Yu',
-      'Yi Seong-Gye',
-      'Takeda Shingen',
-      'El Cid',
+      // Infantry
+      { name: 'Scipio Africanus',     category: 'Infantry'    },
+      { name: 'Tokugawa Ieyasu',      category: 'Infantry'    },
+      { name: 'Scipio Aemilianus',    category: 'Infantry'    },
+      { name: 'Sun Tzu Prime',        category: 'Infantry'    },
+      // Archer
+      { name: 'Choe Yeong',           category: 'Archer'      },
+      { name: 'Shapur I',             category: 'Archer'      },
+      // Cavalry
+      { name: 'Achilles',             category: 'Cavalry'     },
+      { name: 'Subutai',              category: 'Cavalry'     },
+      { name: 'David IV',             category: 'Cavalry'     },
+      { name: 'Eleanor of Aquitaine', category: 'Cavalry'     },
+      // Leadership
+      { name: 'Matthias I',           category: 'Leadership'  },
+      // Engineering
+      { name: 'Stephen III',          category: 'Engineering' },
     ],
   },
-] as const
-
-const TOKENS_PER_COMMANDER = 800
-const SPEEDUP_MINUTES_PER_2_TOKENS = 480 // 480 min → 2 tokens
-const GEMS_PER_30_TOKENS = 2000           // 2000 gems → 30 tokens
+]
 
 /* ------------------------------------------------------------------ */
-/*  Helper                                                              */
+/*  Cost calculation                                                    */
 /* ------------------------------------------------------------------ */
+
+function calcCost(selected: Set<string>): {
+  t1Cost: number
+  t2Cost: number
+  t3Cost: number
+  t1Shortfall: number
+  t2Shortfall: number
+  total: number
+} {
+  const t1Sel = TIERS_DATA[0].commanders.filter((c) => selected.has(c.name)).length
+  const t2Sel = TIERS_DATA[1].commanders.filter((c) => selected.has(c.name)).length
+  const t3Sel = TIERS_DATA[2].commanders.filter((c) => selected.has(c.name)).length
+
+  const t1Cost = t1Sel * T1_COST
+  const t2Cost = t2Sel * T2_COST
+  const t3Cost = t3Sel * T3_COST
+
+  const needT2 = t2Sel > 0 || t3Sel > 0
+  const needT3 = t3Sel > 0
+
+  // If accessing T2, must have spent ≥400 in T1
+  const t1Shortfall = needT2 ? Math.max(0, T2_MIN_SPEND - t1Cost) : 0
+  const effectiveT1 = t1Cost + t1Shortfall
+
+  // If accessing T3, T1+T2 combined must be ≥1400
+  const t1t2Combined = effectiveT1 + t2Cost
+  const t2Shortfall = needT3 ? Math.max(0, T3_MIN_SPEND - t1t2Combined) : 0
+
+  const total = t1t2Combined + t2Shortfall + t3Cost
+
+  return { t1Cost, t2Cost, t3Cost, t1Shortfall, t2Shortfall, total }
+}
 
 function calcSpeedupTokens(minutes: number): number {
   if (!minutes || minutes < 0) return 0
-  return Math.floor(minutes / SPEEDUP_MINUTES_PER_2_TOKENS) * 2
+  return Math.floor(minutes / SPEEDUP_RATE) * 2
 }
 
 function calcGemTokens(gems: number): number {
   if (!gems || gems < 0) return 0
-  return Math.floor(gems / GEMS_PER_30_TOKENS) * 30
-}
-
-/** Returns the total required spend (tier minimums + commander costs) */
-function calcCost(selected: Set<string>): {
-  tierMinimums: number
-  commanderTokens: number
-  total: number
-  highestTier: number | null
-} {
-  if (selected.size === 0) return { tierMinimums: 0, commanderTokens: 0, total: 0, highestTier: null }
-
-  let highestTier: number | null = null
-
-  for (const tier of [...TIERS].reverse()) {
-    const anyInTier = tier.commanders.some((c) => selected.has(c))
-    if (anyInTier) {
-      highestTier = tier.tier
-      break
-    }
-  }
-
-  if (highestTier === null) return { tierMinimums: 0, commanderTokens: 0, total: 0, highestTier: null }
-
-  // The minimum spend for the highest tier includes all lower tier minimums
-  const tierObj = TIERS.find((t) => t.tier === highestTier)!
-  const tierMinimums = tierObj.minSpend
-
-  // Commander tokens are on top of tier minimums
-  const commanderTokens = selected.size * TOKENS_PER_COMMANDER
-
-  // Total cost: tier minimum + commander tokens
-  // (tier minimum already "includes" lower tier unlocks)
-  const total = tierMinimums + commanderTokens
-
-  return { tierMinimums, commanderTokens, total, highestTier }
+  return Math.floor(gems / GEMS_RATE) * 30
 }
 
 /* ------------------------------------------------------------------ */
@@ -150,43 +265,25 @@ export function GatheringOfHeroesContent() {
   const [gemsInput, setGemsInput] = useState('')
   const [selectedCommanders, setSelectedCommanders] = useState<Set<string>>(new Set())
   const [showChallenges, setShowChallenges] = useState(true)
+  const [expandedTiers, setExpandedTiers] = useState<Set<number>>(new Set([1, 2, 3]))
+  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set())
 
-  /* ---- derived ---- */
   const challengeTokens = useMemo(
-    () =>
-      CHALLENGE_MISSIONS.filter((m) => checkedChallenges.has(m.id)).reduce(
-        (sum, m) => sum + m.tokens,
-        0,
-      ),
+    () => CHALLENGE_MISSIONS.filter((m) => checkedChallenges.has(m.id)).reduce((s, m) => s + m.tokens, 0),
     [checkedChallenges],
   )
+  const speedupTokens = useMemo(() => calcSpeedupTokens(parseFloat(speedupMinutes) || 0), [speedupMinutes])
+  const gemTokens     = useMemo(() => calcGemTokens(parseFloat(gemsInput) || 0), [gemsInput])
+  const totalTokens   = DAILY_TOKENS + challengeTokens + speedupTokens + gemTokens
 
-  const speedupTokens = useMemo(
-    () => calcSpeedupTokens(parseFloat(speedupMinutes) || 0),
-    [speedupMinutes],
-  )
-
-  const gemTokens = useMemo(
-    () => calcGemTokens(parseFloat(gemsInput) || 0),
-    [gemsInput],
-  )
-
-  const totalTokens = DAILY_TOKENS + challengeTokens + speedupTokens + gemTokens
-
-  const { total: totalCost, highestTier } = useMemo(
-    () => calcCost(selectedCommanders),
-    [selectedCommanders],
-  )
-
-  const remaining = totalTokens - totalCost
+  const costInfo = useMemo(() => calcCost(selectedCommanders), [selectedCommanders])
+  const remaining = totalTokens - costInfo.total
   const canAfford = remaining >= 0
 
-  /* ---- toggle helpers ---- */
   const toggleChallenge = (id: ChallengeId) => {
     setCheckedChallenges((prev) => {
       const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      next.has(id) ? next.delete(id) : next.add(id)
       return next
     })
   }
@@ -194,21 +291,28 @@ export function GatheringOfHeroesContent() {
   const toggleCommander = (name: string) => {
     setSelectedCommanders((prev) => {
       const next = new Set(prev)
-      if (next.has(name)) next.delete(name)
-      else next.add(name)
+      next.has(name) ? next.delete(name) : next.add(name)
       return next
     })
   }
 
-  /* ---- group challenges by group label ---- */
-  const groups = useMemo(() => {
-    const map = new Map<string, typeof CHALLENGE_MISSIONS[number][]>()
-    for (const m of CHALLENGE_MISSIONS) {
-      if (!map.has(m.group)) map.set(m.group, [])
-      map.get(m.group)!.push(m)
-    }
-    return map
-  }, [])
+  const toggleTier = (tier: number) => {
+    setExpandedTiers((prev) => {
+      const next = new Set(prev)
+      next.has(tier) ? next.delete(tier) : next.add(tier)
+      return next
+    })
+  }
+
+  const toggleCat = (key: string) => {
+    setExpandedCats((prev) => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+  }
+
+  const selCount = selectedCommanders.size
 
   return (
     <div className="space-y-6 p-6">
@@ -219,7 +323,7 @@ export function GatheringOfHeroesContent() {
           Gathering of Heroes Calculator
         </h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Calculate your tokens and plan which commanders to unlock during the event.
+          Plan which commanders to unlock and calculate if you have enough tokens.
         </p>
       </div>
 
@@ -229,7 +333,7 @@ export function GatheringOfHeroesContent() {
         {/* ============================================================ */}
         <div className="xl:col-span-2 space-y-4">
 
-          {/* 1. Daily Missions (fixed) */}
+          {/* 1. Daily Missions */}
           <Card className="bg-card border-border">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
@@ -241,12 +345,12 @@ export function GatheringOfHeroesContent() {
               <div className="flex items-center gap-3 rounded-lg bg-primary/10 border border-primary/20 px-4 py-3">
                 <Info className="h-4 w-4 text-primary shrink-0" />
                 <div className="text-sm">
-                  <span className="text-foreground font-medium">90 tokens</span>
+                  <span className="text-foreground font-medium">{DAILY_TOKENS} tokens</span>
                   <span className="text-muted-foreground ml-2">
-                    (5 days × 18 tokens/day — automatically included)
+                    ({EVENT_DAYS} days × {DAILY_TOKENS_PER_DAY}/day — Login, Barbarians, Gather)
                   </span>
                 </div>
-                <span className="ml-auto text-primary font-bold tabular-nums">+90</span>
+                <span className="ml-auto text-primary font-bold tabular-nums">+{DAILY_TOKENS}</span>
               </div>
             </CardContent>
           </Card>
@@ -276,42 +380,35 @@ export function GatheringOfHeroesContent() {
             </CardHeader>
             {showChallenges && (
               <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1">
-                  {Array.from(groups.entries()).map(([group, missions]) => (
-                    <div key={group} className="space-y-1">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-2 mb-1">
-                        {group}
-                      </p>
-                      {missions.map((m) => (
-                        <label
-                          key={m.id}
-                          className="flex items-center gap-3 cursor-pointer rounded-md px-2 py-1.5 hover:bg-secondary/50 transition-colors group"
-                        >
-                          <Checkbox
-                            checked={checkedChallenges.has(m.id)}
-                            onCheckedChange={() => toggleChallenge(m.id)}
-                          />
-                          <span className="text-sm text-foreground flex-1 group-hover:text-primary transition-colors">
-                            {m.label}
-                          </span>
-                          <span className="text-xs font-medium text-muted-foreground tabular-nums">
-                            +{m.tokens}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
+                <div className="space-y-1">
+                  {CHALLENGE_MISSIONS.map((m) => (
+                    <label
+                      key={m.id}
+                      className="flex items-center gap-3 cursor-pointer rounded-md px-2 py-1.5 hover:bg-secondary/50 transition-colors group"
+                    >
+                      <Checkbox
+                        checked={checkedChallenges.has(m.id)}
+                        onCheckedChange={() => toggleChallenge(m.id)}
+                      />
+                      <span className="text-sm text-foreground flex-1 group-hover:text-primary transition-colors">
+                        {m.label}
+                      </span>
+                      <span className="text-xs font-medium text-muted-foreground tabular-nums">
+                        +{m.tokens}
+                      </span>
+                    </label>
                   ))}
                 </div>
               </CardContent>
             )}
           </Card>
 
-          {/* 3. Speedups */}
+          {/* 3. Speedups (Repeatable) */}
           <Card className="bg-card border-border">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                 <Zap className="h-4 w-4 text-blue-400" />
-                Speedups
+                Speedups Used
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -331,31 +428,29 @@ export function GatheringOfHeroesContent() {
                   />
                 </div>
                 <div className="text-right pb-1">
-                  <span className="text-2xl font-bold text-primary tabular-nums">
-                    +{speedupTokens}
-                  </span>
+                  <span className="text-2xl font-bold text-primary tabular-nums">+{speedupTokens}</span>
                   <p className="text-xs text-muted-foreground">tokens</p>
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Conversion rate: <span className="text-foreground">480 minutes = 2 tokens</span>
+                Rate: <span className="text-foreground">480 minutes = 2 tokens</span> (repeatable)
               </p>
             </CardContent>
           </Card>
 
-          {/* 4. Gems */}
+          {/* 4. Gems (Repeatable) */}
           <Card className="bg-card border-border">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                 <Coins className="h-4 w-4 text-yellow-400" />
-                Gems
+                Gems Spent
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex items-end gap-3">
                 <div className="flex-1 space-y-1.5">
                   <Label htmlFor="gems-input" className="text-sm text-muted-foreground">
-                    Gems to spend
+                    Total gems to spend
                   </Label>
                   <Input
                     id="gems-input"
@@ -363,31 +458,143 @@ export function GatheringOfHeroesContent() {
                     min={0}
                     value={gemsInput}
                     onChange={(e) => setGemsInput(e.target.value)}
-                    placeholder="e.g. 5000"
+                    placeholder="e.g. 10000"
                     className="bg-background border-border"
                   />
                 </div>
                 <div className="text-right pb-1">
-                  <span className="text-2xl font-bold text-primary tabular-nums">
-                    +{gemTokens}
-                  </span>
+                  <span className="text-2xl font-bold text-primary tabular-nums">+{gemTokens}</span>
                   <p className="text-xs text-muted-foreground">tokens</p>
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Conversion rate: <span className="text-foreground">2,000 gems = 30 tokens</span>
+                Rate: <span className="text-foreground">2,000 gems = 30 tokens</span> (repeatable)
               </p>
+            </CardContent>
+          </Card>
+
+          {/* 5. Commander Selection */}
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                <Users className="h-4 w-4 text-primary" />
+                Commander Selection
+                {selCount > 0 && (
+                  <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full font-normal">
+                    {selCount} selected
+                  </span>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {TIERS_DATA.map((tier) => {
+                const tierExpanded = expandedTiers.has(tier.tier)
+                const categories = Array.from(new Set(tier.commanders.map((c) => c.category))) as Category[]
+
+                return (
+                  <div key={tier.tier} className={`rounded-lg border ${tier.borderColor} ${tier.bgColor}`}>
+                    {/* Tier header */}
+                    <button
+                      onClick={() => toggleTier(tier.tier)}
+                      className="flex w-full items-center justify-between px-3 py-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-bold uppercase tracking-wider ${tier.color}`}>
+                          {tier.label}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {tier.cost} tokens/commander
+                        </span>
+                        {tier.minSpend > 0 && (
+                          <span className="text-xs text-muted-foreground/70">
+                            · unlocks after {tier.minSpend} spent
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {tier.commanders.some((c) => selectedCommanders.has(c.name)) && (
+                          <span className={`text-xs font-medium tabular-nums ${tier.color}`}>
+                            {tier.commanders.filter((c) => selectedCommanders.has(c.name)).length} selected
+                          </span>
+                        )}
+                        {tierExpanded
+                          ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+                          : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                        }
+                      </div>
+                    </button>
+
+                    {tierExpanded && (
+                      <div className="px-3 pb-3 space-y-2">
+                        {categories.map((cat) => {
+                          const catKey = `${tier.tier}-${cat}`
+                          const catExpanded = !expandedCats.has(catKey)
+                          const catCommanders = tier.commanders.filter((c) => c.category === cat)
+                          const CatIcon = CATEGORY_ICONS[cat]
+
+                          return (
+                            <div key={cat}>
+                              <button
+                                onClick={() => toggleCat(catKey)}
+                                className="flex items-center gap-1.5 w-full text-left py-1"
+                              >
+                                <CatIcon className={`h-3 w-3 ${CATEGORY_COLORS[cat]}`} />
+                                <span className={`text-xs font-semibold uppercase tracking-wider ${CATEGORY_COLORS[cat]}`}>
+                                  {cat}
+                                </span>
+                                {catExpanded
+                                  ? <ChevronUp className="h-3 w-3 text-muted-foreground ml-auto" />
+                                  : <ChevronDown className="h-3 w-3 text-muted-foreground ml-auto" />
+                                }
+                              </button>
+                              {catExpanded && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-0.5 pl-4">
+                                  {catCommanders.map((c) => (
+                                    <label
+                                      key={c.name}
+                                      className="flex items-center gap-2 cursor-pointer rounded-md px-1 py-1 hover:bg-secondary/50 transition-colors group"
+                                    >
+                                      <Checkbox
+                                        checked={selectedCommanders.has(c.name)}
+                                        onCheckedChange={() => toggleCommander(c.name)}
+                                      />
+                                      <span className={`text-sm flex-1 transition-colors ${
+                                        selectedCommanders.has(c.name) ? tier.color : 'text-foreground'
+                                      } group-hover:${tier.color}`}>
+                                        {c.name}
+                                      </span>
+                                    </label>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+
+              {selCount > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedCommanders(new Set())}
+                  className="w-full border-border hover:border-red-500 hover:text-red-400 text-xs"
+                >
+                  Clear selection
+                </Button>
+              )}
             </CardContent>
           </Card>
         </div>
 
         {/* ============================================================ */}
-        {/*  Right column: Commander selection + Results                  */}
+        {/*  Right column: Results summary                               */}
         {/* ============================================================ */}
-        <div className="space-y-4">
-
-          {/* Token summary */}
-          <Card className="bg-card border-border sticky top-4">
+        <div>
+          <Card className="bg-card border-border">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                 <Trophy className="h-4 w-4 text-primary" />
@@ -419,59 +626,70 @@ export function GatheringOfHeroesContent() {
                 </div>
               </div>
 
-              {selectedCommanders.size > 0 && (
+              {/* Cost breakdown (only when commanders are selected) */}
+              {selCount > 0 && (
                 <>
                   <div className="border-t border-border pt-3 space-y-2 text-sm">
-                    <div className="flex justify-between text-muted-foreground">
-                      <span>
-                        Commanders × {selectedCommanders.size}
-                        <span className="text-xs ml-1">(@800 each)</span>
-                      </span>
-                      <span className="tabular-nums">{(selectedCommanders.size * TOKENS_PER_COMMANDER).toLocaleString()}</span>
-                    </div>
-                    {highestTier !== null && (
+                    {costInfo.t1Cost > 0 && (
                       <div className="flex justify-between text-muted-foreground">
-                        <span>
-                          Tier {highestTier} minimum spend
-                        </span>
-                        <span className="tabular-nums">
-                          {TIERS.find((t) => t.tier === highestTier)!.minSpend.toLocaleString()}
-                        </span>
+                        <span>Tier 1 ×{TIERS_DATA[0].commanders.filter((c) => selectedCommanders.has(c.name)).length} @200</span>
+                        <span className="tabular-nums">{costInfo.t1Cost.toLocaleString()}</span>
                       </div>
                     )}
-                    <div className="flex justify-between font-semibold text-foreground">
+                    {costInfo.t1Shortfall > 0 && (
+                      <div className="flex justify-between text-yellow-400/80">
+                        <span className="text-xs">T1 unlock shortfall</span>
+                        <span className="tabular-nums text-xs">+{costInfo.t1Shortfall.toLocaleString()}</span>
+                      </div>
+                    )}
+                    {costInfo.t2Cost > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Tier 2 ×{TIERS_DATA[1].commanders.filter((c) => selectedCommanders.has(c.name)).length} @500</span>
+                        <span className="tabular-nums">{costInfo.t2Cost.toLocaleString()}</span>
+                      </div>
+                    )}
+                    {costInfo.t2Shortfall > 0 && (
+                      <div className="flex justify-between text-yellow-400/80">
+                        <span className="text-xs">T2 unlock shortfall</span>
+                        <span className="tabular-nums text-xs">+{costInfo.t2Shortfall.toLocaleString()}</span>
+                      </div>
+                    )}
+                    {costInfo.t3Cost > 0 && (
+                      <div className="flex justify-between text-muted-foreground">
+                        <span>Tier 3 ×{TIERS_DATA[2].commanders.filter((c) => selectedCommanders.has(c.name)).length} @1000</span>
+                        <span className="tabular-nums">{costInfo.t3Cost.toLocaleString()}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-semibold text-foreground border-t border-border pt-2">
                       <span>Total cost</span>
-                      <span className="tabular-nums">{totalCost.toLocaleString()}</span>
+                      <span className="tabular-nums">{costInfo.total.toLocaleString()}</span>
                     </div>
                   </div>
 
                   <div
                     className={`rounded-lg px-4 py-3 flex items-center gap-3 border ${
-                      canAfford
-                        ? 'bg-green-500/10 border-green-500/30'
-                        : 'bg-red-500/10 border-red-500/30'
+                      canAfford ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'
                     }`}
                   >
-                    {canAfford ? (
-                      <CheckCircle2 className="h-5 w-5 text-green-400 shrink-0" />
-                    ) : (
-                      <XCircle className="h-5 w-5 text-red-400 shrink-0" />
-                    )}
+                    {canAfford
+                      ? <CheckCircle2 className="h-5 w-5 text-green-400 shrink-0" />
+                      : <XCircle className="h-5 w-5 text-red-400 shrink-0" />
+                    }
                     <div className="flex-1 min-w-0">
                       {canAfford ? (
                         <>
                           <p className="text-sm font-semibold text-green-400">Enough tokens</p>
                           <p className="text-xs text-muted-foreground tabular-nums">
-                            {remaining.toLocaleString()} remaining after purchase
+                            {remaining.toLocaleString()} remaining
                           </p>
                         </>
                       ) : (
                         <>
                           <p className="text-sm font-semibold text-red-400">
-                            Need {Math.abs(remaining).toLocaleString()} more tokens
+                            Need {Math.abs(remaining).toLocaleString()} more
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            Earn more or select fewer commanders
+                            Deselect some commanders or earn more tokens
                           </p>
                         </>
                       )}
@@ -480,63 +698,27 @@ export function GatheringOfHeroesContent() {
                 </>
               )}
 
-              {selectedCommanders.size === 0 && (
+              {selCount === 0 && (
                 <p className="text-xs text-muted-foreground text-center py-2">
-                  Select commanders below to see cost analysis.
+                  Select commanders to see cost breakdown.
                 </p>
               )}
-            </CardContent>
-          </Card>
 
-          {/* Commander selection */}
-          <Card className="bg-card border-border">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                <Users className="h-4 w-4 text-primary" />
-                Commander Selection
-                <span className="text-xs text-muted-foreground font-normal ml-auto">
-                  800 tokens each
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {TIERS.map((tier) => (
-                <div key={tier.tier} className={`rounded-lg border ${tier.borderColor} ${tier.bgColor} p-3 space-y-2`}>
-                  <div className="flex items-center justify-between">
-                    <span className={`text-xs font-bold uppercase tracking-wider ${tier.color}`}>
-                      {tier.label}
-                    </span>
-                    <span className="text-xs text-muted-foreground tabular-nums">
-                      min. {tier.minSpend.toLocaleString()} tokens
+              {/* Tier info */}
+              <div className="border-t border-border pt-3 space-y-1.5">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tier Unlock Requirements</p>
+                {TIERS_DATA.map((t) => (
+                  <div key={t.tier} className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className={`font-medium ${t.color}`}>{t.label}</span>
+                    <span className="text-muted-foreground/60">—</span>
+                    <span>
+                      {t.minSpend === 0
+                        ? 'available immediately'
+                        : `spend ${t.minSpend.toLocaleString()} tokens first`}
                     </span>
                   </div>
-                  {tier.commanders.map((name) => (
-                    <label
-                      key={name}
-                      className="flex items-center gap-2.5 cursor-pointer rounded-md px-1 py-1 hover:bg-secondary/50 transition-colors group"
-                    >
-                      <Checkbox
-                        checked={selectedCommanders.has(name)}
-                        onCheckedChange={() => toggleCommander(name)}
-                      />
-                      <span className={`text-sm flex-1 transition-colors ${selectedCommanders.has(name) ? tier.color : 'text-foreground'} group-hover:${tier.color}`}>
-                        {name}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              ))}
-
-              {selectedCommanders.size > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setSelectedCommanders(new Set())}
-                  className="w-full border-border hover:border-red-500 hover:text-red-400 text-xs"
-                >
-                  Clear selection
-                </Button>
-              )}
+                ))}
+              </div>
             </CardContent>
           </Card>
         </div>
