@@ -1,17 +1,10 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import {
   Shield,
   Sword,
@@ -29,127 +22,191 @@ import {
   AlertTriangle,
   RotateCcw,
   Target,
+  Search,
+  Layers,
 } from 'lucide-react'
 
 /* ------------------------------------------------------------------ */
-/*  Constants & Types                                                   */
+/*  Commander database                                                  */
 /* ------------------------------------------------------------------ */
 
-// Full commander list from sunset-canyon meta (rok-suite KNOWN_SYNERGIES, 2025)
-const KNOWN_COMMANDERS = [
-  // S-Tier Canyon commanders
-  'Constantine I',
-  'Wu Zetian',
-  'Theodora',
-  'Richard I',
-  'Sun Tzu',
-  'Yi Seong-Gye',
-  'Joan of Arc',
-  'William I',
-  'Aethelflaed',
-  // Infantry
-  'Guan Yu',
-  'Harald Sigurdsson',
-  'Charles Martel',
-  'Scipio Africanus',
-  'Scipio Prime',
-  'Liu Che',
-  'Björn Ironside',
-  'Eulji Mundeok',
-  'Alexander the Great',
-  // Archer
-  'Hermann Prime',
-  'Ashurbanipal',
-  'Ramesses II',
-  'Kusunoki Masashige',
-  'Hermann',
-  'Thutmose III',
-  // Cavalry (weaker in Canyon)
-  'Alexander Nevsky',
-  'Xiang Yu',
-  'Attila',
-  'Takeda Shingen',
-  'Cao Cao',
-  'Minamoto no Yoshitsune',
-  'Genghis Khan',
-  'Baibars',
-  'Saladin',
-  'Osman I',
-  'Pelagius',
-  'Belisarius',
-  'Tomoe Gozen',
-  // Support / Mixed
-  'Joan of Arc Prime',
-  'Mulan',
-  'Boudica',
-  'Lohar',
-  'Mehmed II',
-  'Wak Chanil Ajaw',
-  // Garrison specialists
-  'El Cid',
-  'Bertrand',
-  'Amanitore',
-]
+type TroopType = 'infantry' | 'cavalry' | 'archer' | 'mixed'
+type Rarity = 'legendary' | 'epic' | 'elite'
 
-// Canyon synergy data: partners and canyon bonus per commander
-const CANYON_SYNERGIES: Record<string, { partners: string[]; canyonBonus: number; preferredRow: 'front' | 'back' | 'center'; tier: 'S' | 'A' | 'B' }> = {
-  'Constantine I':         { partners: ['Wu Zetian', 'Charles Martel', 'Richard I', 'Joan of Arc'], canyonBonus: 50, preferredRow: 'front', tier: 'S' },
-  'Wu Zetian':             { partners: ['Constantine I', 'Theodora', 'Charles Martel'], canyonBonus: 45, preferredRow: 'front', tier: 'S' },
-  'Theodora':              { partners: ['Wu Zetian', 'Constantine I', 'Yi Seong-Gye'], canyonBonus: 40, preferredRow: 'back', tier: 'S' },
-  'Richard I':             { partners: ['Charles Martel', 'Sun Tzu', 'Scipio Africanus', 'Yi Seong-Gye', 'Guan Yu', 'Constantine I'], canyonBonus: 45, preferredRow: 'front', tier: 'S' },
-  'Sun Tzu':               { partners: ['Charles Martel', 'Guan Yu', 'Harald Sigurdsson', 'Richard I', 'Scipio Africanus', 'Yi Seong-Gye', 'Alexander the Great', 'Björn Ironside', 'Eulji Mundeok', 'Mehmed II', 'Baibars', 'Joan of Arc'], canyonBonus: 50, preferredRow: 'center', tier: 'S' },
-  'Yi Seong-Gye':          { partners: ['Sun Tzu', 'Aethelflaed', 'Kusunoki Masashige', 'Mehmed II', 'Richard I', 'Hermann Prime', 'Ramesses II', 'Theodora'], canyonBonus: 50, preferredRow: 'center', tier: 'S' },
-  'Joan of Arc':           { partners: ['Charles Martel', 'Scipio Africanus', 'Boudica', 'Sun Tzu', 'Mulan', 'Constantine I'], canyonBonus: 40, preferredRow: 'back', tier: 'S' },
-  'William I':             { partners: ['Charles Martel', 'Richard I', 'Guan Yu', 'Genghis Khan'], canyonBonus: 45, preferredRow: 'front', tier: 'S' },
-  'Aethelflaed':           { partners: ['Yi Seong-Gye', 'Sun Tzu', 'Lohar', 'Boudica', 'Baibars', 'Kusunoki Masashige'], canyonBonus: 40, preferredRow: 'center', tier: 'S' },
-  'Guan Yu':               { partners: ['Sun Tzu', 'Alexander the Great', 'Richard I', 'Harald Sigurdsson', 'William I'], canyonBonus: 35, preferredRow: 'front', tier: 'S' },
-  'Harald Sigurdsson':     { partners: ['Guan Yu', 'Sun Tzu', 'Charles Martel'], canyonBonus: 30, preferredRow: 'front', tier: 'S' },
-  'Charles Martel':        { partners: ['Sun Tzu', 'Richard I', 'Scipio Africanus', 'Joan of Arc', 'Eulji Mundeok', 'Björn Ironside', 'Harald Sigurdsson', 'Constantine I', 'Wu Zetian'], canyonBonus: 40, preferredRow: 'front', tier: 'S' },
-  'Scipio Africanus':      { partners: ['Sun Tzu', 'Charles Martel', 'Björn Ironside', 'Joan of Arc', 'Richard I'], canyonBonus: 25, preferredRow: 'front', tier: 'A' },
-  'Scipio Prime':          { partners: ['Liu Che', 'Sun Tzu'], canyonBonus: 30, preferredRow: 'front', tier: 'S' },
-  'Liu Che':               { partners: ['Scipio Prime', 'Sun Tzu'], canyonBonus: 30, preferredRow: 'front', tier: 'S' },
-  'Björn Ironside':        { partners: ['Sun Tzu', 'Eulji Mundeok', 'Charles Martel', 'Scipio Africanus'], canyonBonus: 20, preferredRow: 'front', tier: 'A' },
-  'Eulji Mundeok':         { partners: ['Sun Tzu', 'Björn Ironside', 'Osman I', 'Charles Martel'], canyonBonus: 10, preferredRow: 'front', tier: 'B' },
-  'Alexander the Great':   { partners: ['Guan Yu', 'Sun Tzu', 'Richard I'], canyonBonus: 25, preferredRow: 'front', tier: 'A' },
-  'Hermann Prime':         { partners: ['Ashurbanipal', 'Yi Seong-Gye'], canyonBonus: 35, preferredRow: 'back', tier: 'S' },
-  'Ashurbanipal':          { partners: ['Hermann Prime', 'Yi Seong-Gye', 'Ramesses II'], canyonBonus: 35, preferredRow: 'center', tier: 'S' },
-  'Ramesses II':           { partners: ['Ashurbanipal', 'Yi Seong-Gye'], canyonBonus: 30, preferredRow: 'back', tier: 'S' },
-  'Kusunoki Masashige':    { partners: ['Sun Tzu', 'Yi Seong-Gye', 'Aethelflaed', 'Hermann'], canyonBonus: 20, preferredRow: 'back', tier: 'A' },
-  'Hermann':               { partners: ['Kusunoki Masashige', 'Yi Seong-Gye', 'El Cid'], canyonBonus: 15, preferredRow: 'back', tier: 'B' },
-  'Thutmose III':          { partners: ['Yi Seong-Gye', 'Kusunoki Masashige', 'Aethelflaed'], canyonBonus: 10, preferredRow: 'back', tier: 'B' },
-  'Alexander Nevsky':      { partners: ['Joan of Arc Prime', 'Xiang Yu', 'Attila', 'Takeda Shingen', 'Bertrand'], canyonBonus: -10, preferredRow: 'front', tier: 'A' },
-  'Xiang Yu':              { partners: ['Alexander Nevsky', 'Saladin', 'Cao Cao'], canyonBonus: -10, preferredRow: 'front', tier: 'A' },
-  'Attila':                { partners: ['Takeda Shingen', 'Alexander Nevsky'], canyonBonus: -15, preferredRow: 'front', tier: 'A' },
-  'Takeda Shingen':        { partners: ['Attila', 'Alexander Nevsky'], canyonBonus: -15, preferredRow: 'front', tier: 'A' },
-  'Cao Cao':               { partners: ['Minamoto no Yoshitsune', 'Pelagius', 'Belisarius', 'Baibars', 'Osman I', 'Tomoe Gozen', 'Genghis Khan'], canyonBonus: -10, preferredRow: 'front', tier: 'B' },
-  'Minamoto no Yoshitsune':{ partners: ['Cao Cao', 'Pelagius', 'Baibars', 'Osman I', 'Genghis Khan'], canyonBonus: -10, preferredRow: 'front', tier: 'B' },
-  'Genghis Khan':          { partners: ['Cao Cao', 'Minamoto no Yoshitsune', 'Baibars', 'William I'], canyonBonus: -5, preferredRow: 'front', tier: 'B' },
-  'Baibars':               { partners: ['Osman I', 'Cao Cao', 'Sun Tzu', 'Aethelflaed', 'Saladin', 'Minamoto no Yoshitsune'], canyonBonus: 15, preferredRow: 'center', tier: 'A' },
-  'Saladin':               { partners: ['Baibars', 'Cao Cao', 'Minamoto no Yoshitsune', 'Xiang Yu'], canyonBonus: 5, preferredRow: 'front', tier: 'A' },
-  'Osman I':               { partners: ['Baibars', 'Eulji Mundeok', 'Cao Cao', 'Minamoto no Yoshitsune'], canyonBonus: -5, preferredRow: 'front', tier: 'B' },
-  'Pelagius':              { partners: ['Minamoto no Yoshitsune', 'Cao Cao'], canyonBonus: -10, preferredRow: 'front', tier: 'B' },
-  'Belisarius':            { partners: ['Cao Cao', 'Baibars'], canyonBonus: -15, preferredRow: 'front', tier: 'B' },
-  'Tomoe Gozen':           { partners: ['Cao Cao'], canyonBonus: -5, preferredRow: 'front', tier: 'B' },
-  'Joan of Arc Prime':     { partners: ['Alexander Nevsky', 'Mulan'], canyonBonus: 20, preferredRow: 'back', tier: 'A' },
-  'Mulan':                 { partners: ['Joan of Arc Prime', 'Joan of Arc'], canyonBonus: 25, preferredRow: 'back', tier: 'A' },
-  'Boudica':               { partners: ['Lohar', 'Aethelflaed', 'Sun Tzu', 'Joan of Arc'], canyonBonus: 10, preferredRow: 'back', tier: 'B' },
-  'Lohar':                 { partners: ['Boudica', 'Aethelflaed', 'Joan of Arc'], canyonBonus: 5, preferredRow: 'back', tier: 'B' },
-  'Mehmed II':             { partners: ['Yi Seong-Gye', 'Sun Tzu', 'Aethelflaed'], canyonBonus: 20, preferredRow: 'back', tier: 'A' },
-  'Wak Chanil Ajaw':       { partners: ['Aethelflaed', 'Boudica', 'Lohar'], canyonBonus: 0, preferredRow: 'back', tier: 'B' },
-  'El Cid':                { partners: ['Hermann', 'Yi Seong-Gye'], canyonBonus: 20, preferredRow: 'back', tier: 'A' },
-  'Bertrand':              { partners: ['Alexander Nevsky'], canyonBonus: 15, preferredRow: 'front', tier: 'A' },
-  'Amanitore':             { partners: ['Yi Seong-Gye', 'Sun Tzu', 'Theodora'], canyonBonus: 25, preferredRow: 'back', tier: 'A' },
+interface CommanderInfo {
+  name: string
+  rarity: Rarity
+  troopType: TroopType
 }
 
-type TroopType = 'infantry' | 'cavalry' | 'archer' | 'mixed'
+// Full commander DB — rarity + troop type from rok-suite data (2025 meta)
+const COMMANDER_DB: CommanderInfo[] = [
+  // ── Legendary ──────────────────────────────────────────────────────
+  // Mixed / Leadership
+  { name: 'Constantine I',          rarity: 'legendary', troopType: 'mixed'    },
+  { name: 'Wu Zetian',              rarity: 'legendary', troopType: 'mixed'    },
+  { name: 'Theodora',               rarity: 'legendary', troopType: 'mixed'    },
+  { name: 'Joan of Arc Prime',      rarity: 'legendary', troopType: 'mixed'    },
+  { name: 'Mulan',                  rarity: 'legendary', troopType: 'mixed'    },
+  { name: 'Mehmed II',              rarity: 'legendary', troopType: 'mixed'    },
+  { name: 'Wak Chanil Ajaw',        rarity: 'legendary', troopType: 'mixed'    },
+  // Infantry legendary
+  { name: 'Richard I',              rarity: 'legendary', troopType: 'infantry' },
+  { name: 'William I',              rarity: 'legendary', troopType: 'infantry' },
+  { name: 'Guan Yu',                rarity: 'legendary', troopType: 'infantry' },
+  { name: 'Harald Sigurdsson',      rarity: 'legendary', troopType: 'infantry' },
+  { name: 'Alexander the Great',    rarity: 'legendary', troopType: 'infantry' },
+  { name: 'Liu Che',                rarity: 'legendary', troopType: 'infantry' },
+  { name: 'Scipio Prime',           rarity: 'legendary', troopType: 'infantry' },
+  // Archer legendary
+  { name: 'Yi Seong-Gye',           rarity: 'legendary', troopType: 'archer'   },
+  { name: 'Hermann Prime',          rarity: 'legendary', troopType: 'archer'   },
+  { name: 'Ashurbanipal',           rarity: 'legendary', troopType: 'archer'   },
+  { name: 'Ramesses II',            rarity: 'legendary', troopType: 'archer'   },
+  { name: 'Kusunoki Masashige',     rarity: 'legendary', troopType: 'archer'   },
+  { name: 'El Cid',                 rarity: 'legendary', troopType: 'archer'   },
+  { name: 'Amanitore',              rarity: 'legendary', troopType: 'archer'   },
+  { name: 'Thutmose III',           rarity: 'legendary', troopType: 'archer'   },
+  // Cavalry legendary
+  { name: 'Alexander Nevsky',       rarity: 'legendary', troopType: 'cavalry'  },
+  { name: 'Xiang Yu',               rarity: 'legendary', troopType: 'cavalry'  },
+  { name: 'Attila',                 rarity: 'legendary', troopType: 'cavalry'  },
+  { name: 'Takeda Shingen',         rarity: 'legendary', troopType: 'cavalry'  },
+  { name: 'Cao Cao',                rarity: 'legendary', troopType: 'cavalry'  },
+  { name: 'Minamoto no Yoshitsune', rarity: 'legendary', troopType: 'cavalry'  },
+  { name: 'Genghis Khan',           rarity: 'legendary', troopType: 'cavalry'  },
+  { name: 'Baibars',                rarity: 'legendary', troopType: 'cavalry'  },
+  { name: 'Saladin',                rarity: 'legendary', troopType: 'cavalry'  },
+  { name: 'Bertrand',               rarity: 'legendary', troopType: 'cavalry'  },
+  { name: 'Tomoe Gozen',            rarity: 'legendary', troopType: 'cavalry'  },
+
+  // ── Epic ────────────────────────────────────────────────────────────
+  // Mixed / support epic
+  { name: 'Joan of Arc',            rarity: 'epic',      troopType: 'mixed'    },
+  { name: 'Aethelflaed',            rarity: 'epic',      troopType: 'mixed'    },
+  { name: 'Boudica',                rarity: 'epic',      troopType: 'mixed'    },
+  { name: 'Lohar',                  rarity: 'epic',      troopType: 'mixed'    },
+  // Infantry epic
+  { name: 'Sun Tzu',                rarity: 'epic',      troopType: 'infantry' },
+  { name: 'Charles Martel',         rarity: 'epic',      troopType: 'infantry' },
+  { name: 'Scipio Africanus',       rarity: 'epic',      troopType: 'infantry' },
+  { name: 'Björn Ironside',         rarity: 'epic',      troopType: 'infantry' },
+  { name: 'Eulji Mundeok',          rarity: 'epic',      troopType: 'infantry' },
+  // Archer epic
+  { name: 'Hermann',                rarity: 'epic',      troopType: 'archer'   },
+  // Cavalry epic
+  { name: 'Pelagius',               rarity: 'epic',      troopType: 'cavalry'  },
+  { name: 'Belisarius',             rarity: 'epic',      troopType: 'cavalry'  },
+  { name: 'Osman I',                rarity: 'epic',      troopType: 'cavalry'  },
+]
+
+// Sorted alphabetically for lookup
+const COMMANDER_MAP = new Map(COMMANDER_DB.map((c) => [c.name, c]))
+
+/* ------------------------------------------------------------------ */
+/*  Canyon synergy data (from rok-suite optimizer.ts, 2025)            */
+/* ------------------------------------------------------------------ */
+
+const CANYON_SYNERGIES: Record<string, { partners: string[]; canyonBonus: number; preferredRow: 'front' | 'back' | 'center'; tier: 'S' | 'A' | 'B' }> = {
+  'Constantine I':          { partners: ['Wu Zetian', 'Charles Martel', 'Richard I', 'Joan of Arc'], canyonBonus: 50, preferredRow: 'front', tier: 'S' },
+  'Wu Zetian':              { partners: ['Constantine I', 'Theodora', 'Charles Martel'], canyonBonus: 45, preferredRow: 'front', tier: 'S' },
+  'Theodora':               { partners: ['Wu Zetian', 'Constantine I', 'Yi Seong-Gye'], canyonBonus: 40, preferredRow: 'back', tier: 'S' },
+  'Richard I':              { partners: ['Charles Martel', 'Sun Tzu', 'Scipio Africanus', 'Yi Seong-Gye', 'Guan Yu', 'Constantine I'], canyonBonus: 45, preferredRow: 'front', tier: 'S' },
+  'Sun Tzu':                { partners: ['Charles Martel', 'Guan Yu', 'Harald Sigurdsson', 'Richard I', 'Scipio Africanus', 'Yi Seong-Gye', 'Alexander the Great', 'Björn Ironside', 'Eulji Mundeok', 'Mehmed II', 'Baibars', 'Joan of Arc'], canyonBonus: 50, preferredRow: 'center', tier: 'S' },
+  'Yi Seong-Gye':           { partners: ['Sun Tzu', 'Aethelflaed', 'Kusunoki Masashige', 'Mehmed II', 'Richard I', 'Hermann Prime', 'Ramesses II', 'Theodora'], canyonBonus: 50, preferredRow: 'center', tier: 'S' },
+  'Joan of Arc':            { partners: ['Charles Martel', 'Scipio Africanus', 'Boudica', 'Sun Tzu', 'Mulan', 'Constantine I'], canyonBonus: 40, preferredRow: 'back', tier: 'S' },
+  'William I':              { partners: ['Charles Martel', 'Richard I', 'Guan Yu', 'Genghis Khan'], canyonBonus: 45, preferredRow: 'front', tier: 'S' },
+  'Aethelflaed':            { partners: ['Yi Seong-Gye', 'Sun Tzu', 'Lohar', 'Boudica', 'Baibars', 'Kusunoki Masashige'], canyonBonus: 40, preferredRow: 'center', tier: 'S' },
+  'Guan Yu':                { partners: ['Sun Tzu', 'Alexander the Great', 'Richard I', 'Harald Sigurdsson', 'William I'], canyonBonus: 35, preferredRow: 'front', tier: 'S' },
+  'Harald Sigurdsson':      { partners: ['Guan Yu', 'Sun Tzu', 'Charles Martel'], canyonBonus: 30, preferredRow: 'front', tier: 'S' },
+  'Charles Martel':         { partners: ['Sun Tzu', 'Richard I', 'Scipio Africanus', 'Joan of Arc', 'Eulji Mundeok', 'Björn Ironside', 'Harald Sigurdsson', 'Constantine I', 'Wu Zetian'], canyonBonus: 40, preferredRow: 'front', tier: 'S' },
+  'Scipio Africanus':       { partners: ['Sun Tzu', 'Charles Martel', 'Björn Ironside', 'Joan of Arc', 'Richard I'], canyonBonus: 25, preferredRow: 'front', tier: 'A' },
+  'Scipio Prime':           { partners: ['Liu Che', 'Sun Tzu'], canyonBonus: 30, preferredRow: 'front', tier: 'S' },
+  'Liu Che':                { partners: ['Scipio Prime', 'Sun Tzu'], canyonBonus: 30, preferredRow: 'front', tier: 'S' },
+  'Björn Ironside':         { partners: ['Sun Tzu', 'Eulji Mundeok', 'Charles Martel', 'Scipio Africanus'], canyonBonus: 20, preferredRow: 'front', tier: 'A' },
+  'Eulji Mundeok':          { partners: ['Sun Tzu', 'Björn Ironside', 'Osman I', 'Charles Martel'], canyonBonus: 10, preferredRow: 'front', tier: 'B' },
+  'Alexander the Great':    { partners: ['Guan Yu', 'Sun Tzu', 'Richard I'], canyonBonus: 25, preferredRow: 'front', tier: 'A' },
+  'Hermann Prime':          { partners: ['Ashurbanipal', 'Yi Seong-Gye'], canyonBonus: 35, preferredRow: 'back', tier: 'S' },
+  'Ashurbanipal':           { partners: ['Hermann Prime', 'Yi Seong-Gye', 'Ramesses II'], canyonBonus: 35, preferredRow: 'center', tier: 'S' },
+  'Ramesses II':            { partners: ['Ashurbanipal', 'Yi Seong-Gye'], canyonBonus: 30, preferredRow: 'back', tier: 'S' },
+  'Kusunoki Masashige':     { partners: ['Sun Tzu', 'Yi Seong-Gye', 'Aethelflaed', 'Hermann'], canyonBonus: 20, preferredRow: 'back', tier: 'A' },
+  'Hermann':                { partners: ['Kusunoki Masashige', 'Yi Seong-Gye', 'El Cid'], canyonBonus: 15, preferredRow: 'back', tier: 'B' },
+  'Thutmose III':           { partners: ['Yi Seong-Gye', 'Kusunoki Masashige', 'Aethelflaed'], canyonBonus: 10, preferredRow: 'back', tier: 'B' },
+  'Alexander Nevsky':       { partners: ['Joan of Arc Prime', 'Xiang Yu', 'Attila', 'Takeda Shingen', 'Bertrand'], canyonBonus: -10, preferredRow: 'front', tier: 'A' },
+  'Xiang Yu':               { partners: ['Alexander Nevsky', 'Saladin', 'Cao Cao'], canyonBonus: -10, preferredRow: 'front', tier: 'A' },
+  'Attila':                 { partners: ['Takeda Shingen', 'Alexander Nevsky'], canyonBonus: -15, preferredRow: 'front', tier: 'A' },
+  'Takeda Shingen':         { partners: ['Attila', 'Alexander Nevsky'], canyonBonus: -15, preferredRow: 'front', tier: 'A' },
+  'Cao Cao':                { partners: ['Minamoto no Yoshitsune', 'Pelagius', 'Belisarius', 'Baibars', 'Osman I', 'Tomoe Gozen', 'Genghis Khan'], canyonBonus: -10, preferredRow: 'front', tier: 'B' },
+  'Minamoto no Yoshitsune': { partners: ['Cao Cao', 'Pelagius', 'Baibars', 'Osman I', 'Genghis Khan'], canyonBonus: -10, preferredRow: 'front', tier: 'B' },
+  'Genghis Khan':           { partners: ['Cao Cao', 'Minamoto no Yoshitsune', 'Baibars', 'William I'], canyonBonus: -5, preferredRow: 'front', tier: 'B' },
+  'Baibars':                { partners: ['Osman I', 'Cao Cao', 'Sun Tzu', 'Aethelflaed', 'Saladin', 'Minamoto no Yoshitsune'], canyonBonus: 15, preferredRow: 'center', tier: 'A' },
+  'Saladin':                { partners: ['Baibars', 'Cao Cao', 'Minamoto no Yoshitsune', 'Xiang Yu'], canyonBonus: 5, preferredRow: 'front', tier: 'A' },
+  'Osman I':                { partners: ['Baibars', 'Eulji Mundeok', 'Cao Cao', 'Minamoto no Yoshitsune'], canyonBonus: -5, preferredRow: 'front', tier: 'B' },
+  'Pelagius':               { partners: ['Minamoto no Yoshitsune', 'Cao Cao'], canyonBonus: -10, preferredRow: 'front', tier: 'B' },
+  'Belisarius':             { partners: ['Cao Cao', 'Baibars'], canyonBonus: -15, preferredRow: 'front', tier: 'B' },
+  'Tomoe Gozen':            { partners: ['Cao Cao'], canyonBonus: -5, preferredRow: 'front', tier: 'B' },
+  'Joan of Arc Prime':      { partners: ['Alexander Nevsky', 'Mulan'], canyonBonus: 20, preferredRow: 'back', tier: 'A' },
+  'Mulan':                  { partners: ['Joan of Arc Prime', 'Joan of Arc'], canyonBonus: 25, preferredRow: 'back', tier: 'A' },
+  'Boudica':                { partners: ['Lohar', 'Aethelflaed', 'Sun Tzu', 'Joan of Arc'], canyonBonus: 10, preferredRow: 'back', tier: 'B' },
+  'Lohar':                  { partners: ['Boudica', 'Aethelflaed', 'Joan of Arc'], canyonBonus: 5, preferredRow: 'back', tier: 'B' },
+  'Mehmed II':              { partners: ['Yi Seong-Gye', 'Sun Tzu', 'Aethelflaed'], canyonBonus: 20, preferredRow: 'back', tier: 'A' },
+  'Wak Chanil Ajaw':        { partners: ['Aethelflaed', 'Boudica', 'Lohar'], canyonBonus: 0, preferredRow: 'back', tier: 'B' },
+  'El Cid':                 { partners: ['Hermann', 'Yi Seong-Gye'], canyonBonus: 20, preferredRow: 'back', tier: 'A' },
+  'Bertrand':               { partners: ['Alexander Nevsky'], canyonBonus: 15, preferredRow: 'front', tier: 'A' },
+  'Amanitore':              { partners: ['Yi Seong-Gye', 'Sun Tzu', 'Theodora'], canyonBonus: 25, preferredRow: 'back', tier: 'A' },
+}
+
+/* ------------------------------------------------------------------ */
+/*  Styling maps                                                        */
+/* ------------------------------------------------------------------ */
+
+const RARITY_COLORS: Record<Rarity, string> = {
+  legendary: 'text-yellow-400',
+  epic:      'text-purple-400',
+  elite:     'text-blue-400',
+}
+const RARITY_BG: Record<Rarity, string> = {
+  legendary: 'bg-yellow-500/15 border-yellow-500/30',
+  epic:      'bg-purple-500/15 border-purple-500/30',
+  elite:     'bg-blue-500/15 border-blue-500/30',
+}
+const RARITY_BADGE: Record<Rarity, string> = {
+  legendary: 'bg-yellow-500/20 text-yellow-300',
+  epic:      'bg-purple-500/20 text-purple-300',
+  elite:     'bg-blue-500/20 text-blue-300',
+}
+
+const TROOP_COLORS: Record<TroopType, string> = {
+  infantry: 'text-blue-400',
+  cavalry:  'text-orange-400',
+  archer:   'text-green-400',
+  mixed:    'text-violet-400',
+}
+const TROOP_BG: Record<TroopType, string> = {
+  infantry: 'bg-blue-500/15 border-blue-500/30',
+  cavalry:  'bg-orange-500/15 border-orange-500/30',
+  archer:   'bg-green-500/15 border-green-500/30',
+  mixed:    'bg-violet-500/15 border-violet-500/30',
+}
+const TROOP_ICONS: Record<TroopType, React.ReactNode> = {
+  infantry: <Shield className="h-3.5 w-3.5" />,
+  cavalry:  <Sword className="h-3.5 w-3.5" />,
+  archer:   <Crosshair className="h-3.5 w-3.5" />,
+  mixed:    <Layers className="h-3.5 w-3.5" />,
+}
+
+/* ------------------------------------------------------------------ */
+/*  Commander types for the roster                                      */
+/* ------------------------------------------------------------------ */
 
 interface Commander {
   id: string
   name: string
+  rarity: Rarity
+  troopType: TroopType
   level: number
   stars: number
   skills: [number, number, number, number]
-  troopType: TroopType
 }
 
 interface Army {
@@ -165,27 +222,6 @@ interface Formation {
   notes: string[]
 }
 
-const TROOP_ICONS: Record<TroopType, React.ReactNode> = {
-  infantry: <Shield className="h-4 w-4" />,
-  cavalry: <Sword className="h-4 w-4" />,
-  archer: <Crosshair className="h-4 w-4" />,
-  mixed: <Users className="h-4 w-4" />,
-}
-
-const TROOP_COLORS: Record<TroopType, string> = {
-  infantry: 'text-blue-400',
-  cavalry: 'text-orange-400',
-  archer: 'text-green-400',
-  mixed: 'text-purple-400',
-}
-
-const TROOP_BG: Record<TroopType, string> = {
-  infantry: 'bg-blue-500/15 border-blue-500/30',
-  cavalry: 'bg-orange-500/15 border-orange-500/30',
-  archer: 'bg-green-500/15 border-green-500/30',
-  mixed: 'bg-purple-500/15 border-purple-500/30',
-}
-
 /* ------------------------------------------------------------------ */
 /*  Algorithm                                                           */
 /* ------------------------------------------------------------------ */
@@ -193,7 +229,7 @@ const TROOP_BG: Record<TroopType, string> = {
 function calcPower(c: Commander): number {
   const skillSum = c.skills.reduce((a, b) => a + b, 0)
   const skillRatio = skillSum / 20
-  const rarityBonus = c.level >= 50 ? 300 : c.level >= 30 ? 150 : 50
+  const rarityBonus = c.rarity === 'legendary' ? 300 : c.rarity === 'epic' ? 150 : 50
   return (
     c.level * c.level * 2 +
     skillSum * 100 * (1 + skillRatio) +
@@ -211,17 +247,16 @@ function pairingScore(primary: Commander, secondary: Commander): number {
   const sp = calcPower(secondary)
   let score = pp / 10 + sp / 15
 
-  // Canyon synergy bonus from meta data
   const pSyn = CANYON_SYNERGIES[primary.name]
   const sSyn = CANYON_SYNERGIES[secondary.name]
   if (pSyn) score += pSyn.canyonBonus * 0.5
   if (sSyn) score += sSyn.canyonBonus * 0.3
 
-  // Partner bonus: commanders that are known good pairs get a big boost
+  // Known partner bonus
   if (pSyn?.partners.includes(secondary.name)) score += 40
   if (sSyn?.partners.includes(primary.name))   score += 20
 
-  // Tier bonus from synergy data
+  // Tier bonus
   if (pSyn?.tier === 'S') score += 15
   if (pSyn?.tier === 'A') score += 8
   if (sSyn?.tier === 'S') score += 10
@@ -231,15 +266,15 @@ function pairingScore(primary: Commander, secondary: Commander): number {
   if (primary.troopType === secondary.troopType) score += 30
 
   // Cavalry penalty (cavalry is weak in Canyon)
-  if (primary.troopType === 'cavalry') score -= 25
+  if (primary.troopType === 'cavalry')  score -= 25
   if (secondary.troopType === 'cavalry') score -= 25
 
   // Infantry bonus
-  if (primary.troopType === 'infantry') score += 20
+  if (primary.troopType === 'infantry')  score += 20
   if (secondary.troopType === 'infantry') score += 20
 
   // Viability penalties
-  if (!isViable(primary)) score -= 500
+  if (!isViable(primary))   score -= 500
   if (!isViable(secondary)) score -= 300
 
   return score
@@ -248,23 +283,15 @@ function pairingScore(primary: Commander, secondary: Commander): number {
 function optimizeFormation(commanders: Commander[]): Formation | null {
   if (commanders.length < 2) return null
 
-  // Build all pair combos
   const pairs: { primary: Commander; secondary: Commander; score: number }[] = []
   for (let i = 0; i < commanders.length; i++) {
     for (let j = 0; j < commanders.length; j++) {
       if (i === j) continue
-      pairs.push({
-        primary: commanders[i],
-        secondary: commanders[j],
-        score: pairingScore(commanders[i], commanders[j]),
-      })
+      pairs.push({ primary: commanders[i], secondary: commanders[j], score: pairingScore(commanders[i], commanders[j]) })
     }
   }
-
-  // Sort by score descending
   pairs.sort((a, b) => b.score - a.score)
 
-  // Greedy: pick up to 5 non-overlapping armies
   const used = new Set<string>()
   const armies: Army[] = []
   for (const pair of pairs) {
@@ -277,27 +304,17 @@ function optimizeFormation(commanders: Commander[]): Formation | null {
 
   if (armies.length === 0) return null
 
-  // Position assignment: front (0-1) = tanks/infantry, back (2-4) = archers/mixed
+  // Sort: infantry/tank to front
   armies.sort((a, b) => {
-    const aScore =
-      (a.primary.troopType === 'infantry' ? 10 : 0) +
-      (a.secondary.troopType === 'infantry' ? 5 : 0)
-    const bScore =
-      (b.primary.troopType === 'infantry' ? 10 : 0) +
-      (b.secondary.troopType === 'infantry' ? 5 : 0)
+    const aScore = (a.primary.troopType === 'infantry' ? 10 : 0) + (a.secondary.troopType === 'infantry' ? 5 : 0)
+    const bScore = (b.primary.troopType === 'infantry' ? 10 : 0) + (b.secondary.troopType === 'infantry' ? 5 : 0)
     return bScore - aScore
   })
 
-  const totalPower = armies.reduce(
-    (sum, a) => sum + calcPower(a.primary) + calcPower(a.secondary),
-    0
-  )
-
-  const winRate = Math.min(82, Math.max(30, 35 + totalPower / 15000))
+  const totalPower = armies.reduce((sum, a) => sum + calcPower(a.primary) + calcPower(a.secondary), 0)
+  const winRate    = Math.min(82, Math.max(30, 35 + totalPower / 15000))
 
   const notes: string[] = []
-
-  // Check for known S-tier pairs
   let foundSynergyPair = false
   for (const army of armies) {
     const pSyn = CANYON_SYNERGIES[army.primary.name]
@@ -308,20 +325,15 @@ function optimizeFormation(commanders: Commander[]): Formation | null {
     }
   }
 
-  const hasInfantryFront = armies
-    .slice(0, Math.min(2, armies.length))
-    .some((a) => a.primary.troopType === 'infantry')
+  const hasInfantryFront = armies.slice(0, 2).some((a) => a.primary.troopType === 'infantry')
   if (!hasInfantryFront) notes.push('Add an infantry tank (Richard I, Charles Martel, Constantine I) to the front row.')
 
   const nonViable = armies.filter((a) => !isViable(a.primary) || !isViable(a.secondary))
   if (nonViable.length > 0)
     notes.push(`${nonViable.length} pair(s) include under-leveled commanders. Aim for level 50+ with skill 1 maxed.`)
 
-  const cavalryCount = armies.filter(
-    (a) => a.primary.troopType === 'cavalry' || a.secondary.troopType === 'cavalry'
-  ).length
-  if (cavalryCount > 1)
-    notes.push('Cavalry commanders are countered by infantry in Canyon. Swap for infantry or archer commanders.')
+  const cavalryCount = armies.filter((a) => a.primary.troopType === 'cavalry' || a.secondary.troopType === 'cavalry').length
+  if (cavalryCount > 1) notes.push('Cavalry commanders are countered by infantry in Canyon. Swap for infantry or archer commanders.')
 
   if (!foundSynergyPair && notes.length === 0)
     notes.push('Formation looks solid! Focus on skill upgrades and try Constantine I + Wu Zetian for the front line.')
@@ -330,19 +342,14 @@ function optimizeFormation(commanders: Commander[]): Formation | null {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Sub-components                                                      */
+/*  Helpers                                                             */
 /* ------------------------------------------------------------------ */
 
 function StarRating({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
     <div className="flex gap-0.5">
       {[1, 2, 3, 4, 5].map((s) => (
-        <button
-          key={s}
-          type="button"
-          onClick={() => onChange(s)}
-          className={`transition-colors ${s <= value ? 'text-yellow-400' : 'text-muted-foreground/30'}`}
-        >
+        <button key={s} type="button" onClick={() => onChange(s)} className={`transition-colors ${s <= value ? 'text-yellow-400' : 'text-muted-foreground/30'}`}>
           <Star className="h-4 w-4 fill-current" />
         </button>
       ))}
@@ -350,28 +357,45 @@ function StarRating({ value, onChange }: { value: number; onChange: (v: number) 
   )
 }
 
-function CommanderCard({
-  commander,
-  onEdit,
-  onDelete,
-}: {
-  commander: Commander
-  onEdit: () => void
-  onDelete: () => void
-}) {
-  const power = calcPower(commander)
+function TroopBadge({ type }: { type: TroopType }) {
+  return (
+    <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium ${TROOP_COLORS[type]}`}>
+      {TROOP_ICONS[type]}
+      {type.charAt(0).toUpperCase() + type.slice(1)}
+    </span>
+  )
+}
+
+function RarityBadge({ rarity }: { rarity: Rarity }) {
+  return (
+    <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${RARITY_BADGE[rarity]}`}>
+      {rarity}
+    </span>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/*  Commander Card (in the roster list)                                */
+/* ------------------------------------------------------------------ */
+
+function CommanderCard({ commander, onEdit, onDelete }: { commander: Commander; onEdit: () => void; onDelete: () => void }) {
+  const power  = calcPower(commander)
   const viable = isViable(commander)
+  const synTier = CANYON_SYNERGIES[commander.name]?.tier
 
   return (
-    <div
-      className={`rounded-xl border p-4 transition-all ${
-        viable ? 'border-border bg-card' : 'border-yellow-500/30 bg-yellow-500/5'
-      }`}
-    >
+    <div className={`rounded-xl border p-4 transition-all ${viable ? `${RARITY_BG[commander.rarity]}` : 'border-yellow-500/30 bg-yellow-500/5'}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-foreground truncate">{commander.name}</span>
+            <span className={`font-semibold truncate ${RARITY_COLORS[commander.rarity]}`}>{commander.name}</span>
+            {synTier && (
+              <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                synTier === 'S' ? 'bg-yellow-500/20 text-yellow-300' :
+                synTier === 'A' ? 'bg-orange-500/20 text-orange-300' :
+                'bg-secondary text-muted-foreground'
+              }`}>{synTier}-Tier Canyon</span>
+            )}
             {!viable && (
               <span className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs bg-yellow-500/15 text-yellow-400">
                 <AlertTriangle className="h-3 w-3" />
@@ -379,28 +403,19 @@ function CommanderCard({
               </span>
             )}
           </div>
-          <div className="mt-1 flex items-center gap-3 flex-wrap">
+          <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+            <RarityBadge rarity={commander.rarity} />
+            <TroopBadge type={commander.troopType} />
             <StarRating value={commander.stars} onChange={() => {}} />
-            <span className="text-sm text-muted-foreground">Lv {commander.level}</span>
-            <span
-              className={`flex items-center gap-1 text-sm font-medium ${TROOP_COLORS[commander.troopType]}`}
-            >
-              {TROOP_ICONS[commander.troopType]}
-              {commander.troopType.charAt(0).toUpperCase() + commander.troopType.slice(1)}
-            </span>
+            <span className="text-xs text-muted-foreground">Lv {commander.level}</span>
           </div>
           <div className="mt-2 flex gap-1.5 flex-wrap">
             {commander.skills.map((s, i) => (
-              <span
-                key={i}
-                className={`rounded px-2 py-0.5 text-xs font-medium ${
-                  s >= 4
-                    ? 'bg-purple-500/20 text-purple-300'
-                    : s >= 3
-                    ? 'bg-blue-500/20 text-blue-300'
-                    : 'bg-secondary text-muted-foreground'
-                }`}
-              >
+              <span key={i} className={`rounded px-2 py-0.5 text-xs font-medium ${
+                s >= 4 ? 'bg-purple-500/20 text-purple-300' :
+                s >= 3 ? 'bg-blue-500/20 text-blue-300' :
+                'bg-secondary text-muted-foreground'
+              }`}>
                 S{i + 1}: {s}
               </span>
             ))}
@@ -410,32 +425,19 @@ function CommanderCard({
           </div>
         </div>
         <div className="flex gap-1 shrink-0">
-          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={onEdit}>
-            <Edit2 className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-            onClick={onDelete}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          <Button size="icon" variant="ghost" className="h-8 w-8" onClick={onEdit}><Edit2 className="h-3.5 w-3.5" /></Button>
+          <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={onDelete}><Trash2 className="h-3.5 w-3.5" /></Button>
         </div>
       </div>
     </div>
   )
 }
 
-function ArmySlot({
-  army,
-  position,
-  index,
-}: {
-  army: Army | null
-  position: 'front' | 'back'
-  index: number
-}) {
+/* ------------------------------------------------------------------ */
+/*  Army Slot                                                           */
+/* ------------------------------------------------------------------ */
+
+function ArmySlot({ army, position, index }: { army: Army | null; position: 'front' | 'back'; index: number }) {
   if (!army) {
     return (
       <div className="rounded-xl border border-dashed border-border bg-secondary/20 p-4 flex flex-col items-center justify-center min-h-[110px] text-muted-foreground/40">
@@ -444,46 +446,30 @@ function ArmySlot({
       </div>
     )
   }
-
   const { primary, secondary } = army
   const bgClass = TROOP_BG[primary.troopType]
-
   return (
     <div className={`rounded-xl border p-4 ${bgClass}`}>
       <div className="flex items-center gap-1.5 mb-2">
-        <span
-          className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-            position === 'front'
-              ? 'bg-blue-500/20 text-blue-300'
-              : 'bg-purple-500/20 text-purple-300'
-          }`}
-        >
+        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${position === 'front' ? 'bg-blue-500/20 text-blue-300' : 'bg-purple-500/20 text-purple-300'}`}>
           {position === 'front' ? `Front ${index + 1}` : `Back ${index - 1}`}
         </span>
       </div>
       <div className="space-y-1.5">
         <div className="flex items-center gap-2">
-          <div
-            className={`flex h-6 w-6 items-center justify-center rounded-full bg-yellow-500/20 ${TROOP_COLORS[primary.troopType]}`}
-          >
+          <div className={`flex h-6 w-6 items-center justify-center rounded-full bg-secondary/50 ${RARITY_COLORS[primary.rarity]}`}>
             {TROOP_ICONS[primary.troopType]}
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-foreground truncate">{primary.name}</p>
-            <p className="text-xs text-muted-foreground">
-              Lv {primary.level} · ★{primary.stars}
-            </p>
+            <p className={`text-sm font-semibold truncate ${RARITY_COLORS[primary.rarity]}`}>{primary.name}</p>
+            <p className="text-xs text-muted-foreground">Lv {primary.level} · ★{primary.stars}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 pl-1">
           <div className="w-px h-6 bg-border mx-2" />
           <div className="min-w-0">
-            <p className="text-xs font-medium text-muted-foreground truncate">
-              + {secondary.name}
-            </p>
-            <p className="text-xs text-muted-foreground/70">
-              Lv {secondary.level} · ★{secondary.stars}
-            </p>
+            <p className={`text-xs font-medium truncate ${RARITY_COLORS[secondary.rarity]}`}>+ {secondary.name}</p>
+            <p className="text-xs text-muted-foreground/70">Lv {secondary.level} · ★{secondary.stars}</p>
           </div>
         </div>
       </div>
@@ -492,51 +478,37 @@ function ArmySlot({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Commander Form                                                      */
+/*  Commander Form with searchable dropdown                             */
 /* ------------------------------------------------------------------ */
 
-const EMPTY_FORM: Omit<Commander, 'id'> = {
-  name: '',
-  level: 40,
-  stars: 3,
-  skills: [3, 3, 3, 3],
-  troopType: 'infantry',
+const EMPTY_FORM = {
+  name:      '',
+  rarity:    'epic' as Rarity,
+  troopType: 'infantry' as TroopType,
+  level:     40,
+  stars:     3,
+  skills:    [3, 3, 3, 3] as [number, number, number, number],
 }
 
-function CommanderForm({
-  initial,
-  onSave,
-  onCancel,
-}: {
+function CommanderForm({ initial, onSave, onCancel }: {
   initial?: Commander
   onSave: (c: Omit<Commander, 'id'>) => void
   onCancel: () => void
 }) {
-  const [form, setForm] = useState<Omit<Commander, 'id'>>(
-    initial ? { ...initial } : { ...EMPTY_FORM }
-  )
-  const [suggestions, setSuggestions] = useState<string[]>([])
-  const [showSuggestions, setShowSuggestions] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [form, setForm] = useState(initial ? { ...initial } : { ...EMPTY_FORM })
+  const [search, setSearch] = useState(initial?.name ?? '')
+  const [dropOpen, setDropOpen] = useState(false)
+  const searchRef = useRef<HTMLInputElement>(null)
 
-  function handleNameChange(val: string) {
-    setForm((f) => ({ ...f, name: val }))
-    if (val.length > 0) {
-      const filtered = KNOWN_COMMANDERS.filter((n) =>
-        n.toLowerCase().includes(val.toLowerCase())
-      )
-      setSuggestions(filtered)
-      setShowSuggestions(filtered.length > 0)
-    } else {
-      setSuggestions([])
-      setShowSuggestions(false)
-    }
-  }
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase()
+    return COMMANDER_DB.filter((c) => c.name.toLowerCase().includes(q)).slice(0, 30)
+  }, [search])
 
-  function pickSuggestion(name: string) {
-    setForm((f) => ({ ...f, name }))
-    setSuggestions([])
-    setShowSuggestions(false)
+  function pickCommander(info: CommanderInfo) {
+    setForm((f) => ({ ...f, name: info.name, rarity: info.rarity, troopType: info.troopType }))
+    setSearch(info.name)
+    setDropOpen(false)
   }
 
   function setSkill(index: number, val: string) {
@@ -552,55 +524,63 @@ function CommanderForm({
 
   return (
     <div className="rounded-xl border border-border bg-card p-5 space-y-4">
-      <h3 className="font-semibold text-foreground text-sm">
-        {initial ? 'Edit Commander' : 'Add Commander'}
-      </h3>
+      <h3 className="font-semibold text-foreground text-sm">{initial ? 'Edit Commander' : 'Add Commander'}</h3>
 
-      {/* Name */}
-      <div className="relative">
-        <Label className="mb-1.5 block text-xs text-muted-foreground">Name</Label>
-        <Input
-          ref={inputRef}
-          value={form.name}
-          onChange={(e) => handleNameChange(e.target.value)}
-          onFocus={() => {
-            if (suggestions.length > 0) setShowSuggestions(true)
-          }}
-          onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-          placeholder="Commander name..."
-          className="bg-secondary border-border"
-        />
-        {showSuggestions && (
-          <div className="absolute z-20 mt-1 w-full rounded-lg border border-border bg-card shadow-lg max-h-48 overflow-y-auto">
-            {suggestions.map((s) => (
-              <button
-                key={s}
-                type="button"
-                className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-secondary transition-colors"
-                onMouseDown={() => pickSuggestion(s)}
-              >
-                {s}
-              </button>
-            ))}
+      {/* Searchable dropdown */}
+      <div>
+        <Label className="mb-1.5 block text-xs text-muted-foreground">Commander</Label>
+        <div className="relative">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <input
+              ref={searchRef}
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value)
+                setForm((f) => ({ ...f, name: e.target.value }))
+                setDropOpen(true)
+              }}
+              onFocus={() => setDropOpen(true)}
+              onBlur={() => setTimeout(() => setDropOpen(false), 150)}
+              placeholder="Search commanders..."
+              className="w-full pl-8 pr-3 py-2 text-sm rounded-lg border border-border bg-secondary text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+          {dropOpen && filtered.length > 0 && (
+            <div className="absolute z-30 mt-1 w-full rounded-lg border border-border bg-card shadow-xl max-h-64 overflow-y-auto">
+              {filtered.map((c) => (
+                <button
+                  key={c.name}
+                  type="button"
+                  onMouseDown={() => pickCommander(c)}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-secondary transition-colors"
+                >
+                  <span className={`shrink-0 ${TROOP_COLORS[c.troopType]}`}>{TROOP_ICONS[c.troopType]}</span>
+                  <span className={`text-sm font-medium flex-1 ${RARITY_COLORS[c.rarity]}`}>{c.name}</span>
+                  <span className={`text-[10px] font-semibold uppercase tracking-wider ${RARITY_BADGE[c.rarity]} rounded px-1.5 py-0.5`}>{c.rarity}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {/* Selected commander preview */}
+        {COMMANDER_MAP.has(form.name) && (
+          <div className={`mt-2 flex items-center gap-2 rounded-lg border px-3 py-2 ${RARITY_BG[form.rarity]}`}>
+            <span className={`${TROOP_COLORS[form.troopType]}`}>{TROOP_ICONS[form.troopType]}</span>
+            <span className={`text-sm font-semibold ${RARITY_COLORS[form.rarity]}`}>{form.name}</span>
+            <RarityBadge rarity={form.rarity} />
+            <TroopBadge type={form.troopType} />
           </div>
         )}
       </div>
 
-      {/* Level & Stars row */}
+      {/* Level & Stars */}
       <div className="grid grid-cols-2 gap-3">
         <div>
           <Label className="mb-1.5 block text-xs text-muted-foreground">Level (1-60)</Label>
           <Input
-            type="number"
-            min={1}
-            max={60}
-            value={form.level}
-            onChange={(e) =>
-              setForm((f) => ({
-                ...f,
-                level: Math.min(60, Math.max(1, parseInt(e.target.value) || 1)),
-              }))
-            }
+            type="number" min={1} max={60} value={form.level}
+            onChange={(e) => setForm((f) => ({ ...f, level: Math.min(60, Math.max(1, parseInt(e.target.value) || 1)) }))}
             className="bg-secondary border-border"
           />
         </div>
@@ -618,14 +598,9 @@ function CommanderForm({
         <div className="grid grid-cols-4 gap-2">
           {form.skills.map((s, i) => (
             <div key={i}>
-              <Label className="mb-1 block text-xs text-muted-foreground/60 text-center">
-                S{i + 1}
-              </Label>
+              <Label className="mb-1 block text-xs text-muted-foreground/60 text-center">S{i + 1}</Label>
               <Input
-                type="number"
-                min={1}
-                max={5}
-                value={s}
+                type="number" min={1} max={5} value={s}
                 onChange={(e) => setSkill(i, e.target.value)}
                 className="bg-secondary border-border text-center"
               />
@@ -634,33 +609,9 @@ function CommanderForm({
         </div>
       </div>
 
-      {/* Troop type */}
-      <div>
-        <Label className="mb-1.5 block text-xs text-muted-foreground">Troop Type</Label>
-        <Select
-          value={form.troopType}
-          onValueChange={(v) => setForm((f) => ({ ...f, troopType: v as TroopType }))}
-        >
-          <SelectTrigger className="bg-secondary border-border">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="infantry">Infantry</SelectItem>
-            <SelectItem value="cavalry">Cavalry</SelectItem>
-            <SelectItem value="archer">Archer</SelectItem>
-            <SelectItem value="mixed">Mixed</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
       {/* Actions */}
       <div className="flex gap-2 pt-1">
-        <Button
-          size="sm"
-          disabled={!valid}
-          onClick={() => onSave(form)}
-          className="bg-purple-600 hover:bg-purple-700 text-white"
-        >
+        <Button size="sm" disabled={!valid} onClick={() => onSave(form)} className="bg-purple-600 hover:bg-purple-700 text-white">
           <Check className="h-3.5 w-3.5 mr-1.5" />
           {initial ? 'Save Changes' : 'Add Commander'}
         </Button>
@@ -674,62 +625,48 @@ function CommanderForm({
 }
 
 /* ------------------------------------------------------------------ */
-/*  Main Export                                                         */
+/*  Main export                                                         */
 /* ------------------------------------------------------------------ */
 
 export function SunsetCanyonContent() {
   const [commanders, setCommanders] = useState<Commander[]>([])
-  const [showForm, setShowForm] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [formation, setFormation] = useState<Formation | null>(null)
+  const [showForm, setShowForm]     = useState(false)
+  const [editingId, setEditingId]   = useState<string | null>(null)
+  const [formation, setFormation]   = useState<Formation | null>(null)
 
   function addCommander(data: Omit<Commander, 'id'>) {
     setCommanders((prev) => [...prev, { ...data, id: crypto.randomUUID() }])
     setShowForm(false)
     setFormation(null)
   }
-
   function updateCommander(id: string, data: Omit<Commander, 'id'>) {
     setCommanders((prev) => prev.map((c) => (c.id === id ? { ...data, id } : c)))
     setEditingId(null)
     setFormation(null)
   }
-
   function deleteCommander(id: string) {
     setCommanders((prev) => prev.filter((c) => c.id !== id))
     setFormation(null)
   }
-
   function clearAll() {
     setCommanders([])
     setFormation(null)
     setShowForm(false)
     setEditingId(null)
   }
-
   function runOptimizer() {
-    const result = optimizeFormation(commanders)
-    setFormation(result)
+    setFormation(optimizeFormation(commanders))
   }
 
-  const winColor =
-    formation
-      ? formation.winRate > 65
-        ? 'text-green-400'
-        : formation.winRate >= 50
-        ? 'text-yellow-400'
-        : 'text-red-400'
-      : ''
+  const winColor = formation
+    ? formation.winRate > 65 ? 'text-green-400' : formation.winRate >= 50 ? 'text-yellow-400' : 'text-red-400'
+    : ''
 
-  // Build 5-slot grid (front 0-1, back 2-4)
-  const slots: Array<{ army: Army | null; position: 'front' | 'back'; index: number }> = Array.from(
-    { length: 5 },
-    (_, i) => ({
-      army: formation ? formation.armies[i] ?? null : null,
-      position: i < 2 ? 'front' : 'back',
-      index: i,
-    })
-  )
+  const slots: Array<{ army: Army | null; position: 'front' | 'back'; index: number }> = Array.from({ length: 5 }, (_, i) => ({
+    army: formation ? formation.armies[i] ?? null : null,
+    position: i < 2 ? 'front' : 'back',
+    index: i,
+  }))
 
   return (
     <div className="space-y-6 p-6">
@@ -746,12 +683,7 @@ export function SunsetCanyonContent() {
         </div>
         <div className="flex gap-2">
           {commanders.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={clearAll}
-              className="text-muted-foreground hover:text-destructive"
-            >
+            <Button variant="ghost" size="sm" onClick={clearAll} className="text-muted-foreground hover:text-destructive">
               <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
               Clear All
             </Button>
@@ -759,10 +691,7 @@ export function SunsetCanyonContent() {
           <Button
             size="sm"
             className="bg-purple-600 hover:bg-purple-700 text-white"
-            onClick={() => {
-              setShowForm(true)
-              setEditingId(null)
-            }}
+            onClick={() => { setShowForm(true); setEditingId(null) }}
           >
             <Plus className="h-3.5 w-3.5 mr-1.5" />
             Add Commander
@@ -771,73 +700,45 @@ export function SunsetCanyonContent() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left column: form + commander list */}
+        {/* Left: form + roster */}
         <div className="space-y-4">
-          {/* Add form */}
-          {showForm && !editingId && (
-            <CommanderForm onSave={addCommander} onCancel={() => setShowForm(false)} />
-          )}
+          {showForm && !editingId && <CommanderForm onSave={addCommander} onCancel={() => setShowForm(false)} />}
 
-          {/* Commander cards */}
           {commanders.length === 0 && !showForm && (
             <div className="rounded-xl border border-dashed border-border bg-secondary/20 p-8 text-center">
               <Users className="h-8 w-8 mx-auto mb-2 text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">
-                No commanders added yet. Click "Add Commander" to get started.
-              </p>
+              <p className="text-sm text-muted-foreground">No commanders added yet. Click "Add Commander" to get started.</p>
             </div>
           )}
 
           {commanders.map((c) =>
             editingId === c.id ? (
-              <CommanderForm
-                key={c.id}
-                initial={c}
-                onSave={(data) => updateCommander(c.id, data)}
-                onCancel={() => setEditingId(null)}
-              />
+              <CommanderForm key={c.id} initial={c} onSave={(data) => updateCommander(c.id, data)} onCancel={() => setEditingId(null)} />
             ) : (
-              <CommanderCard
-                key={c.id}
-                commander={c}
-                onEdit={() => {
-                  setEditingId(c.id)
-                  setShowForm(false)
-                }}
-                onDelete={() => deleteCommander(c.id)}
-              />
+              <CommanderCard key={c.id} commander={c} onEdit={() => { setEditingId(c.id); setShowForm(false) }} onDelete={() => deleteCommander(c.id)} />
             )
           )}
 
-          {/* Optimize button */}
           {commanders.length >= 2 && (
-            <Button
-              className="w-full bg-purple-600 hover:bg-purple-700 text-white"
-              onClick={runOptimizer}
-            >
+            <Button className="w-full bg-purple-600 hover:bg-purple-700 text-white" onClick={runOptimizer}>
               <Zap className="h-4 w-4 mr-2" />
               Optimize Formation
             </Button>
           )}
           {commanders.length === 1 && (
-            <p className="text-center text-xs text-muted-foreground">
-              Add at least 2 commanders to optimize.
-            </p>
+            <p className="text-center text-xs text-muted-foreground">Add at least 2 commanders to optimize.</p>
           )}
         </div>
 
-        {/* Right column: formation result */}
+        {/* Right: formation result */}
         <div className="space-y-4">
           {!formation ? (
             <div className="rounded-xl border border-dashed border-border bg-secondary/20 p-10 text-center">
               <Target className="h-8 w-8 mx-auto mb-2 text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">
-                Add commanders and click "Optimize Formation" to see results.
-              </p>
+              <p className="text-sm text-muted-foreground">Add commanders and click "Optimize Formation" to see results.</p>
             </div>
           ) : (
             <>
-              {/* Win rate banner */}
               <Card className="border-border">
                 <CardContent className="py-4 px-5">
                   <div className="flex items-center justify-between">
@@ -847,54 +748,36 @@ export function SunsetCanyonContent() {
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">Projected Win Rate</p>
-                        <p className={`text-3xl font-bold tabular-nums ${winColor}`}>
-                          {formation.winRate.toFixed(1)}%
-                        </p>
+                        <p className={`text-3xl font-bold tabular-nums ${winColor}`}>{formation.winRate.toFixed(1)}%</p>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className="text-xs text-muted-foreground">Total Formation Power</p>
-                      <p className="text-lg font-semibold text-foreground">
-                        {Math.round(formation.totalPower).toLocaleString()}
-                      </p>
+                      <p className="text-lg font-semibold text-foreground">{Math.round(formation.totalPower).toLocaleString()}</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Formation grid */}
               <Card className="border-border">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-semibold text-foreground">
-                    Formation Layout
-                  </CardTitle>
+                  <CardTitle className="text-sm font-semibold text-foreground">Formation Layout</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    Front Row (Tanks)
-                  </p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Front Row (Tanks)</p>
                   <div className="grid grid-cols-2 gap-3">
-                    {slots.slice(0, 2).map((slot) => (
-                      <ArmySlot key={slot.index} {...slot} />
-                    ))}
+                    {slots.slice(0, 2).map((slot) => <ArmySlot key={slot.index} {...slot} />)}
                   </div>
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide pt-1">
-                    Back Row (DPS / Support)
-                  </p>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide pt-1">Back Row (DPS / Support)</p>
                   <div className="grid grid-cols-3 gap-3">
-                    {slots.slice(2).map((slot) => (
-                      <ArmySlot key={slot.index} {...slot} />
-                    ))}
+                    {slots.slice(2).map((slot) => <ArmySlot key={slot.index} {...slot} />)}
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Reasoning notes */}
               <Card className="border-border">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-semibold text-foreground">
-                    Optimizer Notes
-                  </CardTitle>
+                  <CardTitle className="text-sm font-semibold text-foreground">Optimizer Notes</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
                   {formation.notes.map((note, i) => (
