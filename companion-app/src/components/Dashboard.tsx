@@ -85,8 +85,8 @@ export default function Dashboard({ status, totalSynced, syncLog, settings, onBu
         <div className="card" style={{ borderColor: "rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.05)", marginBottom: 16 }}>
           <div style={{ color: "var(--danger)", fontWeight: 600, marginBottom: 4, fontSize: 13 }}>🔍 Game window not found</div>
           <div style={{ color: "var(--muted)", fontSize: 12 }}>
-            Make sure <strong style={{ color: "var(--text)" }}>BlueStacks X</strong> is open and the game is running.
-            If using a different launcher, update the Window Title in Settings.
+            Looking for a window matching <strong style={{ color: "var(--text)" }}>"{settings.windowTitle || "Rise of Kingdoms"}"</strong>.
+            Make sure Rise of Kingdoms is open. If using BlueStacks or a different launcher, update Window Title in Settings.
           </div>
         </div>
       )}

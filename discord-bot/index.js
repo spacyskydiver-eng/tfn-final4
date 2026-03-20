@@ -16,6 +16,7 @@ const client = new Client({
 
 const API    = process.env.APP_URL
 const SECRET = process.env.BOT_API_SECRET
+const ROK_SERVER = process.env.ROK_SERVER_URL || 'http://204.168.137.204:7373'
 
 // ─── IDs ──────────────────────────────────────────────────────────────────────
 const STAFF_ROLE_ID          = '1164685988468109354'
@@ -600,6 +601,43 @@ client.on(Events.InteractionCreate, async interaction => {
           }
         }
         return interaction.editReply(`✅ Ticket created! Head to <#${ticketChannel.id}> — a staff member will help you complete your order.`)
+      }
+
+      // ── /locate <govid> ──────────────────────────────────────────────────────
+      if (commandName === 'locate') {
+        const govIdStr = interaction.options.getString('govid').trim()
+        const govId = parseInt(govIdStr, 10)
+        if (isNaN(govId) || govId <= 0) {
+          return interaction.editReply('❌ Invalid governor ID. Please enter a numeric ID like `209179204`.')
+        }
+        const res = await fetch(`${ROK_SERVER}/locate?govid=${govId}`)
+        if (!res.ok) throw new Error(`Locate server error: ${res.status}`)
+        const data = await res.json()
+        if (data.found) {
+          const ts = data.ts ? new Date(data.ts * 1000).toUTCString() : 'unknown'
+          const embed = new EmbedBuilder()
+            .setTitle('📍 Governor Located')
+            .setColor(0x22c55e)
+            .addFields(
+              { name: 'Governor ID', value: `\`${govId}\``, inline: true },
+              { name: 'Coordinates', value: `X: **${data.x}** | Y: **${data.y}**`, inline: true },
+            )
+            .setFooter({ text: `Last seen: ${ts}` })
+          return interaction.editReply({ embeds: [embed] })
+        } else {
+          const embed = new EmbedBuilder()
+            .setTitle('❓ Governor Not Found')
+            .setColor(0xf59e0b)
+            .setDescription(
+              `No cached location for governor ID \`${govId}\`.\n\n` +
+              `**To capture their location:**\n` +
+              `1. Open the game and find this governor on the map\n` +
+              `2. Tap their city to open the popup\n` +
+              `3. The bot will automatically record their coordinates\n` +
+              `4. Run \`/locate\` again after ~5 seconds`
+            )
+          return interaction.editReply({ embeds: [embed] })
+        }
       }
 
       // ── /continue (staff) ────────────────────────────────────────────────────

@@ -40,7 +40,9 @@ import {
   Coins,
   Box,
   Pentagon,
+  Calculator,
 } from "lucide-react";
+import { FlagCalculatorContent } from "@/components/flag-calculator-content";
 
 /* ------------------------------------------------------------------ */
 /*  TYPES                                                              */
@@ -420,6 +422,7 @@ function uid(prefix: string): string {
 /* ------------------------------------------------------------------ */
 
 export function TerritoryPlannerContent() {
+  const [activeTab, setActiveTab] = useState<"planner" | "flags">("planner");
   /* --- Existing state --- */
   const [items, setItems] = useState<Placeable[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -2642,6 +2645,36 @@ ctx.fillText(
   /* ---------------------------------------------------------------- */
 
   return (
+    <div className="flex flex-col gap-4">
+      {/* Tab switcher */}
+      <div className="flex gap-2 border-b border-border pb-3">
+        <button
+          onClick={() => setActiveTab("planner")}
+          className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+            activeTab === "planner"
+              ? "bg-primary/15 text-primary"
+              : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+          }`}
+        >
+          <MapPin className="h-4 w-4" />
+          Territory Planner
+        </button>
+        <button
+          onClick={() => setActiveTab("flags")}
+          className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+            activeTab === "flags"
+              ? "bg-primary/15 text-primary"
+              : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+          }`}
+        >
+          <Calculator className="h-4 w-4" />
+          Flag Calculator
+        </button>
+      </div>
+
+      {activeTab === "flags" ? (
+        <FlagCalculatorContent />
+      ) : (
     <div
       className={
         isFullscreen
@@ -3783,6 +3816,8 @@ style={{
           </CardContent>
         </Card>
       </div>
+    </div>
+      )}
     </div>
   );
 }

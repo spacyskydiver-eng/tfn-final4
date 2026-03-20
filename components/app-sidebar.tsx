@@ -35,6 +35,11 @@ import {
   LayoutDashboard,
   ClipboardList,
   Sword,
+  Mail,
+  Mountain,
+  Gift,
+  Sparkles,
+  Wallet,
 } from "lucide-react";
 
 function UserFooter({ collapsed }: { collapsed: boolean }) {
@@ -101,40 +106,133 @@ interface AppSidebarProps {
   onMobileClose?: () => void;
 }
 
-const mainNavItems = [
-  { id: "home",               label: "Home",              icon: Home },
+// Top-level standalone items
+const topNavItems = [
+  { id: "home",     label: "Home",    icon: Home },
+  { id: "guides",   label: "Guides",  icon: BookOpen },
+  { id: "settings", label: "Settings", icon: Settings },
+];
+
+// Strategy section
+const strategyNavItems = [
   { id: "calendar",           label: "Calendar",          icon: CalendarDays },
   { id: "kvk",                label: "KvK Tracker",       icon: CrosshairIcon },
   { id: "commander",          label: "Commander Prep",    icon: Crown },
-  { id: "guides",             label: "Guides",            icon: BookOpen },
   { id: "general-tools",      label: "General Tools",     icon: Wrench },
+  { id: "sunset-canyon",      label: "Sunset Canyon",     icon: Mountain },
+  { id: "gathering-of-heroes", label: "Gathering of Heroes", icon: Gift },
+];
+
+// Account & Progression section
+const accountNavItems = [
   { id: "accounts",           label: "Accounts",          icon: Users },
   { id: "calculator",         label: "Calculator",        icon: Calculator },
   { id: "progression-plans",  label: "Progression Plans", icon: TrendingUp },
   { id: "bundles",            label: "Bundles",           icon: Boxes },
   { id: "spending",           label: "Spending Tracker",  icon: Receipt },
-  { id: "settings",           label: "Settings",          icon: Settings },
 ];
 
+// Project Tools section
 const projectToolsNavItems = [
-  { id: "project-tools-home", label: "Overview & Guide",   icon: Crown },
-  { id: "ark",                label: "Ark of Osiris",      icon: Sword },
-  { id: "territory-planner",  label: "Territory Planner",  icon: Map },
+  { id: "project-tools-home", label: "Overview & Guide",  icon: Crown },
+  { id: "ark",                label: "Ark of Osiris",     icon: Sword },
+  { id: "territory-planner",  label: "Territory Planner", icon: Map },
+  { id: "rok-mail",           label: "RoK Mail",          icon: Mail },
 ];
 
-const projectToolsTabIds = new Set(projectToolsNavItems.map(p => p.id));
-
+// Bot Tools section
 const botNavItems = [
-  { id: "bot-tools-home",  label: "Bot Store",              icon: LayoutDashboard },
-  { id: "title-giving",    label: "Title Giving",           icon: Crown },
-  { id: "fort-tracking",   label: "Fort Tracking",          icon: Flag },
-  { id: "player-finder",   label: "Player Finder",          icon: Search },
-  { id: "alliance-mob",    label: "Alliance Mobilization",  icon: Bell },
-  { id: "discord-verify",  label: "Discord Verification",   icon: MessageSquare },
-  { id: "kvk-scanner",     label: "KvK Scanner",            icon: ScanSearch },
+  { id: "bot-tools-home",  label: "Bot Store",             icon: LayoutDashboard },
+  { id: "title-giving",    label: "Title Giving",          icon: Crown },
+  { id: "fort-tracking",   label: "Fort Tracking",         icon: Flag },
+  { id: "player-finder",   label: "Player Finder",         icon: Search },
+  { id: "alliance-mob",    label: "Alliance Mobilization", icon: Bell },
+  { id: "discord-verify",  label: "Discord Verification",  icon: MessageSquare },
+  { id: "kvk-scanner",     label: "KvK Scanner",           icon: ScanSearch },
 ];
 
-const botTabIds = new Set(botNavItems.map(b => b.id));
+const strategyTabIds    = new Set(strategyNavItems.map(s => s.id));
+const accountTabIds     = new Set(accountNavItems.map(a => a.id));
+const projectToolsTabIds = new Set(projectToolsNavItems.map(p => p.id));
+const botTabIds         = new Set(botNavItems.map(b => b.id));
+
+function SectionHeader({
+  icon: Icon,
+  label,
+  isActive,
+  open,
+  onToggle,
+  collapsed,
+}: {
+  icon: React.ElementType;
+  label: string;
+  isActive: boolean;
+  open: boolean;
+  onToggle: () => void;
+  collapsed: boolean;
+}) {
+  return (
+    <button
+      onClick={onToggle}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-lg px-3 py-2 transition-colors hover:bg-secondary/50",
+        collapsed ? "justify-center" : "justify-between"
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <Icon className={cn("h-4 w-4 shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
+        {!collapsed && (
+          <span className={cn("text-xs font-semibold uppercase tracking-wider", isActive ? "text-primary" : "text-muted-foreground")}>
+            {label}
+          </span>
+        )}
+      </div>
+      {!collapsed && (
+        open
+          ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+          : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+      )}
+    </button>
+  );
+}
+
+function NavItem({
+  id,
+  label,
+  icon: Icon,
+  activeTab,
+  onTabChange,
+  collapsed,
+  size = "sm",
+}: {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+  activeTab: string;
+  onTabChange: (tab: string) => void;
+  collapsed: boolean;
+  size?: "md" | "sm";
+}) {
+  const isActive = activeTab === id;
+  return (
+    <button
+      onClick={() => onTabChange(id)}
+      className={cn(
+        "group relative flex w-full items-center gap-3 rounded-lg px-3 text-sm font-medium transition-all duration-200",
+        size === "md" ? "py-2.5" : "py-2",
+        isActive
+          ? "bg-primary/15 text-primary shadow-[0_0_20px_-4px_hsl(var(--glow)/0.3)]"
+          : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+      )}
+    >
+      {isActive && (
+        <div className={cn("absolute left-0 top-1/2 -translate-y-1/2 rounded-r-full bg-primary", size === "md" ? "h-6 w-[3px]" : "h-5 w-[3px]")} />
+      )}
+      <Icon className={cn("shrink-0 transition-colors duration-200", size === "md" ? "h-5 w-5" : "h-4 w-4", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
+      {!collapsed && <span>{label}</span>}
+    </button>
+  );
+}
 
 export function AppSidebar({
   activeTab,
@@ -147,182 +245,126 @@ export function AppSidebar({
   onMobileClose,
 }: AppSidebarProps) {
   const { user } = useAuth();
-  const [botsOpen, setBotsOpen] = useState(true);
+  const [strategyOpen, setStrategyOpen]         = useState(true);
+  const [accountOpen, setAccountOpen]           = useState(true);
   const [projectToolsOpen, setProjectToolsOpen] = useState(true);
-  const [staffOpen, setStaffOpen] = useState(true);
+  const [botsOpen, setBotsOpen]                 = useState(true);
+  const [staffOpen, setStaffOpen]               = useState(true);
 
   return (
     <aside
       className={cn(
         "fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-border bg-sidebar transition-all duration-300 ease-in-out",
-        // Desktop: always visible, width based on collapsed state
         "md:translate-x-0",
         collapsed ? "md:w-[72px]" : "md:w-[260px]",
-        // Mobile: slide in/out as overlay, always full width (260px)
         "w-[260px]",
         mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
       )}
     >
-      {/* Logo area */}
+      {/* Logo */}
       <div className="flex h-16 items-center justify-between px-4">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/20 text-primary">
             <Swords className="h-5 w-5" />
           </div>
           {!collapsed && (
-            <span className="text-lg font-bold tracking-tight text-foreground">
-              RoK Toolkit
-            </span>
+            <span className="text-lg font-bold tracking-tight text-foreground">RoK Toolkit</span>
           )}
         </div>
-        {/* Desktop: collapse toggle */}
         <button
           onClick={onToggleCollapse}
           className="hidden md:flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
-          {collapsed ? (
-            <ChevronRight className="h-4 w-4" />
-          ) : (
-            <ChevronLeft className="h-4 w-4" />
-          )}
+          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </button>
-        {/* Mobile: close button */}
         <button
           onClick={onMobileClose}
           className="flex md:hidden h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-          aria-label="Close menu"
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {/* Main nav items */}
-        {mainNavItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeTab === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => onTabChange(item.id)}
-              className={cn(
-                "group relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
-                isActive
-                  ? "bg-primary/15 text-primary shadow-[0_0_20px_-4px_hsl(var(--glow)/0.3)]"
-                  : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-              )}
-            >
-              {isActive && (
-                <div className="absolute left-0 top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-r-full bg-primary" />
-              )}
-              <Icon className={cn("h-5 w-5 shrink-0 transition-colors duration-200", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
-              {!collapsed && <span>{item.label}</span>}
-            </button>
-          );
-        })}
+      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
 
-        {/* Bot Tools divider + collapsible section */}
+        {/* Top standalone items */}
+        {topNavItems.map(item => (
+          <NavItem key={item.id} {...item} activeTab={activeTab} onTabChange={onTabChange} collapsed={collapsed} size="md" />
+        ))}
+
+        {/* Strategy section */}
         <div className="pt-2">
-          <button
-            onClick={() => setBotsOpen(o => !o)}
-            className={cn(
-              "flex w-full items-center gap-2 rounded-lg px-3 py-2 transition-colors hover:bg-secondary/50",
-              collapsed ? "justify-center" : "justify-between"
-            )}
-          >
-            <div className="flex items-center gap-2">
-              <Bot className={cn("h-4 w-4 shrink-0", botTabIds.has(activeTab) ? "text-primary" : "text-muted-foreground")} />
-              {!collapsed && (
-                <span className={cn("text-xs font-semibold uppercase tracking-wider", botTabIds.has(activeTab) ? "text-primary" : "text-muted-foreground")}>
-                  Bot Tools
-                </span>
-              )}
-            </div>
-            {!collapsed && (
-              botsOpen
-                ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
-                : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-            )}
-          </button>
-
-          {(botsOpen || collapsed) && (
+          <SectionHeader
+            icon={Sparkles}
+            label="Strategy"
+            isActive={strategyTabIds.has(activeTab)}
+            open={strategyOpen}
+            onToggle={() => setStrategyOpen(o => !o)}
+            collapsed={collapsed}
+          />
+          {(strategyOpen || collapsed) && (
             <div className={cn("space-y-0.5", !collapsed && "pl-2 mt-0.5")}>
-              {botNavItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = activeTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => onTabChange(item.id)}
-                    className={cn(
-                      "group relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
-                      isActive
-                        ? "bg-primary/15 text-primary shadow-[0_0_20px_-4px_hsl(var(--glow)/0.3)]"
-                        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                    )}
-                  >
-                    {isActive && (
-                      <div className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary" />
-                    )}
-                    <Icon className={cn("h-4 w-4 shrink-0 transition-colors duration-200", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
-                    {!collapsed && <span>{item.label}</span>}
-                  </button>
-                );
-              })}
+              {strategyNavItems.map(item => (
+                <NavItem key={item.id} {...item} activeTab={activeTab} onTabChange={onTabChange} collapsed={collapsed} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Account & Progression section */}
+        <div className="pt-2">
+          <SectionHeader
+            icon={Wallet}
+            label="Account & Progression"
+            isActive={accountTabIds.has(activeTab)}
+            open={accountOpen}
+            onToggle={() => setAccountOpen(o => !o)}
+            collapsed={collapsed}
+          />
+          {(accountOpen || collapsed) && (
+            <div className={cn("space-y-0.5", !collapsed && "pl-2 mt-0.5")}>
+              {accountNavItems.map(item => (
+                <NavItem key={item.id} {...item} activeTab={activeTab} onTabChange={onTabChange} collapsed={collapsed} />
+              ))}
             </div>
           )}
         </div>
 
         {/* Project Tools section */}
         <div className="pt-2">
-          <button
-            onClick={() => setProjectToolsOpen(o => !o)}
-            className={cn(
-              "flex w-full items-center gap-2 rounded-lg px-3 py-2 transition-colors hover:bg-secondary/50",
-              collapsed ? "justify-center" : "justify-between"
-            )}
-          >
-            <div className="flex items-center gap-2">
-              <Sword className={cn("h-4 w-4 shrink-0", projectToolsTabIds.has(activeTab) ? "text-primary" : "text-muted-foreground")} />
-              {!collapsed && (
-                <span className={cn("text-xs font-semibold uppercase tracking-wider", projectToolsTabIds.has(activeTab) ? "text-primary" : "text-muted-foreground")}>
-                  Project Tools
-                </span>
-              )}
-            </div>
-            {!collapsed && (
-              projectToolsOpen
-                ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
-                : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-            )}
-          </button>
-
+          <SectionHeader
+            icon={Sword}
+            label="Project Tools"
+            isActive={projectToolsTabIds.has(activeTab)}
+            open={projectToolsOpen}
+            onToggle={() => setProjectToolsOpen(o => !o)}
+            collapsed={collapsed}
+          />
           {(projectToolsOpen || collapsed) && (
             <div className={cn("space-y-0.5", !collapsed && "pl-2 mt-0.5")}>
-              {projectToolsNavItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = activeTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => onTabChange(item.id)}
-                    className={cn(
-                      "group relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
-                      isActive
-                        ? "bg-primary/15 text-primary shadow-[0_0_20px_-4px_hsl(var(--glow)/0.3)]"
-                        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                    )}
-                  >
-                    {isActive && (
-                      <div className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary" />
-                    )}
-                    <Icon className={cn("h-4 w-4 shrink-0 transition-colors duration-200", isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
-                    {!collapsed && <span>{item.label}</span>}
-                  </button>
-                );
-              })}
+              {projectToolsNavItems.map(item => (
+                <NavItem key={item.id} {...item} activeTab={activeTab} onTabChange={onTabChange} collapsed={collapsed} />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Bot Tools section */}
+        <div className="pt-2">
+          <SectionHeader
+            icon={Bot}
+            label="Bot Tools"
+            isActive={botTabIds.has(activeTab)}
+            open={botsOpen}
+            onToggle={() => setBotsOpen(o => !o)}
+            collapsed={collapsed}
+          />
+          {(botsOpen || collapsed) && (
+            <div className={cn("space-y-0.5", !collapsed && "pl-2 mt-0.5")}>
+              {botNavItems.map(item => (
+                <NavItem key={item.id} {...item} activeTab={activeTab} onTabChange={onTabChange} collapsed={collapsed} />
+              ))}
             </div>
           )}
         </div>
@@ -330,59 +372,30 @@ export function AppSidebar({
         {/* Staff section (admin only) */}
         {user?.isAdmin && (
           <div className="pt-2">
-            <button
-              onClick={() => setStaffOpen(o => !o)}
-              className={cn(
-                "flex w-full items-center gap-2 rounded-lg px-3 py-2 transition-colors hover:bg-secondary/50",
-                collapsed ? "justify-center" : "justify-between"
-              )}
-            >
-              <div className="flex items-center gap-2">
-                <Shield className={cn("h-4 w-4 shrink-0", activeTab === 'staff-portal' ? "text-primary" : "text-muted-foreground")} />
-                {!collapsed && (
-                  <span className={cn("text-xs font-semibold uppercase tracking-wider", activeTab === 'staff-portal' ? "text-primary" : "text-muted-foreground")}>
-                    Staff
-                  </span>
-                )}
-              </div>
-              {!collapsed && (
-                staffOpen
-                  ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
-                  : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-              )}
-            </button>
-
+            <SectionHeader
+              icon={Shield}
+              label="Staff"
+              isActive={activeTab === "staff-portal"}
+              open={staffOpen}
+              onToggle={() => setStaffOpen(o => !o)}
+              collapsed={collapsed}
+            />
             {(staffOpen || collapsed) && (
               <div className={cn("space-y-0.5", !collapsed && "pl-2 mt-0.5")}>
-                <button
-                  onClick={() => onTabChange('staff-portal')}
-                  className={cn(
-                    "group relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
-                    activeTab === 'staff-portal'
-                      ? "bg-primary/15 text-primary shadow-[0_0_20px_-4px_hsl(var(--glow)/0.3)]"
-                      : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                  )}
-                >
-                  {activeTab === 'staff-portal' && (
-                    <div className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-primary" />
-                  )}
-                  <ClipboardList className={cn("h-4 w-4 shrink-0", activeTab === 'staff-portal' ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
-                  {!collapsed && <span>Orders</span>}
-                </button>
+                <NavItem id="staff-portal" label="Orders" icon={ClipboardList} activeTab={activeTab} onTabChange={onTabChange} collapsed={collapsed} />
               </div>
             )}
           </div>
         )}
       </nav>
 
-      {/* Cart button */}
-      {(cartCount > 0 || activeTab === 'bot-tools-home') && (
+      {/* Cart */}
+      {(cartCount > 0 || activeTab === "bot-tools-home") && (
         <div className="px-3 pb-2">
           <button
             onClick={onCartClick}
             className={cn(
-              "group relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
-              "bg-primary/10 text-primary hover:bg-primary/20",
+              "group relative flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 bg-primary/10 text-primary hover:bg-primary/20",
               collapsed && "justify-center px-0"
             )}
           >
@@ -400,7 +413,6 @@ export function AppSidebar({
         </div>
       )}
 
-      {/* Auth / Footer */}
       <UserFooter collapsed={collapsed} />
     </aside>
   );

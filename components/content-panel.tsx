@@ -46,6 +46,10 @@ import { StaffPortal } from "@/components/staff-portal";
 import { VerifyContent } from "@/components/verify-content";
 import { ArkContent } from "@/components/ark-content";
 import { ProjectToolsHome } from "@/components/project-tools-home";
+import { RokMailContent } from "@/components/rok-mail-content";
+import { FlagCalculatorContent } from "@/components/flag-calculator-content";
+import { SunsetCanyonContent } from "@/components/sunset-canyon-content";
+import { GatheringOfHeroesContent } from "@/components/gathering-of-heroes-content";
 import { useAuth } from "@/lib/auth-context";
 
 const tabMeta: Record<string, { label: string; description: string; icon: React.ElementType }> = {
@@ -159,9 +163,29 @@ const tabMeta: Record<string, { label: string; description: string; icon: React.
     description: "Configure your toolkit preferences",
     icon: Settings,
   },
+  "rok-mail": {
+    label: "RoK Mail",
+    description: "Format in-game mail with colours, bold, and templates",
+    icon: MessageSquare,
+  },
+  "flag-calculator": {
+    label: "Flag Calculator",
+    description: "Calculate Lost Kingdom flag costs with production simulation",
+    icon: Flag,
+  },
+  "sunset-canyon": {
+    label: "Sunset Canyon",
+    description: "Optimise your defensive formation for Sunset Canyon",
+    icon: Shield,
+  },
+  "gathering-of-heroes": {
+    label: "Gathering of Heroes",
+    description: "Plan tokens, missions, and commander unlocks for GoH events",
+    icon: Crown,
+  },
   "project-tools-home": {
     label: "Project Tools",
-    description: "Ark of Osiris and Territory Planner — for registered project leadership",
+    description: "Ark of Osiris, Territory Planner, and RoK Mail",
     icon: Crown,
   },
 };
@@ -260,21 +284,11 @@ export function ContentPanel({
         ) : activeTab === "project-tools-home" ? (
           <ProjectToolsHome onNavigate={onTabChange ?? (() => {})} />
         ) : activeTab === "ark" ? (
-          <div className="relative">
-            {!hasProjectAccess && <ProjectToolBlur onNavigate={onTabChange ?? (() => {})} />}
-            <div className={!hasProjectAccess ? "pointer-events-none select-none blur-sm" : ""}>
-              <ArkContent />
-            </div>
-          </div>
+          <ArkContent />
         ) : activeTab === "commander" ? (
           <CommanderContent />
         ) : activeTab === "territory-planner" ? (
-          <div className="relative">
-            {!hasProjectAccess && <ProjectToolBlur onNavigate={onTabChange ?? (() => {})} />}
-            <div className={!hasProjectAccess ? "pointer-events-none select-none blur-sm" : ""}>
-              <TerritoryPlannerContent />
-            </div>
-          </div>
+          <TerritoryPlannerContent />
         ) : activeTab === "bundles" ? (
           <BundlesContent />
         ) : activeTab === "spending" ? (
@@ -283,6 +297,12 @@ export function ContentPanel({
           <KvkScannerContent onNavigate={onTabChange} />
         ) : activeTab === "settings" ? (
           <SettingsContent />
+        ) : activeTab === "rok-mail" ? (
+          <RokMailContent />
+        ) : activeTab === "sunset-canyon" ? (
+          <SunsetCanyonContent />
+        ) : activeTab === "gathering-of-heroes" ? (
+          <GatheringOfHeroesContent />
         ) : (
           <HomeContent onTabChange={onTabChange} />
         )}

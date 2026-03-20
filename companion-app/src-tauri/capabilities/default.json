@@ -24,6 +24,15 @@
     "notification:allow-notify",
 
     "shell:allow-open",
-    "shell:allow-execute"
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "binaries/RoKScreenReader",
+          "sidecar": true,
+          "args": true
+        }
+      ]
+    }
   ]
 }

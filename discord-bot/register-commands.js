@@ -63,6 +63,15 @@ const commands = [
         .setDescription('Ticket channel name (e.g. founder-ABC123)')
         .setRequired(true)
     ),
+
+  new SlashCommandBuilder()
+    .setName('locate')
+    .setDescription('Find the map coordinates of a governor by their ID')
+    .addStringOption(o =>
+      o.setName('govid')
+        .setDescription('Governor ID (e.g. 209179204)')
+        .setRequired(true)
+    ),
 ].map(c => c.toJSON())
 
 const rest = new REST().setToken(process.env.DISCORD_BOT_TOKEN)

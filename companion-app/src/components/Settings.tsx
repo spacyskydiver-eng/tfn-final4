@@ -5,6 +5,7 @@
 
 import { useState } from "react";
 import type { AppSettings } from "../App";
+import { listWindows, type WindowInfo } from "../lib/screen-monitor";
 
 interface Props {
   settings: AppSettings;
@@ -12,14 +13,30 @@ interface Props {
 }
 
 export default function Settings({ settings, onSave }: Props) {
-  const [form, setForm]           = useState<AppSettings>(settings);
-  const [saving, setSaving]       = useState(false);
-  const [saved, setSaved]         = useState(false);
-  const [showToken, setShowToken] = useState(false);
+  const [form, setForm]               = useState<AppSettings>(settings);
+  const [saving, setSaving]           = useState(false);
+  const [saved, setSaved]             = useState(false);
+  const [showToken, setShowToken]     = useState(false);
+  const [windows, setWindows]         = useState<WindowInfo[]>([]);
+  const [pickerOpen, setPickerOpen]   = useState(false);
+  const [loadingPicker, setLoadingPicker] = useState(false);
 
   const update = (key: keyof AppSettings, value: string | boolean) => {
     setForm((prev) => ({ ...prev, [key]: value }));
     setSaved(false);
+  };
+
+  const openPicker = async () => {
+    setLoadingPicker(true);
+    setPickerOpen(true);
+    const list = await listWindows();
+    setWindows(list);
+    setLoadingPicker(false);
+  };
+
+  const selectWindow = (win: WindowInfo) => {
+    update("windowTitle", win.app);
+    setPickerOpen(false);
   };
 
   const handleSave = async () => {
@@ -72,19 +89,28 @@ export default function Settings({ settings, onSave }: Props) {
           </div>
         </label>
 
-        {/* Window title (only shown in screen mode) */}
+        {/* Window title / picker (only shown in screen mode) */}
         {form.monitorMode === "screen" && (
           <div className="form-group" style={{ marginTop: 12 }}>
-            <label>Game Window Title</label>
-            <input
-              type="text"
-              value={form.windowTitle}
-              onChange={(e) => update("windowTitle", e.target.value)}
-              placeholder="BlueStacks"
-            />
+            <label>Game Window</label>
+            <div className="row" style={{ gap: 8 }}>
+              <input
+                type="text"
+                value={form.windowTitle}
+                onChange={(e) => update("windowTitle", e.target.value)}
+                placeholder="e.g. BlueStacks"
+                style={{ flex: 1 }}
+              />
+              <button
+                onClick={openPicker}
+                className="btn btn-ghost"
+                style={{ padding: "7px 12px", fontSize: 12, flexShrink: 0 }}
+              >
+                📋 Choose Window…
+              </button>
+            </div>
             <span className="text-muted">
-              Leave as <code style={{ fontSize: 11 }}>BlueStacks</code> unless you're running
-              the native iOS version directly (then try <code style={{ fontSize: 11 }}>Rise of Kingdoms</code>).
+              Click <strong style={{ color: "var(--text)" }}>Choose Window…</strong> to pick the game from a list, or type the window/app name manually.
             </span>
           </div>
         )}
@@ -189,6 +215,60 @@ export default function Settings({ settings, onSave }: Props) {
           <li>Revoke tokens on the website if this device is lost or compromised.</li>
         </ul>
       </div>
+
+      {/* ── Window Picker Modal ── */}
+      {pickerOpen && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          zIndex: 1000,
+        }}>
+          <div className="card" style={{
+            width: 340, maxHeight: 420, display: "flex", flexDirection: "column",
+            padding: 0, overflow: "hidden",
+          }}>
+            <div style={{
+              padding: "14px 16px 10px", borderBottom: "1px solid var(--border)",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+            }}>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>Choose Game Window</div>
+              <button
+                onClick={() => setPickerOpen(false)}
+                className="btn btn-ghost"
+                style={{ padding: "2px 8px", fontSize: 13 }}
+              >✕</button>
+            </div>
+            <div style={{ overflowY: "auto", flex: 1, padding: "8px 0" }}>
+              {loadingPicker ? (
+                <div style={{ padding: 24, textAlign: "center", color: "var(--muted)", fontSize: 13 }}>
+                  Loading windows…
+                </div>
+              ) : windows.length === 0 ? (
+                <div style={{ padding: 24, textAlign: "center", color: "var(--muted)", fontSize: 13 }}>
+                  No capturable windows found.<br />Make sure the game is open.
+                </div>
+              ) : windows.map((w) => (
+                <button
+                  key={w.id}
+                  onClick={() => selectWindow(w)}
+                  style={{
+                    width: "100%", textAlign: "left", background: "none", border: "none",
+                    padding: "10px 16px", cursor: "pointer", display: "block",
+                    borderBottom: "1px solid var(--border)",
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "var(--surface-hover, rgba(255,255,255,0.05))")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "none")}
+                >
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>{w.app}</div>
+                  {w.title && w.title !== w.app && (
+                    <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{w.title}</div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

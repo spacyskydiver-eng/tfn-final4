@@ -2,13 +2,9 @@
  * screen-monitor.ts
  *
  * Thin wrapper around the RoKScreenReader sidecar binary.
- * The sidecar is a compiled Swift CLI that:
- *   1. Finds the BlueStacks X / RoK window using ScreenCaptureKit
- *   2. Captures a screenshot with SCScreenshotManager
- *   3. Runs Apple Vision OCR
- *   4. Returns JSON: { text, windowFound, appName, timestamp, error }
- *
- * Requirements: macOS 14.0+, Screen Recording permission granted.
+ * Supports two modes:
+ *   captureGameScreen(term) — find + OCR game window
+ *   listWindows()           — return all capturable windows for the picker UI
  */
 
 import { Command } from "@tauri-apps/plugin-shell";
@@ -19,6 +15,28 @@ export interface OCRResult {
   appName: string;
   timestamp: string;
   error: string | null;
+}
+
+export interface WindowInfo {
+  id: number;
+  app: string;
+  title: string;
+}
+
+/**
+ * List all capturable windows — used by the window picker in Settings.
+ * Returns an empty array on error (never throws).
+ */
+export async function listWindows(): Promise<WindowInfo[]> {
+  try {
+    const command = Command.sidecar("binaries/RoKScreenReader", ["--list"]);
+    const output  = await command.execute();
+    const raw = output.stdout.trim();
+    if (!raw) return [];
+    return JSON.parse(raw) as WindowInfo[];
+  } catch {
+    return [];
+  }
 }
 
 /**

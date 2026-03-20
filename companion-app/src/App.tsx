@@ -52,11 +52,11 @@ export interface AppSettings {
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-  serverUrl:   "http://localhost:3000",
+  serverUrl:   "https://tfn-final4-sand.vercel.app",
   apiToken:    "",
   notifyOnSync: true,
   monitorMode: "screen",
-  windowTitle: "RiseOfKingdoms",
+  windowTitle: "Rise of Kingdoms",
 };
 
 const STORE_FILE    = "rok-companion-settings.json";
