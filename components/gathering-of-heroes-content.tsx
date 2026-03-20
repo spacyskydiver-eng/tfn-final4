@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -412,25 +412,44 @@ function TokenDonut({
 
 export function GatheringOfHeroesContent() {
   // Challenge missions
-  const [checkedChallenges, setCheckedChallenges] = useState<Set<ChallengeId>>(new Set())
+  const [checkedChallenges, setCheckedChallenges] = useState<Set<ChallengeId>>(() => {
+    if (typeof window === 'undefined') return new Set()
+    try { return new Set(JSON.parse(localStorage.getItem('goh:challenges') ?? '[]') as ChallengeId[]) } catch { return new Set() }
+  })
 
   // Gems
-  const [gemsInput, setGemsInput] = useState('')
+  const [gemsInput, setGemsInput] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    try { return localStorage.getItem('goh:gems') ?? '' } catch { return '' }
+  })
 
   // Speedup per-category (manual entry)
-  const [speedupMode, setSpeedupMode] = useState<SpeedupMode>('auto')
-  const [speedupCats, setSpeedupCats] = useState<Record<SpeedupCategory, number>>({
-    building: 0, research: 0, training: 0, healing: 0, universal: 0,
+  const [speedupMode, setSpeedupMode] = useState<SpeedupMode>(() => {
+    if (typeof window === 'undefined') return 'auto'
+    try { return (localStorage.getItem('goh:speedupMode') as SpeedupMode) ?? 'auto' } catch { return 'auto' }
+  })
+  const [speedupCats, setSpeedupCats] = useState<Record<SpeedupCategory, number>>(() => {
+    if (typeof window === 'undefined') return { building: 0, research: 0, training: 0, healing: 0, universal: 0 }
+    try { return JSON.parse(localStorage.getItem('goh:speedupCats') ?? 'null') ?? { building: 0, research: 0, training: 0, healing: 0, universal: 0 } } catch { return { building: 0, research: 0, training: 0, healing: 0, universal: 0 } }
   })
   // Speedup calculator (paste from external tool)
   const [calcStr, setCalcStr] = useState('')
 
   // Commander selection
-  const [selectedCommanders, setSelectedCommanders] = useState<Set<string>>(new Set())
+  const [selectedCommanders, setSelectedCommanders] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set()
+    try { return new Set(JSON.parse(localStorage.getItem('goh:commanders') ?? '[]') as string[]) } catch { return new Set() }
+  })
   const [showChallenges, setShowChallenges] = useState(true)
   const [showSpeedupCats, setShowSpeedupCats] = useState(false)
   const [expandedTiers, setExpandedTiers] = useState<Set<number>>(new Set([1, 2, 3]))
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set())
+
+  useEffect(() => { localStorage.setItem('goh:challenges', JSON.stringify([...checkedChallenges])) }, [checkedChallenges])
+  useEffect(() => { localStorage.setItem('goh:gems', gemsInput) }, [gemsInput])
+  useEffect(() => { localStorage.setItem('goh:speedupMode', speedupMode) }, [speedupMode])
+  useEffect(() => { localStorage.setItem('goh:speedupCats', JSON.stringify(speedupCats)) }, [speedupCats])
+  useEffect(() => { localStorage.setItem('goh:commanders', JSON.stringify([...selectedCommanders])) }, [selectedCommanders])
 
   /* ---- derived values ---- */
   const challengeTokens = useMemo(

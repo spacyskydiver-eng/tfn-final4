@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import Image from 'next/image'
 import { AlertTriangle, CheckCircle2, Zap, Package, Swords } from 'lucide-react'
 import {
@@ -1112,10 +1112,23 @@ function ModeCombined({ healSpd, costRed, tradeRatio }: { healSpd: string; costR
 /* ------------------------------------------------------------------ */
 
 export function KvkHealingContent() {
-  const [mode, setMode]               = useState<Mode>('cost')
-  const [healSpd, setHealSpd]         = useState('90')
-  const [costRed, setCostRed]         = useState('10')
+  const [mode, setMode]               = useState<Mode>(() => {
+    if (typeof window === 'undefined') return 'cost'
+    try { return (localStorage.getItem('heal:mode') as Mode) ?? 'cost' } catch { return 'cost' }
+  })
+  const [healSpd, setHealSpd]         = useState(() => {
+    if (typeof window === 'undefined') return '90'
+    try { return localStorage.getItem('heal:healSpd') ?? '90' } catch { return '90' }
+  })
+  const [costRed, setCostRed]         = useState(() => {
+    if (typeof window === 'undefined') return '10'
+    try { return localStorage.getItem('heal:costRed') ?? '10' } catch { return '10' }
+  })
   const [tradeRatio, setTradeRatio]   = useState<number | null>(null)
+
+  useEffect(() => { localStorage.setItem('heal:mode', mode) }, [mode])
+  useEffect(() => { localStorage.setItem('heal:healSpd', healSpd) }, [healSpd])
+  useEffect(() => { localStorage.setItem('heal:costRed', costRed) }, [costRed])
 
   const MODES: { id: Mode; icon: React.ReactNode; label: string; desc: string }[] = [
     { id: 'cost',           icon: <Swords className="h-4 w-4" />,  label: 'Cost Calculator',    desc: 'Enter troops → get speedup & resource cost' },

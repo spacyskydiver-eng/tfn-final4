@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   RadialBarChart, RadialBar, PolarAngleAxis,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -920,10 +920,15 @@ function CommanderForm({ initial, onSave, onCancel }: {
 /* ------------------------------------------------------------------ */
 
 export function SunsetCanyonContent() {
-  const [commanders, setCommanders] = useState<Commander[]>([])
+  const [commanders, setCommanders] = useState<Commander[]>(() => {
+    if (typeof window === 'undefined') return []
+    try { return JSON.parse(localStorage.getItem('sc:commanders') ?? '[]') } catch { return [] }
+  })
   const [showForm, setShowForm]     = useState(false)
   const [editingId, setEditingId]   = useState<string | null>(null)
   const [formation, setFormation]   = useState<Formation | null>(null)
+
+  useEffect(() => { localStorage.setItem('sc:commanders', JSON.stringify(commanders)) }, [commanders])
 
   function addCommander(data: Omit<Commander, 'id'>) {
     setCommanders((prev) => [...prev, { ...data, id: crypto.randomUUID() }])
