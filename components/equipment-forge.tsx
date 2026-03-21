@@ -904,6 +904,88 @@ function ItemPickerModal({
 }
 
 /* ================================================================== */
+/*  CALCULATOR: COMPARISON WINDOW                                      */
+/* ================================================================== */
+
+function ComparisonWindow({
+  slot, data, item, rc, x, y, onClose, onMove,
+}: {
+  slot: SlotKey
+  data: ForgeItem
+  item: LoadoutItem
+  rc: typeof RARITY_CONFIG[ForgeRarity]
+  x: number
+  y: number
+  onClose: () => void
+  onMove: (x: number, y: number) => void
+}) {
+  const dragRef = useRef<{ ox: number; oy: number; wx: number; wy: number } | null>(null)
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    dragRef.current = { ox: e.clientX, oy: e.clientY, wx: x, wy: y }
+    const onMove2 = (ev: MouseEvent) => {
+      if (!dragRef.current) return
+      onMove(dragRef.current.wx + ev.clientX - dragRef.current.ox, dragRef.current.wy + ev.clientY - dragRef.current.oy)
+    }
+    const onUp = () => {
+      dragRef.current = null
+      document.removeEventListener('mousemove', onMove2)
+      document.removeEventListener('mouseup', onUp)
+    }
+    document.addEventListener('mousemove', onMove2)
+    document.addEventListener('mouseup', onUp)
+  }
+
+  return (
+    <div
+      className="fixed z-[300] rounded-xl border shadow-2xl overflow-hidden"
+      style={{ left: x, top: y, width: 220, background: 'hsl(var(--background))', borderColor: rc?.glowColor ?? 'hsl(var(--border))', boxShadow: rc ? `0 0 20px ${rc.glowColor}44` : undefined }}
+    >
+      <div
+        className="flex items-center justify-between px-3 py-2 cursor-move select-none"
+        style={{ background: `${rc?.glowColor ?? '#888'}22` }}
+        onMouseDown={handleMouseDown}
+      >
+        <span className={`text-xs font-bold truncate mr-2 ${rc?.nameCls ?? ''}`}>{data.name}</span>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground flex-shrink-0">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="p-3 space-y-2">
+        <div className="flex items-center gap-2">
+          {data.iconUrl && <img src={data.iconUrl} alt={data.name} width={36} height={36} className="object-contain flex-shrink-0" />}
+          <div>
+            <p className="text-[10px] text-muted-foreground capitalize">{data.rarity} · {data.slot}</p>
+            <div className="flex gap-1 mt-0.5">
+              {item.refined && <span className="text-[9px] bg-amber-900/50 text-amber-300 rounded px-1 py-0.5">Refined</span>}
+              {item.awakenLevel > 0 && <span className="text-[9px] bg-purple-900/50 text-purple-300 rounded px-1 py-0.5">Awaken {toRoman(item.awakenLevel)}</span>}
+            </div>
+          </div>
+        </div>
+        <div className="space-y-1">
+          {data.attributes.map((attr, i) => {
+            const ac = ATTRIBUTE_COLORS[attr.color]
+            const base = parseFloat(attr.value.replace(/[^0-9.]/g, ''))
+            const bonus = item.refined && !isNaN(base) ? getRefinedBonus(base) : 0
+            return (
+              <div key={i} className="flex items-center justify-between gap-1">
+                <span className="text-[10px] text-muted-foreground truncate flex-1">{attr.label}</span>
+                <span className={`text-[10px] font-bold flex-shrink-0 ${ac.text}`}>
+                  {attr.value}{bonus > 0 ? <span className="text-sky-400"> +{bonus.toFixed(1).replace('.0', '')}%</span> : null}
+                </span>
+              </div>
+            )
+          })}
+          {data.attributes.length === 0 && <p className="text-[10px] text-muted-foreground italic">No attributes</p>}
+        </div>
+        <p className="text-[9px] text-muted-foreground/50 text-center pt-1 border-t border-border/30">Shift+click slot again to close</p>
+      </div>
+    </div>
+  )
+}
+
+/* ================================================================== */
 /*  CALCULATOR: LOADOUT GRID                                           */
 /* ================================================================== */
 
@@ -926,7 +1008,7 @@ const SLOT_GRID: Record<SlotKey, { row: number; col: number }> = {
 }
 
 function LoadoutGrid({
-  loadout, label, onSlotClick, onRemove, showRefined, showAwakenBadge, onContextMenu, onSlotDrop, size,
+  loadout, label, onSlotClick, onRemove, showRefined, showAwakenBadge, onContextMenu, onSlotDrop, onShiftClick, size,
 }: {
   loadout: Loadout
   label?: string
@@ -936,6 +1018,7 @@ function LoadoutGrid({
   showAwakenBadge: boolean
   onContextMenu?: (e: React.MouseEvent, slot: SlotKey) => void
   onSlotDrop?: (slot: SlotKey, itemId: string) => void
+  onShiftClick?: (slot: SlotKey, x: number, y: number) => void
   size?: number
 }) {
   const sz = size ?? 56
@@ -944,6 +1027,7 @@ function LoadoutGrid({
     common: 'Normal', uncommon: 'Advanced', rare: 'Elite', epic: 'Epic', legendary: 'Legendary',
   }
   const [dragOver, setDragOver] = useState<SlotKey | null>(null)
+  const [hoverTooltip, setHoverTooltip] = useState<{ slot: SlotKey; x: number; y: number } | null>(null)
 
   return (
     <div>
@@ -979,7 +1063,21 @@ function LoadoutGrid({
                   isDragOver ? 'brightness-125 drop-shadow-[0_0_8px_rgba(251,191,36,0.9)]' : '',
                 )}
                 style={{ width: sz, height: sz }}
-                onClick={() => onSlotClick(slot)}
+                onClick={e => {
+                  if (e.shiftKey && item && onShiftClick) {
+                    const rect = e.currentTarget.getBoundingClientRect()
+                    onShiftClick(slot, rect.right + 8, rect.top)
+                  } else {
+                    onSlotClick(slot)
+                  }
+                }}
+                onMouseEnter={e => {
+                  if (item) {
+                    const rect = e.currentTarget.getBoundingClientRect()
+                    setHoverTooltip({ slot, x: rect.right + 6, y: rect.top })
+                  }
+                }}
+                onMouseLeave={() => setHoverTooltip(null)}
                 onContextMenu={e => {
                   if (item && onContextMenu) { e.preventDefault(); onContextMenu(e, slot) }
                 }}
@@ -1020,6 +1118,50 @@ function LoadoutGrid({
           )
         })}
       </div>
+
+      {/* Hover tooltip */}
+      {hoverTooltip && (() => {
+        const slot = hoverTooltip.slot
+        const item = loadout[slot]
+        const data = item ? EQUIPMENT_FORGE_SEED_ITEMS.find(d => d.id === item.id) : null
+        if (!data) return null
+        const rc = RARITY_CONFIG[data.rarity]
+        const x = Math.min(hoverTooltip.x, window.innerWidth - 220)
+        const y = Math.min(hoverTooltip.y, window.innerHeight - 300)
+        return (
+          <div
+            className="fixed z-[200] pointer-events-none rounded-xl border shadow-xl p-3 space-y-2"
+            style={{ left: x, top: y, width: 210, background: 'hsl(var(--background))', borderColor: rc?.glowColor ?? 'hsl(var(--border))' }}
+          >
+            <div className="flex items-center gap-2">
+              {data.iconUrl && <img src={data.iconUrl} alt={data.name} width={32} height={32} className="object-contain flex-shrink-0" />}
+              <div>
+                <p className={`text-xs font-bold leading-tight ${rc?.nameCls ?? ''}`}>{data.name}</p>
+                <p className="text-[10px] text-muted-foreground capitalize">{data.rarity} · {data.slot}</p>
+              </div>
+            </div>
+            {data.attributes.length > 0 && (
+              <div className="space-y-0.5">
+                {data.attributes.map((attr, i) => {
+                  const ac = ATTRIBUTE_COLORS[attr.color]
+                  const base = parseFloat(attr.value.replace(/[^0-9.]/g, ''))
+                  const bonus = item?.refined && !isNaN(base) ? getRefinedBonus(base) : 0
+                  return (
+                    <div key={i} className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] text-muted-foreground truncate">{attr.label}</span>
+                      <span className={`text-[10px] font-bold ${ac.text} flex-shrink-0`}>
+                        {attr.value}{bonus > 0 ? ` (+${bonus.toFixed(1).replace('.0', '')}%)` : ''}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            {item?.refined && <p className="text-[9px] text-amber-400 font-medium">✦ Refined</p>}
+            {item?.awakenLevel ? <p className="text-[9px] text-purple-400 font-medium">Awakened {toRoman(item.awakenLevel)}</p> : null}
+          </div>
+        )
+      })()}
     </div>
   )
 }
@@ -1543,6 +1685,17 @@ function CalculatorTab({
   const result = useMemo(() => calcLoadoutStats(loadout, kvkSeason), [loadout, kvkSeason])
   const [panel, setPanel] = useState<'stats' | 'materials'>('stats')
   const [contextMenu, setContextMenu] = useState<{ slot: SlotKey; x: number; y: number } | null>(null)
+  const [compWindows, setCompWindows] = useState<Record<string, { slot: SlotKey; x: number; y: number }>>({})
+
+  const handleShiftClick = useCallback((slot: SlotKey, x: number, y: number) => {
+    setCompWindows(prev => {
+      if (prev[slot]) {
+        const { [slot]: _, ...rest } = prev
+        return rest
+      }
+      return { ...prev, [slot]: { slot, x: Math.min(x, window.innerWidth - 230), y: Math.max(8, Math.min(y, window.innerHeight - 320)) } }
+    })
+  }, [])
 
   const handleSlotContext = useCallback((e: React.MouseEvent, slot: SlotKey) => {
     if (!loadout[slot]) return
@@ -1563,9 +1716,13 @@ function CalculatorTab({
             </Button>
           </div>
           <LoadoutGrid loadout={loadout} onSlotClick={onSlotClick} onRemove={onRemove}
-            showRefined showAwakenBadge onContextMenu={handleSlotContext} onSlotDrop={onSlotDrop} />
+            showRefined showAwakenBadge onContextMenu={handleSlotContext} onSlotDrop={onSlotDrop}
+            onShiftClick={handleShiftClick} />
           <p className="text-[10px] text-muted-foreground text-center mt-3">
-            Click slot to equip · Drag items from forge above · Right-click for options
+            Click slot to equip · Drag from forge · Right-click for options
+          </p>
+          <p className="text-[10px] text-primary/70 text-center mt-1">
+            Shift+click a slot to open a floating comparison window · click again to close
           </p>
         </div>
 
@@ -1615,6 +1772,27 @@ function CalculatorTab({
           </div>
         </div>
       </div>
+
+      {/* Floating comparison windows */}
+      {Object.values(compWindows).map(({ slot, x, y }) => {
+        const item = loadout[slot]
+        const data = item ? EQUIPMENT_FORGE_SEED_ITEMS.find(d => d.id === item.id) : null
+        if (!data) return null
+        const rc = RARITY_CONFIG[data.rarity]
+        return (
+          <ComparisonWindow
+            key={slot}
+            slot={slot}
+            data={data}
+            item={item!}
+            rc={rc}
+            x={x}
+            y={y}
+            onClose={() => setCompWindows(prev => { const { [slot]: _, ...rest } = prev; return rest })}
+            onMove={(nx, ny) => setCompWindows(prev => ({ ...prev, [slot]: { slot, x: nx, y: ny } }))}
+          />
+        )
+      })}
     </div>
   )
 }
@@ -1856,10 +2034,10 @@ function ForgeTabContent({
                           'transition-all aspect-square overflow-hidden',
                           irc.itemBg,
                           isSelected
-                            ? `${irc.itemBorder} scale-[1.04]`
+                            ? irc.itemBorder
                             : 'border-transparent hover:border-white/20',
                         )}
-                        style={isSelected ? { boxShadow: irc.glow } : {}}>
+                        style={isSelected ? { boxShadow: irc.glow, outline: `2px solid ${irc.glowColor}33`, outlineOffset: '2px' } : {}}>
                         {isSelected && (
                           <div className="absolute inset-0 rounded-lg"
                             style={{
@@ -2081,9 +2259,9 @@ function ForgeTabContent({
                       <p className="text-[10px] font-semibold text-sky-300 uppercase tracking-wide mb-2">Refine Cost (Approx.)</p>
                       <div className="flex items-center gap-4 flex-wrap">
                         <div className="flex items-center gap-1.5">
-                          <Image src="/images/bundle/conversion_stone.png" alt="Conv. Stone" width={24} height={24} className="object-contain" />
+                          <Image src="/images/equipment/mat_icons/refine_icon.webp" alt="Refine Stone" width={24} height={24} className="object-contain" />
                           <div>
-                            <p className="text-[10px] text-muted-foreground">Conv. Stone</p>
+                            <p className="text-[10px] text-muted-foreground">Refine Stone</p>
                             <p className="text-xs font-bold">×{cost.stones}</p>
                           </div>
                         </div>

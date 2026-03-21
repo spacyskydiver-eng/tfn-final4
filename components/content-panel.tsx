@@ -51,6 +51,7 @@ import { FlagCalculatorContent } from "@/components/flag-calculator-content";
 import { SunsetCanyonContent } from "@/components/sunset-canyon-content";
 import { GatheringOfHeroesContent } from "@/components/gathering-of-heroes-content";
 import { KvkHealingContent } from "@/components/kvk-healing-content";
+import { EquipmentForge } from "@/components/equipment-forge";
 import { useAuth } from "@/lib/auth-context";
 
 const tabMeta: Record<string, { label: string; description: string; icon: React.ElementType }> = {
@@ -189,6 +190,11 @@ const tabMeta: Record<string, { label: string; description: string; icon: React.
     description: "Calculate healing costs, resource needs, and speedup requirements for KvK",
     icon: CrosshairIcon,
   },
+  equipment: {
+    label: "Equipment",
+    description: "Forge, refine, awaken, and compare equipment loadouts",
+    icon: Sword,
+  },
   "project-tools-home": {
     label: "Project Tools",
     description: "Ark of Osiris, Territory Planner, and RoK Mail",
@@ -311,6 +317,8 @@ export function ContentPanel({
           <GatheringOfHeroesContent />
         ) : activeTab === "kvk-healing" ? (
           <KvkHealingContent />
+        ) : activeTab === "equipment" ? (
+          <EquipmentForge />
         ) : (
           <HomeContent onTabChange={onTabChange} />
         )}

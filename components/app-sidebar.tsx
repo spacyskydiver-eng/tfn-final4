@@ -118,6 +118,7 @@ const strategyNavItems = [
   { id: "calendar",           label: "Calendar",          icon: CalendarDays },
   { id: "kvk",                label: "KvK Tracker",       icon: CrosshairIcon },
   { id: "commander",          label: "Commander Prep",    icon: Crown },
+  { id: "equipment",          label: "Equipment",         icon: Sword },
   { id: "general-tools",      label: "General Tools",     icon: Wrench },
   { id: "sunset-canyon",      label: "Sunset Canyon",     icon: Mountain },
   { id: "gathering-of-heroes", label: "Gathering of Heroes", icon: Gift },

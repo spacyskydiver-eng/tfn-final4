@@ -30,11 +30,10 @@ import { expandBuildingsForCH } from '@/lib/game/buildings'
 import { economyTree } from '@/lib/tech-tree/economy'
 import { militaryTree } from '@/lib/tech-tree/military'
 import { EquipmentCalculator } from '@/components/equipment-calculator'
-import { EquipmentForge } from '@/components/equipment-forge'
 import { MgeCalculator } from '@/components/mge-calculator'
 import { GemsPlanner } from '@/components/commander/GemsPlanner'
 import { WheelOfFortuneSection } from '@/components/commander/WheelOfFortuneSection'
-import { Sword, Trophy } from 'lucide-react'
+import { Trophy } from 'lucide-react'
 import type { AccountProfile } from '@/lib/engine/types'
 
 /* ------------------------------------------------------------------ */
@@ -47,7 +46,6 @@ const TOOLS = [
   { id: 'vip-level', label: 'VIP Level', icon: Crown },
   { id: 'buildings', label: 'Buildings', icon: Building2 },
   { id: 'technology', label: 'Technology', icon: FlaskConical },
-  { id: 'equipment', label: 'Equipment', icon: Sword },
   { id: 'mge', label: 'MGE Calculator', icon: Trophy },
   { id: 'gems', label: 'Gems Planner', icon: Star },
   { id: 'wheel', label: 'Wheel of Fortune', icon: Award },
@@ -385,7 +383,6 @@ export function GeneralToolsContent() {
           {activeTool === 'vip-level' && <VipLevelCalc />}
           {activeTool === 'buildings' && <BuildingsCalc />}
           {activeTool === 'technology' && <TechnologyCalc />}
-          {activeTool === 'equipment' && <EquipmentForge />}
           {activeTool === 'mge' && <MgeCalculator />}
           {activeTool === 'gems' && profile && <GemsPlanner profile={profile} onUpdate={updateProfile} />}
           {activeTool === 'wheel' && profile && <WheelOfFortuneSection profile={profile} onUpdate={updateProfile} />}
