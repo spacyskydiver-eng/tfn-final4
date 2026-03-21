@@ -187,6 +187,7 @@ interface TechLevelDef { level:number; buff:string; time:string; crystals:number
 interface TechDef {
   name:string; description:string; buffType:string; category:string
   maxLevel:number; levels:TechLevelDef[]; requirements:TechReq[]
+  totals?:{ buff:string; time:string; crystals:number; seasonCoins:number }
 }
 type TechMap = Record<string, TechDef>
 type Levels = Record<string, number>
@@ -341,8 +342,8 @@ const CAT_COLOR: Record<string,string> = {
 }
 
 /* Draggable info card — opens on clicking the i button */
-function TechInfoCard({ techKey, onClose, initX, initY }: {
-  techKey: string; onClose: () => void; initX: number; initY: number
+function TechInfoCard({ techKey, levels, onClose, initX, initY }: {
+  techKey: string; levels: Levels; onClose: () => void; initX: number; initY: number
 }) {
   const tech = TECH_MAP[techKey]
   if (!tech) return null
@@ -392,37 +393,70 @@ function TechInfoCard({ techKey, onClose, initX, initY }: {
         >✕</button>
       </div>
 
-      {/* Description */}
-      <p style={{ padding:'8px 12px 4px', fontSize:10.5, color:'rgba(180,220,255,0.5)', lineHeight:1.5 }}>
-        {tech.description}
-      </p>
+      {/* Description + buff type */}
+      <div style={{ padding:'8px 12px 4px', display:'flex', flexDirection:'column', gap:4 }}>
+        <p style={{ fontSize:10.5, color:'rgba(180,220,255,0.5)', lineHeight:1.5 }}>{tech.description}</p>
+        {tech.buffType && (
+          <span style={{
+            alignSelf:'flex-start', fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em',
+            background:`${accent}22`, border:`1px solid ${accent}44`, borderRadius:4,
+            color:accent, padding:'2px 7px',
+          }}>{tech.buffType}</span>
+        )}
+      </div>
 
       {/* All-levels table */}
       <div style={{ padding:'4px 12px 12px', overflowY:'auto', maxHeight:320 }}>
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:10 }}>
           <thead>
             <tr>
-              {['Lv','Buff','Time','💎','🪙'].map(h => (
-                <th key={h} style={{
+              {[
+                { label:'Lv', icon:null },
+                { label:'Buff', icon:null },
+                { label:'Time', icon:null },
+                { label:'', icon:'/images/crystal/crystal.webp' },
+                { label:'', icon:'/images/crystal/season_coin.webp' },
+              ].map((h, i) => (
+                <th key={i} style={{
                   textAlign:'left', padding:'4px 6px 6px',
                   color:'rgba(100,200,255,0.45)', fontSize:9, fontWeight:700,
                   textTransform:'uppercase', borderBottom:'1px solid rgba(255,255,255,0.07)',
                   whiteSpace:'nowrap',
-                }}>{h}</th>
+                }}>
+                  {h.icon
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    ? <img src={h.icon} alt="" width={14} height={14} style={{ objectFit:'contain', display:'block' }} />
+                    : h.label}
+                </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {tech.levels.map(ld => (
-              <tr key={ld.level} style={{ background: ld.level % 2 === 0 ? 'rgba(255,255,255,0.02)' : undefined }}>
-                <td style={{ padding:'3px 6px', color:accent, fontWeight:700, fontSize:11 }}>{ld.level}</td>
-                <td style={{ padding:'3px 6px', color:'rgba(200,230,255,0.75)' }}>{ld.buff}</td>
-                <td style={{ padding:'3px 6px', color:'rgba(120,200,255,0.6)', whiteSpace:'nowrap' }}>{ld.time}</td>
-                <td style={{ padding:'3px 6px', color:'#00e5ff', whiteSpace:'nowrap' }}>{ld.crystals.toLocaleString()}</td>
-                <td style={{ padding:'3px 6px', color:'rgba(251,191,36,0.8)' }}>{ld.seasonCoins > 0 ? ld.seasonCoins : '—'}</td>
-              </tr>
-            ))}
+            {tech.levels.map(ld => {
+              const isCurrent = ld.level === (levels[techKey] ?? 0)
+              const isNext    = ld.level === (levels[techKey] ?? 0) + 1
+              return (
+                <tr key={ld.level} style={{
+                  background: isCurrent ? `${accent}18` : isNext ? 'rgba(100,180,220,0.1)' : ld.level % 2 === 0 ? 'rgba(255,255,255,0.02)' : undefined,
+                }}>
+                  <td style={{ padding:'3px 6px', color: isCurrent ? accent : 'rgba(200,220,255,0.5)', fontWeight:700, fontSize:11 }}>{ld.level}</td>
+                  <td style={{ padding:'3px 6px', color: isCurrent ? '#7dd87d' : 'rgba(200,230,255,0.75)', fontWeight: isCurrent ? 600 : 400 }}>{ld.buff}</td>
+                  <td style={{ padding:'3px 6px', color:'rgba(120,200,255,0.6)', whiteSpace:'nowrap' }}>{ld.time}</td>
+                  <td style={{ padding:'3px 6px', color:'#00e5ff', whiteSpace:'nowrap' }}>{ld.crystals.toLocaleString()}</td>
+                  <td style={{ padding:'3px 6px', color:'rgba(251,191,36,0.8)' }}>{ld.seasonCoins > 0 ? ld.seasonCoins.toLocaleString() : '—'}</td>
+                </tr>
+              )
+            })}
           </tbody>
+          <tfoot>
+            <tr style={{ borderTop:'1px solid rgba(100,200,255,0.15)', background:'rgba(0,0,0,0.2)' }}>
+              <td style={{ padding:'4px 6px', color:'rgba(200,220,255,0.4)', fontSize:9, fontWeight:700 }}>Total</td>
+              <td style={{ padding:'4px 6px', color:'#7dd87d', fontWeight:700 }}>{tech.totals?.buff ?? '—'}</td>
+              <td style={{ padding:'4px 6px', color:'rgba(120,200,255,0.6)', whiteSpace:'nowrap' }}>{tech.totals?.time ?? '—'}</td>
+              <td style={{ padding:'4px 6px', color:'#00e5ff', whiteSpace:'nowrap' }}>{tech.totals?.crystals?.toLocaleString() ?? '—'}</td>
+              <td style={{ padding:'4px 6px', color:'rgba(251,191,36,0.8)' }}>{tech.totals?.seasonCoins?.toLocaleString() ?? '—'}</td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>
@@ -482,7 +516,7 @@ function TechNode({ techKey, levels, rc, onSet }: {
 
   return (
     <>
-      {cardOpen && <TechInfoCard techKey={techKey} onClose={() => setCardOpen(false)} initX={cardPos.x} initY={cardPos.y} />}
+      {cardOpen && <TechInfoCard techKey={techKey} levels={levels} onClose={() => setCardOpen(false)} initX={cardPos.x} initY={cardPos.y} />}
       <div
         style={{
           position:'absolute', left:pos.x, top:pos.y, width:NW, height:NH,
@@ -645,7 +679,7 @@ export function CrystalTechContent() {
     const cc1 = Math.min(levels['cuttingCornersI']??0, 5)
     const cc2 = Math.min(levels['cuttingCornersII']??0, 10)
     const costRed = Math.min(rcRed + cc1 + cc2, 50)
-    let crystals=0, raw=0, coins=0, secs=0
+    let crystals=0, raw=0, coins=0, baseSecs=0
     for (const [key, lv] of Object.entries(levels)) {
       if (!lv||lv<=0) continue
       const tech = TECH_MAP[key]; if (!tech) continue
@@ -654,12 +688,18 @@ export function CrystalTechContent() {
         raw += ld.crystals
         crystals += Math.round(ld.crystals * (1 - costRed/100))
         coins += ld.seasonCoins
-        const base = parseTime(ld.time)
-        const spd = speed>0 ? base/(1+speed/100) : base
-        secs += applyHelps(spd, helps)
+        baseSecs += parseTime(ld.time)
       }
     }
-    return { crystals, raw, savings:raw-crystals, coins, secs, costRed:costRed.toFixed(1) }
+    // Apply speed bonus then helps to grand total (matches codexhelper approach exactly)
+    const afterSpeed = speed > 0 ? baseSecs / (1 + speed / 100) : baseSecs
+    let secs = afterSpeed
+    const hc = Math.min(Math.max(helps, 0), 30)
+    for (let i = 0; i < hc; i++) {
+      if (secs <= 0) break
+      secs = Math.max(0, secs - Math.max(180, secs * 0.01))
+    }
+    return { crystals, raw, savings:raw-crystals, coins, secs:Math.floor(secs), baseSecs, costRed:costRed.toFixed(1) }
   }, [levels, rc, speed, helps])
 
   const svgPaths = useMemo(() => {
@@ -784,10 +824,11 @@ export function CrystalTechContent() {
       }}>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:0 }}>
           {[
-            { icon:'/images/crystal/research_speedup.webp', label:'Total Speedups', value:fmtTime(totals.secs), color:'#7dd3fc' },
-            { icon:'/images/crystal/season_coin.webp',      label:'Season Coins',   value:fmtNum(totals.coins), color:'#fbbf24' },
-            { icon:'/images/crystal/crystal.webp',          label:'Total Crystals', value:fmtNum(totals.crystals), color:'#00e5ff',
-              sub: totals.savings>0 ? `−${fmtNum(totals.savings)} saved (${totals.costRed}% off)` : undefined },
+            { icon:'/images/crystal/research_speedup.webp', label:'Total Speedups', value:fmtTime(totals.secs), color:'#7dd3fc',
+              sub: totals.baseSecs !== totals.secs ? `${fmtTime(totals.baseSecs)} raw` : undefined },
+            { icon:'/images/crystal/season_coin.webp',      label:'Season Coins',   value:totals.coins.toLocaleString(), color:'#fbbf24' },
+            { icon:'/images/crystal/crystal.webp',          label:'Total Crystals', value:totals.crystals.toLocaleString(), color:'#00e5ff',
+              sub: totals.savings>0 ? `−${totals.savings.toLocaleString()} saved (${totals.costRed}% off)` : undefined },
           ].map((item, i) => (
             <div key={i} style={{ padding:'14px 20px', textAlign:'center', borderRight: i<2 ? '1px solid rgba(100,200,255,0.1)' : undefined }}>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, marginBottom:4 }}>
@@ -810,7 +851,7 @@ export function CrystalTechContent() {
             { label:'Cost Reduction', value:`${totals.costRed}%` },
             { label:'RC Discount',    value:`${rcReduction(rc).toFixed(1)}%` },
             { label:'CC Discount',    value:`${Math.min((levels['cuttingCornersI']??0)+(levels['cuttingCornersII']??0),15)}%` },
-            { label:'Raw Crystals',   value:fmtNum(totals.raw) },
+            { label:'Raw Crystals',   value:totals.raw.toLocaleString() },
           ].map(item => (
             <div key={item.label} style={{ textAlign:'center' }}>
               <p style={{ fontSize:9, color:'rgba(200,220,255,0.35)', textTransform:'uppercase', letterSpacing:'0.07em' }}>{item.label}</p>
