@@ -41,8 +41,30 @@ import {
   Box,
   Pentagon,
   Calculator,
+  Timer,
+  Wifi,
+  WifiOff,
+  Plus,
+  Play,
+  Pause,
+  CornerUpLeft,
+  CornerUpRight,
+  Activity,
+  ExternalLink,
+  Lock,
+  Database,
+  AlertOctagon,
+  Layers,
+  Sparkles,
+  Sword,
+  ChevronDown,
+  ChevronUp,
+  Flame,
+  Wrench,
+  Clock,
 } from "lucide-react";
 import { FlagCalculatorContent } from "@/components/flag-calculator-content";
+import { useAuth } from "@/lib/auth-context";
 
 /* ------------------------------------------------------------------ */
 /*  TYPES                                                              */
@@ -418,11 +440,657 @@ function uid(prefix: string): string {
 }
 
 /* ------------------------------------------------------------------ */
+/*  TIMER TYPES                                                        */
+/* ------------------------------------------------------------------ */
+
+type FortTimerStatus = 'building' | 'repairing' | 'under_attack' | 'active';
+
+interface FortTimer {
+  id: string;
+  name: string;
+  kind: PlaceableKind;
+  status: FortTimerStatus;
+  targetMs: number;
+  createdMs: number;
+}
+
+interface EventTimer {
+  id: string;
+  label: string;
+  targetMs: number;
+}
+
+/* ------------------------------------------------------------------ */
+/*  PLANNER MODE & SAVE TYPES                                          */
+/* ------------------------------------------------------------------ */
+
+type PlannerMode = 'normal' | 'creative' | 'simulation';
+type MapType = 'home' | 'kvk';
+
+interface SimResources {
+  food: number;
+  wood: number;
+  stone: number;
+  gold: number;
+  crystals: number;
+  credits: number;
+}
+
+interface PlanSave {
+  id: string;
+  name: string;
+  mapType: MapType;
+  createdAt: number;
+  items: Placeable[];
+  terrainPolygons: TerrainPolygon[];
+  resourceNodes: ResourceNode[];
+  structures: KingdomStructure[];
+  markers: Marker[];
+  zoneBorders: ZoneBorder[];
+}
+
+/* ------------------------------------------------------------------ */
+/*  HISTORY SNAPSHOT                                                   */
+/* ------------------------------------------------------------------ */
+
+interface HistorySnapshot {
+  items: Placeable[];
+  terrainPolygons: TerrainPolygon[];
+  resourceNodes: ResourceNode[];
+  structures: KingdomStructure[];
+  markers: Marker[];
+  zoneBorders: ZoneBorder[];
+}
+
+/* ------------------------------------------------------------------ */
+/*  TIMER HELPERS                                                      */
+/* ------------------------------------------------------------------ */
+
+function formatCountdown(msRemaining: number): string {
+  if (msRemaining <= 0) return 'Done';
+  const totalSecs = Math.floor(msRemaining / 1000);
+  const d = Math.floor(totalSecs / 86400);
+  const h = Math.floor((totalSecs % 86400) / 3600);
+  const m = Math.floor((totalSecs % 3600) / 60);
+  const s = totalSecs % 60;
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  return `${m}m ${s}s`;
+}
+
+function timerProgress(createdMs: number, targetMs: number, now: number): number {
+  const total = targetMs - createdMs;
+  if (total <= 0) return 100;
+  return Math.min(100, Math.max(0, ((now - createdMs) / total) * 100));
+}
+
+/* ------------------------------------------------------------------ */
+/*  FORT TIMER COMPONENT                                               */
+/* ------------------------------------------------------------------ */
+
+function FortTimerCard({ timer, now, onRemove }: { timer: FortTimer; now: number; onRemove: () => void }) {
+  const remaining = timer.targetMs - now;
+  const pct = timerProgress(timer.createdMs, timer.targetMs, now);
+  const done = remaining <= 0;
+
+  const statusConfig: Record<FortTimerStatus, { label: string; color: string; barColor: string }> = {
+    building:     { label: 'Building',     color: 'text-blue-400',   barColor: 'bg-blue-500'   },
+    repairing:    { label: 'Repairing',    color: 'text-amber-400',  barColor: 'bg-amber-500'  },
+    under_attack: { label: 'Under Attack', color: 'text-red-400',    barColor: 'bg-red-500'    },
+    active:       { label: 'Active',       color: 'text-green-400',  barColor: 'bg-green-500'  },
+  };
+
+  const sc = statusConfig[timer.status];
+  const kindDef = STRUCTURE_DEFS[timer.kind];
+
+  return (
+    <div className={`rounded-xl border p-3 space-y-2 transition-all ${timer.status === 'under_attack' ? 'border-red-500/60 bg-red-950/20 animate-pulse' : 'border-border bg-secondary/10'}`}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: kindDef.color }} />
+          <span className="text-sm font-semibold text-foreground">{timer.name}</span>
+          <span className="text-[10px] bg-secondary/50 text-muted-foreground px-1.5 py-0.5 rounded">{kindDef.shortLabel}</span>
+        </div>
+        <button onClick={onRemove} className="text-muted-foreground hover:text-red-400 transition-colors p-0.5">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="flex items-center justify-between">
+        <span className={`text-xs font-medium ${sc.color}`}>
+          {timer.status === 'under_attack' && <AlertOctagon className="h-3 w-3 inline mr-1" />}
+          {sc.label}
+        </span>
+        <span className={`text-sm font-mono font-bold ${done ? 'text-green-400' : remaining < 300_000 ? 'text-red-400' : remaining < 3_600_000 ? 'text-amber-400' : 'text-foreground'}`}>
+          {done ? '✓ Done' : formatCountdown(remaining)}
+        </span>
+      </div>
+      <div className="h-1.5 bg-secondary/30 rounded-full overflow-hidden">
+        <div className={`h-full transition-all ${done ? 'bg-green-500' : sc.barColor}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  EVENT TIMER COMPONENT                                              */
+/* ------------------------------------------------------------------ */
+
+function EventTimerCard({ timer, now, onRemove }: { timer: EventTimer; now: number; onRemove: () => void }) {
+  const remaining = timer.targetMs - now;
+  const done = remaining <= 0;
+  const color = done ? 'text-green-400' : remaining < 300_000 ? 'text-red-400' : remaining < 3_600_000 ? 'text-amber-400' : 'text-foreground';
+
+  return (
+    <div className={`rounded-xl border p-3 flex items-center justify-between gap-3 ${done ? 'border-green-500/40 bg-green-950/10' : remaining < 300_000 ? 'border-red-500/40 bg-red-950/10' : 'border-border bg-secondary/10'}`}>
+      <div className="flex items-center gap-2 flex-1 min-w-0">
+        <Clock className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+        <span className="text-sm text-foreground truncate">{timer.label}</span>
+        {remaining < 300_000 && !done && <AlertOctagon className="h-3 w-3 text-red-400 flex-shrink-0 animate-pulse" />}
+      </div>
+      <span className={`text-sm font-mono font-bold flex-shrink-0 ${color}`}>
+        {done ? '✓ Done' : formatCountdown(remaining)}
+      </span>
+      <button onClick={onRemove} className="text-muted-foreground hover:text-red-400 transition-colors p-0.5 flex-shrink-0">
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  ADD TIMER DIALOG                                                   */
+/* ------------------------------------------------------------------ */
+
+function AddFortTimerDialog({ onAdd, onClose }: { onAdd: (t: FortTimer) => void; onClose: () => void }) {
+  const [name, setName] = useState('');
+  const [kind, setKind] = useState<PlaceableKind>('cf');
+  const [status, setStatus] = useState<FortTimerStatus>('building');
+  const [hours, setHours] = useState('');
+  const [mins, setMins] = useState('');
+  const [secs, setSecs] = useState('');
+
+  const submit = () => {
+    const h = parseInt(hours || '0') || 0;
+    const m = parseInt(mins || '0') || 0;
+    const s = parseInt(secs || '0') || 0;
+    const durationMs = (h * 3600 + m * 60 + s) * 1000;
+    if (!name.trim() || durationMs <= 0) return;
+    const now = Date.now();
+    onAdd({ id: uid('ft'), name: name.trim(), kind, status, targetMs: now + durationMs, createdMs: now });
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="bg-background border border-border rounded-2xl p-5 w-80 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold">Add Fort Timer</h3>
+          <button onClick={onClose}><X className="h-4 w-4 text-muted-foreground" /></button>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-muted-foreground">Name</label>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Main CF" className="w-full mt-1 px-3 py-1.5 rounded-lg bg-secondary/30 border border-border text-sm outline-none focus:border-primary" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-muted-foreground">Type</label>
+              <select value={kind} onChange={e => setKind(e.target.value as PlaceableKind)} className="w-full mt-1 px-2 py-1.5 rounded-lg bg-secondary/30 border border-border text-sm outline-none">
+                <option value="cf">CF</option>
+                <option value="af">AF</option>
+                <option value="af2">AF2</option>
+                <option value="flag">Flag</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Status</label>
+              <select value={status} onChange={e => setStatus(e.target.value as FortTimerStatus)} className="w-full mt-1 px-2 py-1.5 rounded-lg bg-secondary/30 border border-border text-sm outline-none">
+                <option value="building">Building</option>
+                <option value="repairing">Repairing</option>
+                <option value="under_attack">Under Attack</option>
+                <option value="active">Active</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground">Time Remaining</label>
+            <div className="flex gap-2 mt-1">
+              <input value={hours} onChange={e => setHours(e.target.value)} placeholder="0h" className="w-full px-2 py-1.5 rounded-lg bg-secondary/30 border border-border text-sm outline-none text-center" />
+              <input value={mins} onChange={e => setMins(e.target.value)} placeholder="0m" className="w-full px-2 py-1.5 rounded-lg bg-secondary/30 border border-border text-sm outline-none text-center" />
+              <input value={secs} onChange={e => setSecs(e.target.value)} placeholder="0s" className="w-full px-2 py-1.5 rounded-lg bg-secondary/30 border border-border text-sm outline-none text-center" />
+            </div>
+          </div>
+        </div>
+        <button onClick={submit} className="w-full py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors">Add Timer</button>
+      </div>
+    </div>
+  );
+}
+
+function AddEventTimerDialog({ onAdd, onClose }: { onAdd: (t: EventTimer) => void; onClose: () => void }) {
+  const [label, setLabel] = useState('');
+  const [hours, setHours] = useState('');
+  const [mins, setMins] = useState('');
+
+  const submit = () => {
+    const h = parseInt(hours || '0') || 0;
+    const m = parseInt(mins || '0') || 0;
+    const durationMs = (h * 3600 + m * 60) * 1000;
+    if (!label.trim() || durationMs <= 0) return;
+    onAdd({ id: uid('et'), label: label.trim(), targetMs: Date.now() + durationMs });
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+      <div className="bg-background border border-border rounded-2xl p-5 w-72 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold">Add Event Timer</h3>
+          <button onClick={onClose}><X className="h-4 w-4 text-muted-foreground" /></button>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-muted-foreground">Label</label>
+            <input value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. KvK Start" className="w-full mt-1 px-3 py-1.5 rounded-lg bg-secondary/30 border border-border text-sm outline-none focus:border-primary" />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground">Time from now</label>
+            <div className="flex gap-2 mt-1">
+              <input value={hours} onChange={e => setHours(e.target.value)} placeholder="0h" className="w-full px-2 py-1.5 rounded-lg bg-secondary/30 border border-border text-sm outline-none text-center" />
+              <input value={mins} onChange={e => setMins(e.target.value)} placeholder="0m" className="w-full px-2 py-1.5 rounded-lg bg-secondary/30 border border-border text-sm outline-none text-center" />
+            </div>
+          </div>
+        </div>
+        <button onClick={submit} className="w-full py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors">Add Timer</button>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  TIMERS TAB COMPONENT                                               */
+/* ------------------------------------------------------------------ */
+
+function TimersTab({
+  fortTimers, eventTimers, now,
+  showAddFort, showAddEvent,
+  onAddFort, onAddEvent,
+  onRemoveFort, onRemoveEvent,
+  onOpenAddFort, onCloseAddFort,
+  onOpenAddEvent, onCloseAddEvent,
+}: {
+  fortTimers: FortTimer[]; eventTimers: EventTimer[]; now: number;
+  showAddFort: boolean; showAddEvent: boolean;
+  onAddFort: (t: FortTimer) => void; onAddEvent: (t: EventTimer) => void;
+  onRemoveFort: (id: string) => void; onRemoveEvent: (id: string) => void;
+  onOpenAddFort: () => void; onCloseAddFort: () => void;
+  onOpenAddEvent: () => void; onCloseAddEvent: () => void;
+}) {
+  const attackTimers = fortTimers.filter(t => t.status === 'under_attack');
+
+  return (
+    <div className="space-y-6">
+      {attackTimers.length > 0 && (
+        <div className="rounded-xl border border-red-500/50 bg-red-950/20 px-4 py-3 flex items-center gap-3">
+          <AlertOctagon className="h-5 w-5 text-red-400 animate-pulse flex-shrink-0" />
+          <div>
+            <p className="text-sm font-bold text-red-300">{attackTimers.length} Fort{attackTimers.length > 1 ? 's' : ''} Under Attack</p>
+            <p className="text-xs text-red-400/80">{attackTimers.map(t => t.name).join(', ')}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Fort Timers */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+            <Castle className="h-4 w-4 text-amber-400" /> Fort Timers
+          </h3>
+          <button
+            onClick={onOpenAddFort}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 hover:bg-primary/25 text-primary text-xs font-semibold transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" /> Add Fort Timer
+          </button>
+        </div>
+        {fortTimers.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border p-8 text-center text-muted-foreground text-sm">
+            No fort timers yet. Add one to track building, repairs, or attacks.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {fortTimers.map(t => (
+              <FortTimerCard key={t.id} timer={t} now={now} onRemove={() => onRemoveFort(t.id)} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Event Timers */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+            <Clock className="h-4 w-4 text-blue-400" /> Event Timers
+          </h3>
+          <button
+            onClick={onOpenAddEvent}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 hover:bg-primary/25 text-primary text-xs font-semibold transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" /> Add Event Timer
+          </button>
+        </div>
+        {eventTimers.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border p-8 text-center text-muted-foreground text-sm">
+            No event timers yet. Track KvK starts, events, and deadlines.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {eventTimers.map(t => (
+              <EventTimerCard key={t.id} timer={t} now={now} onRemove={() => onRemoveEvent(t.id)} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {showAddFort && <AddFortTimerDialog onAdd={onAddFort} onClose={onCloseAddFort} />}
+      {showAddEvent && <AddEventTimerDialog onAdd={onAddEvent} onClose={onCloseAddEvent} />}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  ALLIANCE TRACKING TAB                                              */
+/* ------------------------------------------------------------------ */
+
+const MOCK_STOREHOUSE = {
+  food:     { stored: 2_400_000_000, perHour: 3_200_000,  cap: 5_000_000_000 },
+  wood:     { stored: 1_800_000_000, perHour: 2_800_000,  cap: 5_000_000_000 },
+  stone:    { stored: 890_000_000,   perHour: 1_600_000,  cap: 5_000_000_000 },
+  gold:     { stored: 420_000_000,   perHour: 800_000,    cap: 2_000_000_000 },
+  crystals: { stored: 12_400,        perHour: 1_200,      cap: 50_000        },
+};
+
+const MOCK_FLAGS = [
+  { id: 'f1', x: 423, y: 601, mapType: 'home' as MapType },
+  { id: 'f2', x: 456, y: 612, mapType: 'home' as MapType },
+  { id: 'f3', x: 489, y: 623, mapType: 'home' as MapType },
+  { id: 'f4', x: 312, y: 480, mapType: 'kvk'  as MapType },
+  { id: 'f5', x: 356, y: 492, mapType: 'kvk'  as MapType },
+];
+
+const MOCK_FORTS = [
+  { kind: 'cf'  as PlaceableKind, x: 450, y: 610, status: 'active'       as FortTimerStatus, hp: 100 },
+  { kind: 'af'  as PlaceableKind, x: 420, y: 590, status: 'repairing'    as FortTimerStatus, hp: 62  },
+  { kind: 'af2' as PlaceableKind, x: 480, y: 630, status: 'under_attack' as FortTimerStatus, hp: 34  },
+];
+
+function fmtBig(n: number): string {
+  if (n >= 1e9) return (n / 1e9).toFixed(2).replace(/\.?0+$/, '') + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.?0+$/, '') + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(0) + 'K';
+  return n.toLocaleString();
+}
+
+function AllianceTrackingTab({
+  botConnected, mapType, showBotFlags, allianceExpanded,
+  onToggleBot, onToggleBotFlags, onToggleSection,
+}: {
+  botConnected: boolean; mapType: MapType; showBotFlags: boolean;
+  allianceExpanded: Record<string, boolean>;
+  onToggleBot: () => void; onToggleBotFlags: () => void;
+  onToggleSection: (k: string) => void;
+}) {
+  const storehouseKeys: (keyof typeof MOCK_STOREHOUSE)[] = mapType === 'kvk'
+    ? ['food', 'wood', 'stone', 'gold', 'crystals']
+    : ['food', 'wood', 'stone', 'gold'];
+
+  const storeIcons: Record<string, React.ElementType> = {
+    food: Wheat, wood: TreePine, stone: Mountain, gold: Coins, crystals: Gem,
+  };
+  const storeColors: Record<string, string> = {
+    food: 'text-yellow-400', wood: 'text-green-400', stone: 'text-slate-400', gold: 'text-amber-400', crystals: 'text-cyan-400',
+  };
+  const storeBarColors: Record<string, string> = {
+    food: 'bg-yellow-500', wood: 'bg-green-500', stone: 'bg-slate-400', gold: 'bg-amber-500', crystals: 'bg-cyan-500',
+  };
+
+  const fortStatusConfig: Record<FortTimerStatus, { label: string; color: string }> = {
+    active: { label: 'Active', color: 'text-green-400' },
+    building: { label: 'Building', color: 'text-blue-400' },
+    repairing: { label: 'Repairing', color: 'text-amber-400' },
+    under_attack: { label: 'Under Attack', color: 'text-red-400' },
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Dev toggle for demo */}
+      <div className="rounded-xl border border-border bg-secondary/10 px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {botConnected ? <Wifi className="h-4 w-4 text-green-400" /> : <WifiOff className="h-4 w-4 text-muted-foreground" />}
+          <div>
+            <p className="text-sm font-semibold">{botConnected ? 'Bot Connected' : 'Bot Disconnected'}</p>
+            {botConnected && <p className="text-[10px] text-green-400">Live · Updated just now · Kingdom 1234 (Demo)</p>}
+            {!botConnected && <p className="text-xs text-muted-foreground">Connect your Alliance Tracking bot to see live data</p>}
+          </div>
+        </div>
+        <button
+          onClick={onToggleBot}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${botConnected ? 'bg-red-500/15 text-red-400 hover:bg-red-500/25' : 'bg-green-500/15 text-green-400 hover:bg-green-500/25'}`}
+        >
+          {botConnected ? 'Disconnect' : 'Demo: Connect Bot'}
+        </button>
+      </div>
+
+      {!botConnected ? (
+        <div className="rounded-2xl border border-dashed border-primary/30 bg-primary/5 p-8 text-center space-y-4">
+          <div className="flex justify-center">
+            <div className="h-16 w-16 rounded-2xl bg-primary/15 flex items-center justify-center">
+              <Database className="h-8 w-8 text-primary" />
+            </div>
+          </div>
+          <div>
+            <p className="text-base font-bold text-foreground">Alliance Tracking</p>
+            <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto leading-relaxed">
+              The Alliance Tracking bundle provides live data from your kingdom — fort status, storehouse resources (per hour + cap), and flag coordinates on both your home and KvK maps.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-left max-w-2xl mx-auto">
+            {[
+              { icon: Castle, title: 'Fort Tracking', desc: 'Live status for CF, AF1 and AF2 — building times, repairs, under attack alerts' },
+              { icon: Database, title: 'Storehouse Tracking', desc: 'Total alliance RSS stored, hourly production rate, and storage caps per resource' },
+              { icon: Flag, title: 'Flag Placement', desc: 'See all placed flags with coordinates on your home KD and KvK maps automatically' },
+            ].map(({ icon: Icon, title, desc }) => (
+              <div key={title} className="rounded-xl border border-border bg-secondary/10 p-3 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <Icon className="h-4 w-4 text-primary" />
+                  <p className="text-xs font-bold text-foreground">{title}</p>
+                </div>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">{desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {/* Mock data watermark */}
+          <div className="rounded-lg bg-amber-900/20 border border-amber-600/30 px-3 py-2 flex items-center gap-2">
+            <Info className="h-3.5 w-3.5 text-amber-400 flex-shrink-0" />
+            <p className="text-xs text-amber-300">Demo mode — showing mock data. Real bot integration coming soon.</p>
+          </div>
+
+          {/* Bot flags toggle */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onToggleBotFlags}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${showBotFlags ? 'border-primary bg-primary/15 text-primary' : 'border-border text-muted-foreground hover:bg-secondary/50'}`}
+            >
+              <Layers className="h-3.5 w-3.5" />
+              {showBotFlags ? 'Bot Flags: On' : 'Bot Flags: Off'}
+            </button>
+          </div>
+
+          {/* Storehouse */}
+          <div className="rounded-xl border border-border bg-secondary/10 overflow-hidden">
+            <button
+              onClick={() => onToggleSection('storehouse')}
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-secondary/20 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Database className="h-4 w-4 text-blue-400" />
+                <span className="text-sm font-semibold">Alliance Storehouse</span>
+              </div>
+              {allianceExpanded.storehouse ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+            </button>
+            {allianceExpanded.storehouse && (
+              <div className="px-4 pb-4 space-y-3">
+                {storehouseKeys.map(key => {
+                  const d = MOCK_STOREHOUSE[key];
+                  const pct = Math.min(100, (d.stored / d.cap) * 100);
+                  const Icon = storeIcons[key];
+                  return (
+                    <div key={key} className="space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className={`flex items-center gap-1.5 font-medium ${storeColors[key]}`}>
+                          <Icon className="h-3 w-3" />
+                          {key.charAt(0).toUpperCase() + key.slice(1)}
+                        </span>
+                        <div className="flex items-center gap-3 text-muted-foreground">
+                          <span>{fmtBig(d.stored)} / {fmtBig(d.cap)}</span>
+                          <span className="text-green-400">+{fmtBig(d.perHour)}/h</span>
+                        </div>
+                      </div>
+                      <div className="h-1.5 bg-secondary/30 rounded-full overflow-hidden">
+                        <div className={`h-full ${storeBarColors[key]} transition-all`} style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Flags */}
+          <div className="rounded-xl border border-border bg-secondary/10 overflow-hidden">
+            <button
+              onClick={() => onToggleSection('flags')}
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-secondary/20 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Flag className="h-4 w-4 text-purple-400" />
+                <span className="text-sm font-semibold">Flag Placement ({MOCK_FLAGS.length})</span>
+              </div>
+              {allianceExpanded.flags ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+            </button>
+            {allianceExpanded.flags && (
+              <div className="px-4 pb-4 space-y-2">
+                <div className="flex gap-4 text-xs text-muted-foreground mb-3">
+                  <span>Home KD: <span className="text-foreground font-mono">{MOCK_FLAGS.filter(f => f.mapType === 'home').length}</span></span>
+                  <span>KvK: <span className="text-foreground font-mono">{MOCK_FLAGS.filter(f => f.mapType === 'kvk').length}</span></span>
+                </div>
+                {MOCK_FLAGS.map(f => (
+                  <div key={f.id} className="flex items-center justify-between text-xs rounded-lg bg-secondary/20 px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${f.mapType === 'kvk' ? 'bg-orange-400' : 'bg-purple-400'}`} />
+                      <span className="text-muted-foreground">{f.mapType.toUpperCase()}</span>
+                    </div>
+                    <span className="font-mono text-foreground">({f.x}, {f.y})</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Fort status */}
+          <div className="rounded-xl border border-border bg-secondary/10 overflow-hidden">
+            <button
+              onClick={() => onToggleSection('forts')}
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-secondary/20 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Castle className="h-4 w-4 text-amber-400" />
+                <span className="text-sm font-semibold">Fort Status</span>
+              </div>
+              {allianceExpanded.forts ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+            </button>
+            {allianceExpanded.forts && (
+              <div className="px-4 pb-4 space-y-3">
+                {MOCK_FORTS.map(fort => {
+                  const def = STRUCTURE_DEFS[fort.kind];
+                  const sc = fortStatusConfig[fort.status];
+                  return (
+                    <div key={fort.kind} className={`rounded-xl border p-3 space-y-2 ${fort.status === 'under_attack' ? 'border-red-500/50 bg-red-950/20 animate-pulse' : 'border-border bg-secondary/20'}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: def.color }} />
+                          <span className="text-sm font-bold text-foreground">{def.label}</span>
+                          <span className="font-mono text-xs text-muted-foreground">({fort.x}, {fort.y})</span>
+                        </div>
+                        <span className={`text-xs font-medium ${sc.color}`}>
+                          {fort.status === 'under_attack' && <AlertOctagon className="h-3 w-3 inline mr-0.5 animate-pulse" />}
+                          {sc.label}
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[10px] text-muted-foreground">
+                          <span>HP</span><span>{fort.hp}%</span>
+                        </div>
+                        <div className="h-1.5 bg-secondary/30 rounded-full overflow-hidden">
+                          <div className={`h-full transition-all ${fort.hp > 60 ? 'bg-green-500' : fort.hp > 30 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${fort.hp}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  COMPONENT                                                          */
 /* ------------------------------------------------------------------ */
 
 export function TerritoryPlannerContent() {
-  const [activeTab, setActiveTab] = useState<"planner" | "flags">("planner");
+  const { user } = useAuth();
+  const isLeadership = user?.isAdmin || user?.isLeadership;
+
+  const [activeTab, setActiveTab] = useState<"planner" | "timers" | "alliance" | "flags">("planner");
+
+  /* --- New: timers --- */
+  const [fortTimers, setFortTimers] = useState<FortTimer[]>(() => {
+    try { return JSON.parse(localStorage.getItem('tp:fort_timers') ?? '[]') } catch { return [] }
+  });
+  const [eventTimers, setEventTimers] = useState<EventTimer[]>(() => {
+    try { return JSON.parse(localStorage.getItem('tp:event_timers') ?? '[]') } catch { return [] }
+  });
+  const [timerNow, setTimerNow] = useState(Date.now());
+  const [showAddFort, setShowAddFort] = useState(false);
+  const [showAddEvent, setShowAddEvent] = useState(false);
+
+  /* --- New: mode and map type --- */
+  const [plannerMode, setPlannerMode] = useState<PlannerMode>('normal');
+  const [mapType, setMapType] = useState<MapType>('home');
+  const [simResources, setSimResources] = useState<SimResources>({ food: 0, wood: 0, stone: 0, gold: 0, crystals: 0, credits: 0 });
+  const [showSimSetup, setShowSimSetup] = useState(false);
+
+  /* --- New: save slots --- */
+  const [planSaves, setPlanSaves] = useState<PlanSave[]>(() => {
+    try { return JSON.parse(localStorage.getItem('tp:saves') ?? '[]') } catch { return [] }
+  });
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [newSaveName, setNewSaveName] = useState('');
+
+  /* --- New: undo/redo --- */
+  const historyRef = useRef<{ past: HistorySnapshot[]; future: HistorySnapshot[] }>({ past: [], future: [] });
+
+  /* --- New: bot/alliance tracking --- */
+  const [botConnected, setBotConnected] = useState(false);
+  const [showBotFlags, setShowBotFlags] = useState(true);
+  const [allianceExpanded, setAllianceExpanded] = useState<Record<string, boolean>>({ storehouse: true, flags: true, forts: true });
   /* --- Existing state --- */
   const [items, setItems] = useState<Placeable[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -581,6 +1249,102 @@ export function TerritoryPlannerContent() {
   const triggerSaveFlash = useCallback(() => {
     setSaveFlash(true);
     setTimeout(() => setSaveFlash(false), 1200);
+  }, []);
+
+  /* --- Timer tick --- */
+  useEffect(() => {
+    const id = setInterval(() => setTimerNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  /* --- Persist timers --- */
+  useEffect(() => {
+    try { localStorage.setItem('tp:fort_timers', JSON.stringify(fortTimers)) } catch {}
+  }, [fortTimers]);
+  useEffect(() => {
+    try { localStorage.setItem('tp:event_timers', JSON.stringify(eventTimers)) } catch {}
+  }, [eventTimers]);
+
+  /* --- Persist saves index --- */
+  useEffect(() => {
+    try { localStorage.setItem('tp:saves', JSON.stringify(planSaves)) } catch {}
+  }, [planSaves]);
+
+  /* --- Undo/redo helper --- */
+  const captureSnapshot = useCallback((): HistorySnapshot => ({
+    items: [...items],
+    terrainPolygons: [...terrainPolygons],
+    resourceNodes: [...resourceNodes],
+    structures: [...structures],
+    markers: [...markers],
+    zoneBorders: [...zoneBorders],
+  }), [items, terrainPolygons, resourceNodes, structures, markers, zoneBorders]);
+
+  const pushHistory = useCallback(() => {
+    historyRef.current.past.push(captureSnapshot());
+    if (historyRef.current.past.length > 50) historyRef.current.past.shift();
+    historyRef.current.future = [];
+  }, [captureSnapshot]);
+
+  const applySnapshot = useCallback((snap: HistorySnapshot) => {
+    setItems(snap.items);
+    setTerrainPolygons(snap.terrainPolygons);
+    setResourceNodes(snap.resourceNodes);
+    setStructures(snap.structures);
+    setMarkers(snap.markers);
+    setZoneBorders(snap.zoneBorders);
+  }, []);
+
+  const undo = useCallback(() => {
+    if (historyRef.current.past.length === 0) return;
+    const current = captureSnapshot();
+    historyRef.current.future.push(current);
+    const prev = historyRef.current.past.pop()!;
+    applySnapshot(prev);
+  }, [captureSnapshot, applySnapshot]);
+
+  const redo = useCallback(() => {
+    if (historyRef.current.future.length === 0) return;
+    const current = captureSnapshot();
+    historyRef.current.past.push(current);
+    const next = historyRef.current.future.pop()!;
+    applySnapshot(next);
+  }, [captureSnapshot, applySnapshot]);
+
+  /* --- Save/Load plan --- */
+  const saveCurrentPlan = useCallback((name: string) => {
+    const FREE_LIMIT = 2;
+    const isPayUser = isLeadership;
+    if (!isPayUser && planSaves.length >= FREE_LIMIT) return false;
+    const save: PlanSave = {
+      id: uid('save'), name, mapType, createdAt: Date.now(),
+      items, terrainPolygons, resourceNodes, structures, markers, zoneBorders,
+    };
+    const key = `tp:save:${save.id}`;
+    try { localStorage.setItem(key, JSON.stringify(save)); } catch { return false; }
+    setPlanSaves(prev => [...prev, { ...save }]);
+    return true;
+  }, [items, terrainPolygons, resourceNodes, structures, markers, zoneBorders, mapType, planSaves, isLeadership]);
+
+  const loadPlan = useCallback((saveId: string) => {
+    try {
+      const raw = localStorage.getItem(`tp:save:${saveId}`);
+      if (!raw) return;
+      const save: PlanSave = JSON.parse(raw);
+      pushHistory();
+      if (Array.isArray(save.items)) setItems(save.items);
+      if (Array.isArray(save.terrainPolygons)) setTerrainPolygons(save.terrainPolygons);
+      if (Array.isArray(save.resourceNodes)) setResourceNodes(save.resourceNodes);
+      if (Array.isArray(save.structures)) setStructures(save.structures);
+      if (Array.isArray(save.markers)) setMarkers(save.markers);
+      if (Array.isArray(save.zoneBorders)) setZoneBorders(save.zoneBorders);
+      if (save.mapType) setMapType(save.mapType);
+    } catch {}
+  }, [pushHistory]);
+
+  const deleteSave = useCallback((saveId: string) => {
+    try { localStorage.removeItem(`tp:save:${saveId}`) } catch {}
+    setPlanSaves(prev => prev.filter(s => s.id !== saveId));
   }, []);
 
   /* ---------------------------------------------------------------- */
@@ -2647,33 +3411,77 @@ ctx.fillText(
   return (
     <div className="flex flex-col gap-4">
       {/* Tab switcher */}
-      <div className="flex gap-2 border-b border-border pb-3">
-        <button
-          onClick={() => setActiveTab("planner")}
-          className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-            activeTab === "planner"
-              ? "bg-primary/15 text-primary"
-              : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-          }`}
-        >
-          <MapPin className="h-4 w-4" />
-          Territory Planner
-        </button>
-        <button
-          onClick={() => setActiveTab("flags")}
-          className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-            activeTab === "flags"
-              ? "bg-primary/15 text-primary"
-              : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-          }`}
-        >
-          <Calculator className="h-4 w-4" />
-          Flag Calculator
-        </button>
+      <div className="flex gap-2 border-b border-border pb-3 flex-wrap">
+        {([
+          { id: 'planner', label: 'Territory Planner', icon: MapPin },
+          { id: 'timers', label: 'Timers', icon: Timer },
+          { id: 'alliance', label: 'Alliance Tracking', icon: Activity },
+          { id: 'flags', label: 'Flag Calculator', icon: Calculator },
+        ] as const).map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === tab.id
+                ? "bg-primary/15 text-primary"
+                : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+            }`}
+          >
+            <tab.icon className="h-4 w-4" />
+            {tab.label}
+            {tab.id === 'alliance' && botConnected && (
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
+            )}
+          </button>
+        ))}
       </div>
 
       {activeTab === "flags" ? (
-        <FlagCalculatorContent />
+        <div className="space-y-4">
+          {isLeadership && (
+            <div className="flex items-center justify-between rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
+              <div>
+                <p className="text-sm font-semibold text-foreground">Kings Codex Flag Calculator</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Verify flag costs and production with the official Kings Codex tool</p>
+              </div>
+              <a
+                href="https://riseofkingdoms.codexhelper.com/flag-cost-calculator"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 hover:bg-primary/25 text-primary text-xs font-semibold transition-colors flex-shrink-0"
+              >
+                Open Kings Codex <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+          )}
+          <FlagCalculatorContent />
+        </div>
+      ) : activeTab === "timers" ? (
+        <TimersTab
+          fortTimers={fortTimers}
+          eventTimers={eventTimers}
+          now={timerNow}
+          showAddFort={showAddFort}
+          showAddEvent={showAddEvent}
+          onAddFort={t => setFortTimers(prev => [...prev, t])}
+          onAddEvent={t => setEventTimers(prev => [...prev, t])}
+          onRemoveFort={id => setFortTimers(prev => prev.filter(t => t.id !== id))}
+          onRemoveEvent={id => setEventTimers(prev => prev.filter(t => t.id !== id))}
+          onOpenAddFort={() => setShowAddFort(true)}
+          onCloseAddFort={() => setShowAddFort(false)}
+          onOpenAddEvent={() => setShowAddEvent(true)}
+          onCloseAddEvent={() => setShowAddEvent(false)}
+        />
+      ) : activeTab === "alliance" ? (
+        <AllianceTrackingTab
+          botConnected={botConnected}
+          mapType={mapType}
+          showBotFlags={showBotFlags}
+          allianceExpanded={allianceExpanded}
+          onToggleBot={() => setBotConnected(v => !v)}
+          onToggleBotFlags={() => setShowBotFlags(v => !v)}
+          onToggleSection={(k: string) => setAllianceExpanded(prev => ({ ...prev, [k]: !prev[k] }))}
+        />
       ) : (
     <div
       className={
@@ -2946,6 +3754,47 @@ ctx.fillText(
 
           <div className="h-6 w-px bg-border" />
 
+          {/* Undo/Redo */}
+          <Button size="sm" variant="outline" className="h-8 w-8 p-0 bg-transparent" onClick={undo} title="Undo (Ctrl+Z)">
+            <CornerUpLeft className="h-3.5 w-3.5" />
+          </Button>
+          <Button size="sm" variant="outline" className="h-8 w-8 p-0 bg-transparent" onClick={redo} title="Redo (Ctrl+Y)">
+            <CornerUpRight className="h-3.5 w-3.5" />
+          </Button>
+
+          <div className="h-6 w-px bg-border" />
+
+          {/* Mode buttons */}
+          <Button
+            size="sm"
+            variant="outline"
+            className={`h-8 gap-1.5 text-xs transition-all ${plannerMode === 'creative' ? 'border-purple-500 bg-purple-500/15 text-purple-300' : 'bg-transparent'}`}
+            onClick={() => setPlannerMode(m => m === 'creative' ? 'normal' : 'creative')}
+            title="Creative Mode — place flags freely"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+            Creative
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className={`h-8 gap-1.5 text-xs transition-all ${plannerMode === 'simulation' ? 'border-orange-500 bg-orange-500/15 text-orange-300' : 'bg-transparent'}`}
+            onClick={() => setPlannerMode(m => m === 'simulation' ? 'normal' : 'simulation')}
+            title="Simulation Mode — simulate resource costs"
+          >
+            <Activity className="h-3.5 w-3.5" />
+            Simulate
+          </Button>
+
+          {/* Map type */}
+          <div className="h-6 w-px bg-border" />
+          <div className="flex rounded-lg border border-border overflow-hidden">
+            <button onClick={() => setMapType('home')} className={`px-2.5 py-1 text-xs font-medium transition-colors ${mapType === 'home' ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-secondary/50'}`}>Home</button>
+            <button onClick={() => setMapType('kvk')} className={`px-2.5 py-1 text-xs font-medium transition-colors ${mapType === 'kvk' ? 'bg-orange-500/20 text-orange-300' : 'text-muted-foreground hover:bg-secondary/50'}`}>KvK</button>
+          </div>
+
+          <div className="h-6 w-px bg-border" />
+
           <Button
             size="sm"
             variant="outline"
@@ -3119,7 +3968,7 @@ ctx.fillText(
         {/* Canvas */}
         <div
           ref={containerRef}
-          className={`relative w-full rounded-xl border border-border overflow-hidden ${isFullscreen ? "flex-1" : ""}`}
+          className={`relative w-full rounded-xl overflow-hidden ${isFullscreen ? "flex-1" : ""} ${plannerMode === 'creative' ? 'border-2 border-purple-500/60' : plannerMode === 'simulation' ? 'border-2 border-orange-500/60' : 'border border-border'}`}
 style={{
   backgroundColor: "hsl(100, 38%, 35%)",
   ...(isFullscreen ? { minHeight: 0 } : { height: "calc(100vh - 310px)", minHeight: 400 }),
@@ -3153,6 +4002,22 @@ style={{
               >
                 {saveFlash ? "Saved" : "Autosave on"}
               </div>
+            </div>
+          )}
+
+          {/* Mode badge */}
+          {plannerMode !== 'normal' && (
+            <div className={`absolute top-3 left-3 pointer-events-none flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold ${plannerMode === 'creative' ? 'bg-purple-950/80 border border-purple-500/50 text-purple-300' : 'bg-orange-950/80 border border-orange-500/50 text-orange-300'}`}>
+              {plannerMode === 'creative' ? <Sparkles className="h-3 w-3" /> : <Activity className="h-3 w-3" />}
+              {plannerMode === 'creative' ? 'Creative Mode' : 'Simulation Mode'}
+            </div>
+          )}
+
+          {/* KvK map indicator */}
+          {mapType === 'kvk' && (
+            <div className="absolute bottom-3 left-3 pointer-events-none flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold bg-orange-950/80 border border-orange-500/50 text-orange-300">
+              <Sword className="h-3 w-3" />
+              KvK Map
             </div>
           )}
 
@@ -3750,6 +4615,78 @@ style={{
           </CardContent>
         </Card>
 
+        {/* Plan Saves */}
+        <Card className="border-border bg-card/60 backdrop-blur-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Save className="h-4 w-4 text-primary" />
+              Plan Saves
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <button
+              onClick={() => setShowSaveDialog(true)}
+              className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-primary/40 py-2 text-xs text-primary hover:border-primary hover:bg-primary/5 transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5" /> Save Current Plan
+            </button>
+            {planSaves.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-2">No saved plans yet</p>
+            ) : (
+              <div className="space-y-1 max-h-[160px] overflow-y-auto">
+                {planSaves.map((save, i) => {
+                  const isLocked = !isLeadership && i >= 2;
+                  return (
+                    <div key={save.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-muted-foreground hover:bg-secondary/50 transition-colors">
+                      {isLocked ? <Lock className="h-3 w-3 text-muted-foreground/40 flex-shrink-0" /> : <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: save.mapType === 'kvk' ? '#f97316' : '#a78bfa' }} />}
+                      <span className="flex-1 truncate text-foreground">{save.name}</span>
+                      <span className="text-[10px] opacity-60">{save.mapType.toUpperCase()}</span>
+                      {!isLocked && (
+                        <>
+                          <button onClick={() => loadPlan(save.id)} className="text-primary hover:text-primary/80 transition-colors" title="Load">
+                            <Download className="h-3 w-3" />
+                          </button>
+                          <button onClick={() => deleteSave(save.id)} className="text-muted-foreground hover:text-red-400 transition-colors" title="Delete">
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </>
+                      )}
+                      {isLocked && <span className="text-[9px] bg-secondary/50 px-1 rounded">PRO</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {!isLeadership && planSaves.length >= 2 && (
+              <p className="text-[10px] text-muted-foreground/60 text-center">Upgrade to save unlimited plans</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {showSaveDialog && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setShowSaveDialog(false)}>
+            <div className="bg-background border border-border rounded-2xl p-5 w-72 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold">Save Plan</h3>
+                <button onClick={() => setShowSaveDialog(false)}><X className="h-4 w-4 text-muted-foreground" /></button>
+              </div>
+              <input
+                value={newSaveName}
+                onChange={e => setNewSaveName(e.target.value)}
+                placeholder="Plan name…"
+                className="w-full px-3 py-1.5 rounded-lg bg-secondary/30 border border-border text-sm outline-none focus:border-primary"
+                onKeyDown={e => { if (e.key === 'Enter') { saveCurrentPlan(newSaveName || `Plan ${planSaves.length + 1}`); setNewSaveName(''); setShowSaveDialog(false); }}}
+              />
+              <button
+                onClick={() => { saveCurrentPlan(newSaveName || `Plan ${planSaves.length + 1}`); setNewSaveName(''); setShowSaveDialog(false); }}
+                className="w-full py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Controls help */}
         <Card className="border-border bg-card/60 backdrop-blur-sm">
           <CardHeader className="pb-3">
@@ -3818,6 +4755,10 @@ style={{
       </div>
     </div>
       )}
+
+      {/* Dialogs */}
+      {showAddFort && <AddFortTimerDialog onAdd={t => setFortTimers(prev => [...prev, t])} onClose={() => setShowAddFort(false)} />}
+      {showAddEvent && <AddEventTimerDialog onAdd={t => setEventTimers(prev => [...prev, t])} onClose={() => setShowAddEvent(false)} />}
     </div>
   );
 }
