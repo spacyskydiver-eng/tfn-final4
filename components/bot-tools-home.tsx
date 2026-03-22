@@ -643,11 +643,6 @@ function VipBundleCard({ inCart, onAdd }: { inCart: (id: string) => boolean; onA
           </div>
         </div>
 
-        {/* Competitor callout */}
-        <div className="rounded-xl border border-border/30 bg-muted/20 px-4 py-3 mb-6 text-xs text-muted-foreground">
-          <span className="font-semibold text-foreground">Why $79 works: </span>
-          Competitors charge ~$70 for bots + ~$200 for KvK scanning = ~$270 total. You pay $79 — all-in. A no-brainer for serious alliances.
-        </div>
 
         {/* KvK option selector */}
         <div className="mb-5">

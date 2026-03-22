@@ -145,12 +145,17 @@ const projectToolsNavItems = [
 
 // Bot Tools section
 const botNavItems = [
-  { id: "bot-tools-home",  label: "Bot Store",             icon: LayoutDashboard },
-  { id: "title-giving",    label: "Title Giving",          icon: Crown },
-  { id: "fort-tracking",   label: "Fort Tracking",         icon: Flag },
-  { id: "player-finder",   label: "Player Finder",         icon: Search },
-  { id: "alliance-mob",    label: "Alliance Mobilization", icon: Bell },
-  { id: "kvk-scanner",     label: "KvK Scanner",           icon: ScanSearch },
+  { id: "bot-tools-home",        label: "Bot Store",                icon: LayoutDashboard },
+  { id: "title-giving",          label: "Title Giving",             icon: Crown },
+  { id: "fort-tracking",         label: "Fort Tracking",            icon: Flag },
+  { id: "player-finder",         label: "Player Finder",            icon: Search },
+  { id: "alliance-activity",     label: "Alliance Activity",        icon: Users },
+  { id: "alliance-tracker",      label: "Alliance Tracker",         icon: Map },
+  { id: "alliance-mob",          label: "Alliance Mobilization",    icon: Bell },
+  { id: "auto-mobilization",     label: "Auto Refresh Mobilization",icon: Sparkles },
+  { id: "alliance-rank-manager", label: "Alliance Rank Manager",    icon: Shield },
+  { id: "fort-finder",           label: "Barbarian Fort Finder",    icon: CrosshairIcon },
+  { id: "kvk-scanner",           label: "KvK Scanner",              icon: ScanSearch },
 ];
 
 const strategyTabIds    = new Set(strategyNavItems.map(s => s.id));

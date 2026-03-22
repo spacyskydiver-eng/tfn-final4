@@ -24,6 +24,10 @@ import {
   LayoutDashboard,
   Shield,
   Sword,
+  Activity,
+  LocateFixed,
+  RefreshCw,
+  Sparkles,
 } from "lucide-react";
 
 import { AccountsContent } from "@/components/accounts-content";
@@ -149,10 +153,35 @@ const tabMeta: Record<string, { label: string; description: string; icon: React.
     description: "Search for players across kingdoms by name, ID, or alliance",
     icon: Search,
   },
+  "alliance-activity": {
+    label: "Alliance Activity",
+    description: "Gift tracking, member activity, performance analytics, and storehouse reports",
+    icon: Activity,
+  },
+  "alliance-tracker": {
+    label: "Alliance Tracker",
+    description: "Live fort & flag tracking, build/repair timers, attack alerts, and KvK maps",
+    icon: Map,
+  },
   "alliance-mob": {
     label: "Alliance Mobilization",
-    description: "Send coordinated mobilization messages to alliance chat",
+    description: "Auto-ping rallies and war actions with coordinates in alliance chat",
     icon: Bell,
+  },
+  "auto-mobilization": {
+    label: "Auto Refresh Mobilization",
+    description: "Automatically refresh mobilization alerts — no manual re-activation needed",
+    icon: RefreshCw,
+  },
+  "alliance-rank-manager": {
+    label: "Alliance Rank Manager",
+    description: "Auto assign and manage alliance ranks and Discord roles",
+    icon: Users,
+  },
+  "fort-finder": {
+    label: "Barbarian Fort Finder",
+    description: "Locate barbarian forts across the full map with coordinates and status",
+    icon: LocateFixed,
   },
   "discord-verify": {
     label: "Discord Verification",
@@ -196,7 +225,11 @@ const tabMeta: Record<string, { label: string; description: string; icon: React.
   },
 };
 
-const BOT_TOOL_IDS = new Set(['title-giving', 'fort-tracking', 'player-finder', 'alliance-mob']);
+const BOT_TOOL_IDS = new Set([
+  'title-giving', 'fort-tracking', 'player-finder', 'alliance-activity',
+  'alliance-tracker', 'alliance-mob', 'auto-mobilization',
+  'alliance-rank-manager', 'fort-finder',
+]);
 
 interface ContentPanelProps {
   activeTab: string;
