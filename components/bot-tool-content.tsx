@@ -9,26 +9,26 @@ import { cn } from '@/lib/utils'
 
 // ─── Alliance tier IDs ────────────────────────────────────────────────────────
 
-const BASIC_AND_UP    = ['alliance-basic', 'alliance-elite', 'alliance-legendary', 'vip-premium-soc', 'vip-premium-nonsoc', 'vip-tracking']
-const ELITE_AND_UP    = ['alliance-elite', 'alliance-legendary', 'vip-premium-soc', 'vip-premium-nonsoc', 'vip-tracking']
-const LEGENDARY_ONLY  = ['alliance-legendary', 'vip-premium-soc', 'vip-premium-nonsoc', 'vip-tracking']
+const BASIC_AND_UP    = ['alliance-basic', 'alliance-elite', 'alliance-legendary', 'vip-core', 'vip-elite-soc', 'vip-elite-nonsoc']
+const ELITE_AND_UP    = ['alliance-elite', 'alliance-legendary', 'vip-core', 'vip-elite-soc', 'vip-elite-nonsoc']
+const LEGENDARY_ONLY  = ['alliance-legendary', 'vip-core', 'vip-elite-soc', 'vip-elite-nonsoc']
 
 const TIER_LABELS: Record<string, string> = {
-  'alliance-basic':       'Alliance Control Basic',
-  'alliance-elite':       'Alliance Control Elite',
-  'alliance-legendary':   'Alliance Control Legendary',
-  'vip-premium-soc':      'VIP Bundle',
-  'vip-premium-nonsoc':   'VIP Bundle',
-  'vip-tracking':         'VIP Bundle',
+  'alliance-basic':     'Alliance Control Basic',
+  'alliance-elite':     'Alliance Control Elite',
+  'alliance-legendary': 'Alliance Control Legendary',
+  'vip-core':           'VIP Core',
+  'vip-elite-soc':      'VIP Elite (SoC)',
+  'vip-elite-nonsoc':   'VIP Elite (Non-SoC)',
 }
 
 const TIER_ICONS: Record<string, React.ElementType> = {
-  'alliance-basic':       Zap,
-  'alliance-elite':       Star,
-  'alliance-legendary':   Trophy,
-  'vip-premium-soc':      Crown,
-  'vip-premium-nonsoc':   Crown,
-  'vip-tracking':         Crown,
+  'alliance-basic':     Zap,
+  'alliance-elite':     Star,
+  'alliance-legendary': Trophy,
+  'vip-core':           Crown,
+  'vip-elite-soc':      Crown,
+  'vip-elite-nonsoc':   Crown,
 }
 
 // ─── Tool catalogue ───────────────────────────────────────────────────────────

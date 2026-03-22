@@ -375,6 +375,7 @@ export function KvkScannerContent({ onNavigate }: KvkScannerContentProps = {}) {
         'kvk-nonsoc-full', 'kvk-nonsoc-two', 'kvk-nonsoc-one',
         'kvk-track-1mo', 'kvk-track-2mo', 'kvk-track-1yr',
         'kvk-multi-basic', 'kvk-multi-elite', 'kvk-multi-legendary',
+        'vip-core', 'vip-elite-soc', 'vip-elite-nonsoc',
       ]
       const order = orderData.orders?.find((o: { items: Array<{toolId: string; bundle?: string; isSoC?: boolean}>, status: string }) =>
         (o.status === 'active' || o.status === 'confirmed') &&

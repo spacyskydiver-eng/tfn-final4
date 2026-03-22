@@ -575,173 +575,186 @@ function AllianceTierCard({ tier, inCart, onAdd }: { tier: AllianceTier; inCart:
   )
 }
 
-// ─── VIP Bundle card ──────────────────────────────────────────────────────────
+// ─── VIP tier cards ───────────────────────────────────────────────────────────
 
-function VipBundleCard({ inCart, onAdd }: { inCart: (id: string) => boolean; onAdd: (toolId: string, label: string, isSoC?: boolean) => void }) {
-  const [kvkOption, setKvkOption] = useState<'premium' | 'tracking'>('premium')
-  const [socType, setSocType] = useState<'soc' | 'nonSoc'>('soc')
+interface VipTier {
+  id: string
+  label: string
+  sublabel: string
+  price: number
+  individualValue: number
+  saving: number
+  savePercent: number
+  badge?: string
+  highlight: boolean
+  kvkLabel: string
+  kvkDesc: string
+  kvkFeatures: string[]
+  isSoC?: boolean
+}
+
+const VIP_TIERS: VipTier[] = [
+  {
+    id: 'vip-core',
+    label: 'VIP Core',
+    sublabel: 'Legendary bots + self-service KvK tracking',
+    price: 69,
+    individualValue: 68,
+    saving: 0,
+    savePercent: 0,
+    highlight: false,
+    kvkLabel: 'KvK Data Tracking',
+    kvkDesc: 'Self-service — full control in your hands',
+    kvkFeatures: VIP_KVK_TRACKING_FEATURES,
+    isSoC: undefined,
+  },
+  {
+    id: 'vip-elite-soc',
+    label: 'VIP Elite',
+    sublabel: 'Season of Conquest',
+    price: 119,
+    individualValue: 189,
+    saving: 70,
+    savePercent: 37,
+    badge: 'Best Value',
+    highlight: true,
+    kvkLabel: 'KvK Premium Bundle — Full KvK (SoC)',
+    kvkDesc: 'Done for you — staff handle all scans & DKP',
+    kvkFeatures: VIP_KVK_PREMIUM_FEATURES,
+    isSoC: true,
+  },
+  {
+    id: 'vip-elite-nonsoc',
+    label: 'VIP Elite',
+    sublabel: 'Non-SoC',
+    price: 89,
+    individualValue: 119,
+    saving: 30,
+    savePercent: 25,
+    highlight: false,
+    kvkLabel: 'KvK Premium Bundle — Full KvK (Non-SoC)',
+    kvkDesc: 'Done for you — staff handle all scans & DKP',
+    kvkFeatures: VIP_KVK_PREMIUM_FEATURES,
+    isSoC: false,
+  },
+]
+
+function VipTierCard({ tier, inCart, onAdd }: { tier: VipTier; inCart: boolean; onAdd: () => void }) {
   const [showFeatures, setShowFeatures] = useState(false)
 
-  const toolId = kvkOption === 'premium'
-    ? (socType === 'soc' ? 'vip-premium-soc' : 'vip-premium-nonsoc')
-    : 'vip-tracking'
-  const isSoC = kvkOption === 'premium' ? socType === 'soc' : undefined
-  const label = kvkOption === 'premium'
-    ? `VIP Bundle — Legendary + KvK Premium (${socType === 'soc' ? 'SoC' : 'Non-SoC'})`
-    : 'VIP Bundle — Legendary + KvK Data Tracking'
-  const inCartNow = inCart(toolId)
-
-  const premiumValue = socType === 'soc' ? 150 : 80
-  const totalValue = 39 + (kvkOption === 'premium' ? premiumValue : 29)
-  const saving = totalValue - 79
-
   return (
-    <div className="relative rounded-2xl border-2 border-primary/50 bg-gradient-to-br from-primary/10 via-primary/5 to-card shadow-[0_0_60px_-15px_hsl(var(--glow)/0.35)]">
-      {/* Best Value badge */}
-      <div className="absolute -top-4 inset-x-0 flex justify-center">
-        <span className="rounded-full bg-primary px-4 py-1 text-xs font-bold uppercase tracking-wide text-primary-foreground shadow-lg">
-          Best Value
-        </span>
-      </div>
+    <div className={cn(
+      'relative flex flex-col rounded-xl border transition-all duration-200',
+      tier.highlight
+        ? 'border-primary/40 bg-primary/5 shadow-[0_0_40px_-12px_hsl(var(--glow)/0.3)]'
+        : 'border-border/50 bg-card/60',
+      inCart && 'ring-2 ring-green-500/30',
+    )}>
+      {tier.badge && (
+        <div className="absolute -top-3.5 inset-x-0 flex justify-center">
+          <span className="rounded-full bg-primary px-3 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary-foreground">
+            {tier.badge}
+          </span>
+        </div>
+      )}
 
-      <div className="p-6 pt-8">
-        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
-          {/* Title + tagline */}
-          <div>
-            <h3 className="text-xl font-bold text-foreground">VIP Bundle</h3>
-            <p className="text-sm text-muted-foreground mt-0.5">Alliance Control (Legendary) + your choice of KvK coverage</p>
-          </div>
-          {/* Price */}
-          <div className="text-right">
-            <div className="flex items-end gap-1.5">
-              <span className="text-4xl font-bold text-foreground">$79</span>
-              <span className="text-sm text-muted-foreground pb-1">/mo</span>
+      <div className="p-5 pb-4 flex-1">
+        {/* Header */}
+        <div className="mb-4">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <p className="text-sm font-bold text-foreground">{tier.label}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{tier.sublabel}</p>
             </div>
-            <p className="text-xs text-green-400 font-medium mt-0.5">
-              {saving > 0 ? `Save $${saving}+/mo` : 'Best all-in-one value'}
-              {kvkOption === 'premium' && socType === 'soc' && <span className="text-muted-foreground/60"> (~{Math.round(saving/totalValue*100)}% off)</span>}
-            </p>
+            <div className="text-right shrink-0">
+              <span className="text-2xl font-bold text-foreground">${tier.price}</span>
+              <span className="text-xs text-muted-foreground ml-1">/mo</span>
+            </div>
           </div>
         </div>
 
-        {/* Value comparison */}
-        <div className="grid grid-cols-2 gap-3 mb-6 sm:grid-cols-3">
-          <div className="rounded-xl border border-border/40 bg-muted/20 px-3 py-2.5 text-center">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Alliance Control</p>
-            <p className="text-sm font-bold text-foreground">$39/mo</p>
-            <p className="text-[10px] text-muted-foreground/60">Legendary tier</p>
+        {/* Value breakdown */}
+        <div className="rounded-lg border border-border/40 bg-muted/20 px-3 py-2 text-xs text-muted-foreground mb-4 space-y-1">
+          <div className="flex justify-between">
+            <span>Alliance Control (Legendary)</span>
+            <span className="text-foreground font-medium">$39/mo</span>
           </div>
-          <div className="rounded-xl border border-border/40 bg-muted/20 px-3 py-2.5 text-center">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">{kvkOption === 'premium' ? 'KvK Premium' : 'Data Tracking'}</p>
-            <p className="text-sm font-bold text-foreground">${kvkOption === 'premium' ? premiumValue : 29}{kvkOption === 'premium' ? '' : '/mo'}</p>
-            <p className="text-[10px] text-muted-foreground/60">{kvkOption === 'premium' ? 'one-time per KvK' : 'self-service'}</p>
+          <div className="flex justify-between">
+            <span>{tier.kvkLabel.split(' — ')[0]}</span>
+            <span className="text-foreground font-medium">${tier.individualValue - 39}{tier.id === 'vip-core' ? '/mo' : ''}</span>
           </div>
-          <div className="rounded-xl border border-primary/30 bg-primary/10 px-3 py-2.5 text-center col-span-2 sm:col-span-1">
-            <p className="text-[10px] text-primary uppercase tracking-wide mb-0.5 font-semibold">You pay</p>
-            <p className="text-sm font-bold text-primary">$79/mo</p>
-            <p className="text-[10px] text-green-400">{saving > 0 ? `Save $${saving}+` : 'All-in-one'}</p>
+          <div className="flex justify-between border-t border-border/30 pt-1 mt-1">
+            <span className="font-medium text-foreground">Total value</span>
+            <span className="font-semibold text-foreground">~${tier.individualValue}</span>
           </div>
-        </div>
-
-
-        {/* KvK option selector */}
-        <div className="mb-5">
-          <p className="text-xs font-semibold text-foreground mb-2">Choose your KvK coverage</p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => setKvkOption('premium')}
-              className={cn(
-                'rounded-xl border p-3 text-left transition-colors',
-                kvkOption === 'premium' ? 'border-primary/40 bg-primary/10' : 'border-border/50 bg-muted/10 hover:bg-muted/20'
-              )}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <div className={cn('h-3 w-3 rounded-full border-2 flex-shrink-0', kvkOption === 'premium' ? 'border-primary bg-primary' : 'border-muted-foreground')} />
-                <p className="text-xs font-semibold text-foreground">KvK Premium Bundle</p>
-              </div>
-              <p className="text-[11px] text-muted-foreground pl-5">Done for you — staff handle everything</p>
-            </button>
-            <button
-              onClick={() => setKvkOption('tracking')}
-              className={cn(
-                'rounded-xl border p-3 text-left transition-colors',
-                kvkOption === 'tracking' ? 'border-primary/40 bg-primary/10' : 'border-border/50 bg-muted/10 hover:bg-muted/20'
-              )}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <div className={cn('h-3 w-3 rounded-full border-2 flex-shrink-0', kvkOption === 'tracking' ? 'border-primary bg-primary' : 'border-muted-foreground')} />
-                <p className="text-xs font-semibold text-foreground">KvK Data Tracking</p>
-              </div>
-              <p className="text-[11px] text-muted-foreground pl-5">Self-service — full control in your hands</p>
-            </button>
-          </div>
-
-          {/* SoC toggle for premium */}
-          {kvkOption === 'premium' && (
-            <div className="flex items-center gap-2 mt-3">
-              <span className="text-[11px] text-muted-foreground">KvK type:</span>
-              <button onClick={() => setSocType('soc')} className={cn('rounded-lg px-3 py-1 text-xs font-medium transition-colors border', socType === 'soc' ? 'bg-primary/15 text-primary border-primary/30' : 'text-muted-foreground border-border/50 hover:bg-secondary')}>
-                Season of Conquest
-              </button>
-              <button onClick={() => setSocType('nonSoc')} className={cn('rounded-lg px-3 py-1 text-xs font-medium transition-colors border', socType === 'nonSoc' ? 'bg-primary/15 text-primary border-primary/30' : 'text-muted-foreground border-border/50 hover:bg-secondary')}>
-                Non-SoC
-              </button>
+          {tier.saving > 0 && (
+            <div className="flex justify-between">
+              <span className="text-green-400 font-medium">You save</span>
+              <span className="text-green-400 font-semibold">~${tier.saving} (~{tier.savePercent}% off)</span>
             </div>
           )}
         </div>
 
-        {/* Add to cart */}
-        {inCartNow ? (
-          <div className="flex items-center justify-center gap-2 w-full rounded-xl bg-green-500/10 border border-green-500/20 py-3 text-sm font-semibold text-green-400 mb-4">
+        {/* KvK included */}
+        <div className="rounded-lg border border-border/40 bg-muted/10 px-3 py-2 mb-5">
+          <p className="text-[11px] font-semibold text-foreground mb-0.5">{tier.kvkLabel}</p>
+          <p className="text-[11px] text-muted-foreground">{tier.kvkDesc}</p>
+        </div>
+
+        {/* CTA */}
+        {inCart ? (
+          <div className="flex items-center justify-center gap-1.5 w-full rounded-xl bg-green-500/10 border border-green-500/20 py-2.5 text-sm font-medium text-green-400">
             <Check className="h-4 w-4" /> Added to cart
           </div>
         ) : (
           <button
-            onClick={() => onAdd(toolId, label, isSoC)}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity mb-4"
+            onClick={onAdd}
+            className={cn(
+              'flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold transition-colors',
+              tier.highlight
+                ? 'bg-primary text-primary-foreground hover:opacity-90'
+                : 'bg-primary/15 border border-primary/20 text-primary hover:bg-primary/25'
+            )}
           >
             <ShoppingCart className="h-4 w-4" />
-            Add VIP Bundle to cart — $79/mo
+            Add to cart — ${tier.price}/mo
           </button>
         )}
-
-        {/* Feature toggle */}
-        <button
-          onClick={() => setShowFeatures(f => !f)}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          {showFeatures ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-          {showFeatures ? 'Hide full feature list' : 'View full feature list'}
-        </button>
       </div>
 
-      {/* Expanded feature list */}
+      {/* Feature toggle */}
+      <button
+        onClick={() => setShowFeatures(f => !f)}
+        className="flex items-center justify-between border-t border-border/50 px-5 py-3 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+      >
+        <span className="font-medium">{showFeatures ? 'Hide features' : 'View full feature list'}</span>
+        {showFeatures ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+      </button>
+
       {showFeatures && (
-        <div className="border-t border-primary/20 px-6 pb-6 pt-5 grid grid-cols-1 gap-6 sm:grid-cols-2">
+        <div className="border-t border-border/50 px-5 pb-5 pt-4 space-y-5">
           <div>
-            <p className="text-xs font-bold text-foreground mb-3 flex items-center gap-2">
-              <Trophy className="h-3.5 w-3.5 text-amber-400" />
-              Alliance Control — Legendary (all tools)
+            <p className="text-[11px] font-bold text-foreground mb-2 flex items-center gap-1.5">
+              <Trophy className="h-3 w-3 text-amber-400" />
+              Alliance Control — Legendary
             </p>
             <ul className="space-y-1.5">
               {VIP_LEGENDARY_FEATURES.map((f, i) => (
                 <li key={i} className="flex items-start gap-2 text-[11px] text-muted-foreground">
-                  <Check className="h-3 w-3 text-green-400 shrink-0 mt-0.5" />
-                  {f}
+                  <Check className="h-3 w-3 text-green-400 shrink-0 mt-0.5" />{f}
                 </li>
               ))}
             </ul>
           </div>
           <div>
-            <p className="text-xs font-bold text-foreground mb-3 flex items-center gap-2">
-              <ScanSearch className="h-3.5 w-3.5 text-primary" />
-              {kvkOption === 'premium' ? 'KvK Premium Bundle (Done For You)' : 'KvK Data Tracking (Self-Service)'}
+            <p className="text-[11px] font-bold text-foreground mb-2 flex items-center gap-1.5">
+              <ScanSearch className="h-3 w-3 text-primary" />
+              {tier.kvkLabel}
             </p>
             <ul className="space-y-1.5">
-              {(kvkOption === 'premium' ? VIP_KVK_PREMIUM_FEATURES : VIP_KVK_TRACKING_FEATURES).map((f, i) => (
+              {tier.kvkFeatures.map((f, i) => (
                 <li key={i} className="flex items-start gap-2 text-[11px] text-muted-foreground">
-                  <Check className="h-3 w-3 text-green-400 shrink-0 mt-0.5" />
-                  {f}
+                  <Check className="h-3 w-3 text-green-400 shrink-0 mt-0.5" />{f}
                 </li>
               ))}
             </ul>
@@ -866,10 +879,16 @@ export function BotToolsHome({ cart, onAddToCart, onRemoveFromCart, onOpenCart, 
           label="All-In-One"
           subtitle="Everything in Legendary Alliance Control plus full KvK coverage — one price, zero compromises."
         />
-        <VipBundleCard
-          inCart={(id) => cartIds.has(id)}
-          onAdd={(toolId, label, isSoC) => addItem({ toolId, label, price: 79, isSoC })}
-        />
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+          {VIP_TIERS.map(tier => (
+            <VipTierCard
+              key={tier.id}
+              tier={tier}
+              inCart={cartIds.has(tier.id)}
+              onAdd={() => addItem({ toolId: tier.id, label: `${tier.label} (${tier.sublabel})`, price: tier.price, isSoC: tier.isSoC })}
+            />
+          ))}
+        </div>
       </div>
 
       {/* ── Section 1: Alliance Control ─────────────────────────────────────── */}
