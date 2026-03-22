@@ -136,10 +136,11 @@ const accountNavItems = [
 
 // Project Tools section
 const projectToolsNavItems = [
-  { id: "project-tools-home", label: "Overview & Guide",  icon: Crown },
-  { id: "ark",                label: "Ark of Osiris",     icon: Sword },
-  { id: "territory-planner",  label: "Territory Planner", icon: Map },
-  { id: "rok-mail",           label: "RoK Mail",          icon: Mail },
+  { id: "project-tools-home", label: "Overview & Guide",      icon: Crown },
+  { id: "ark",                label: "Ark of Osiris",         icon: Sword },
+  { id: "territory-planner",  label: "Territory Planner",     icon: Map },
+  { id: "discord-verify",     label: "Discord Verification",  icon: MessageSquare },
+  { id: "rok-mail",           label: "RoK Mail",              icon: Mail },
 ];
 
 // Bot Tools section
@@ -149,7 +150,6 @@ const botNavItems = [
   { id: "fort-tracking",   label: "Fort Tracking",         icon: Flag },
   { id: "player-finder",   label: "Player Finder",         icon: Search },
   { id: "alliance-mob",    label: "Alliance Mobilization", icon: Bell },
-  { id: "discord-verify",  label: "Discord Verification",  icon: MessageSquare },
   { id: "kvk-scanner",     label: "KvK Scanner",           icon: ScanSearch },
 ];
 

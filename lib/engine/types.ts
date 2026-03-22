@@ -13,6 +13,8 @@ export type CommanderGoal = {
   allocationPct: number
   currentEquipment?: Record<string, string> // slot -> equipmentId
   targetEquipment?: Record<string, string> // slot -> equipmentId
+  currentEquipmentMeta?: Record<string, { refined: boolean; awakenLevel: number }>
+  targetEquipmentMeta?: Record<string, { refined: boolean; awakenLevel: number }>
   /** Optional one-time planned heads applied on day 0 (preview only). */
   plannedHeads?: number
 }

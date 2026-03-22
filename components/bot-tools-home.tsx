@@ -3,16 +3,16 @@
 import { useState } from 'react'
 import { useAuth } from '@/lib/auth-context'
 import {
-  Crown, Flag, Search, Bell, MessageSquare, ScanSearch,
-  ShoppingCart, Check, ChevronDown, ChevronUp, X, Copy, CheckCheck,
-  Loader2, ExternalLink, Lock,
+  Crown, Flag, Search, Bell, ScanSearch,
+  ShoppingCart, Check, X, Copy, CheckCheck,
+  Loader2, Star, Zap, Trophy, Database, Globe, Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface CartItem {
-  cartId: string   // unique per line item
+  cartId: string
   toolId: string
   label: string
   bundle?: string
@@ -28,330 +28,95 @@ interface BotToolsHomeProps {
   onNavigate: (tab: string) => void
 }
 
-// ─── Tool catalogue ───────────────────────────────────────────────────────────
+// ─── Alliance Control tiers ───────────────────────────────────────────────────
 
-const TOOLS = [
+const ALLIANCE_TIERS = [
   {
-    id: 'kvk-scanner',
-    label: 'KvK Scanner',
-    icon: ScanSearch,
-    color: 'text-violet-400',
-    bg: 'bg-violet-500/10',
-    border: 'border-violet-500/20',
-    tagline: 'Automated KvK rankings, DKP tracking, and scan scheduling.',
-    description:
-      'The bot logs into your kingdom every day and scrapes the full Top 300 rankings. Get live DKP scores, kill counts, deads, and honor points — automatically uploaded to your dashboard.',
-    features: [
-      'Automated daily top-300 scans',
-      'DKP formula with custom weights',
-      'Pre-KvK & seeding snapshots',
-      'Honor point tracking',
-      'Per-player DKP goals',
-      'Configurable scan schedule',
-    ],
-    hasBundle: true,
-    bundles: [
-      { id: 'full-kvk',  label: 'Full KvK',        camps: 4, socPrice: 200, nonSocPrice: 100 },
-      { id: 'two-camp',  label: 'Two Camp Bundle',  camps: 2, socPrice: 100, nonSocPrice: 50  },
-      { id: 'one-camp',  label: 'One Camp Bundle',  camps: 1, socPrice: 50,  nonSocPrice: 25  },
-    ],
-  },
-  {
-    id: 'title-giving',
-    label: 'Title Giving',
-    icon: Crown,
-    color: 'text-amber-400',
-    bg: 'bg-amber-500/10',
-    border: 'border-amber-500/20',
-    tagline: 'Auto-rotate kingdom titles 24/7 — never miss a title window.',
-    description:
-      'Assigns Duke, Architect, Justice, and Scientist titles to your priority list on a configurable timer. Skips offline players and follows your alliance rules automatically.',
-    features: [
-      'Configurable rotation schedule',
-      'Priority player lists',
-      'Alliance-based rules',
-      'Auto skip offline players',
-    ],
-    hasBundle: false,
-    price: 20,
-  },
-  {
-    id: 'fort-tracking',
-    label: 'Fort Tracking',
-    icon: Flag,
-    color: 'text-red-400',
-    bg: 'bg-red-500/10',
-    border: 'border-red-500/20',
-    tagline: 'Real-time fort attack & defence monitoring.',
-    description:
-      'Watches fort activity and logs every attack, capture, and defence event to your dashboard with timestamps. Get Discord alerts the moment a fort comes under attack.',
-    features: [
-      'Real-time attack alerts',
-      'Defence log with timestamps',
-      'Alliance fort assignments',
-      'Export to CSV',
-    ],
-    hasBundle: false,
-    price: 20,
-  },
-  {
-    id: 'player-finder',
-    label: 'Player Finder',
-    icon: Search,
+    id: 'alliance-basic',
+    label: 'Basic',
+    price: 19,
+    icon: Zap,
     color: 'text-blue-400',
     bg: 'bg-blue-500/10',
     border: 'border-blue-500/20',
-    tagline: 'Search any player by name, ID, or alliance across kingdoms.',
-    description:
-      'Instantly search for players across all connected kingdoms. Pull up power, kill counts, alliance membership, and commander profile snapshots without opening the game.',
+    highlight: false,
     features: [
-      'Cross-kingdom search',
-      'Power & kill filters',
-      'Alliance membership lookup',
-      'Profile snapshot',
+      'Title Giving (auto-rotate 24/7)',
+      'Player Finder (cross-kingdom search)',
+      'Fort Tracking (real-time alerts)',
     ],
-    hasBundle: false,
-    price: 15,
+    individualValue: 55,
   },
   {
-    id: 'alliance-mob',
-    label: 'Alliance Mobilization',
-    icon: Bell,
-    color: 'text-violet-400',
-    bg: 'bg-violet-500/10',
-    border: 'border-violet-500/20',
-    tagline: 'Auto-ping alliance chat when a rally or fort needs you.',
-    description:
-      'Detects fort attacks or rally launches and immediately sends a coordinated mobilization message in alliance chat with the target coordinates. Configurable cooldown to prevent spam.',
+    id: 'alliance-elite',
+    label: 'Elite',
+    price: 29,
+    icon: Star,
+    color: 'text-primary',
+    bg: 'bg-primary/10',
+    border: 'border-primary/30',
+    highlight: true,
+    badge: 'Most Popular',
     features: [
-      'Configurable message templates',
-      'Auto-trigger on fort attack',
-      'Cooldown to prevent spam',
-      'Target coordinate injection',
+      'Title Giving (auto-rotate 24/7)',
+      'Player Finder (cross-kingdom search)',
+      'Fort Tracking (real-time alerts)',
+      'Alliance Mobilization (auto-ping on attack)',
     ],
-    hasBundle: false,
-    price: 20,
+    individualValue: 75,
   },
   {
-    id: 'discord-verify',
-    label: 'Discord Verification',
-    icon: MessageSquare,
-    color: 'text-indigo-400',
-    bg: 'bg-indigo-500/10',
-    border: 'border-indigo-500/20',
-    tagline: 'Link Discord accounts to governor IDs and auto-assign roles.',
-    description:
-      'A verification flow in your Discord server where members confirm their in-game governor ID. Automatically assigns kingdom, alliance, and rank roles based on their profile.',
+    id: 'alliance-legendary',
+    label: 'Legendary',
+    price: 39,
+    icon: Trophy,
+    color: 'text-amber-400',
+    bg: 'bg-amber-500/10',
+    border: 'border-amber-500/20',
+    highlight: false,
     features: [
-      'Governor ID verification',
-      'Auto role assignment',
-      'Kingdom & alliance roles',
-      'Re-verification on power change',
+      'Title Giving (auto-rotate 24/7)',
+      'Player Finder (cross-kingdom search)',
+      'Fort Tracking (real-time alerts)',
+      'Alliance Mobilization (auto-ping on attack)',
+      'KvK Data Tracking (1 month self-service)',
     ],
-    hasBundle: false,
-    price: 15,
+    individualValue: 104,
   },
 ]
 
-// ─── Bundle picker subcomponent ───────────────────────────────────────────────
+// ─── KvK Premium bundles ──────────────────────────────────────────────────────
 
-interface BundlePickerProps {
-  bundles: { id: string; label: string; camps: number; socPrice: number; nonSocPrice: number }[]
-  onAdd: (bundle: string, isSoC: boolean, price: number, label: string) => void
+const KVK_BUNDLES = {
+  soc: [
+    { id: 'soc-full',     label: 'Full KvK',       camps: 4, price: 150 },
+    { id: 'soc-two',      label: 'Two Camp Bundle', camps: 2, price: 80  },
+    { id: 'soc-one',      label: 'One Camp Bundle', camps: 1, price: 40  },
+  ],
+  nonSoc: [
+    { id: 'nonsoc-full',  label: 'Full KvK',        camps: 4, price: 80  },
+    { id: 'nonsoc-two',   label: 'Two Camp Bundle',  camps: 2, price: 40  },
+    { id: 'nonsoc-one',   label: 'One Camp Bundle',  camps: 1, price: 20  },
+  ],
 }
 
-function BundlePicker({ bundles, onAdd }: BundlePickerProps) {
-  const [isSoC, setIsSoC] = useState(true)
+// ─── KvK Data Tracking (self-service) ─────────────────────────────────────────
 
-  return (
-    <div className="mt-4 space-y-3">
-      {/* SoC toggle */}
-      <div className="flex items-center gap-2">
-        <button
-          onClick={() => setIsSoC(true)}
-          className={cn(
-            'rounded-md px-3 py-1.5 text-xs font-medium transition-colors border',
-            isSoC
-              ? 'bg-primary/15 text-primary border-primary/30'
-              : 'text-muted-foreground border-border/50 hover:bg-secondary'
-          )}
-        >
-          Season of Conquest
-        </button>
-        <button
-          onClick={() => setIsSoC(false)}
-          className={cn(
-            'rounded-md px-3 py-1.5 text-xs font-medium transition-colors border',
-            !isSoC
-              ? 'bg-primary/15 text-primary border-primary/30'
-              : 'text-muted-foreground border-border/50 hover:bg-secondary'
-          )}
-        >
-          Non-SoC
-        </button>
-      </div>
+const KVK_TRACKING = [
+  { id: 'tracking-1mo',  label: '1 Month',  price: 29,  perMonth: 29  },
+  { id: 'tracking-2mo',  label: '2 Months', price: 55,  perMonth: 27.5 },
+  { id: 'tracking-1yr',  label: '1 Year',   price: 240, perMonth: 20  },
+]
 
-      {bundles.map(b => {
-        const price = isSoC ? b.socPrice : b.nonSocPrice
-        return (
-          <div
-            key={b.id}
-            className="flex items-center justify-between rounded-lg border border-border/50 bg-muted/20 px-4 py-3"
-          >
-            <div>
-              <p className="text-sm font-medium text-foreground">{b.label}</p>
-              <p className="text-xs text-muted-foreground">{b.camps} camp{b.camps > 1 ? 's' : ''} tracked</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-semibold text-foreground">${price}</span>
-              <button
-                onClick={() => onAdd(b.id, isSoC, price, b.label)}
-                className="flex items-center gap-1.5 rounded-lg bg-primary/15 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/25 border border-primary/20"
-              >
-                <ShoppingCart className="h-3 w-3" />
-                Add
-              </button>
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
+// ─── Multi-Kingdom scan packages ──────────────────────────────────────────────
 
-// ─── Tool card ────────────────────────────────────────────────────────────────
+const MULTI_KVK = [
+  { id: 'multi-basic',     label: 'Basic',     scans: 10,  price: 55  },
+  { id: 'multi-elite',     label: 'Elite',     scans: 25,  price: 85  },
+  { id: 'multi-legendary', label: 'Legendary', scans: 60,  price: 150 },
+]
 
-interface ToolCardProps {
-  tool: typeof TOOLS[number]
-  inCart: boolean
-  onAddToCart: (item: Omit<CartItem, 'cartId'>) => void
-  onNavigate: (tab: string) => void
-}
-
-function ToolCard({ tool, inCart, onAddToCart, onNavigate }: ToolCardProps) {
-  const [expanded, setExpanded] = useState(false)
-  const Icon = tool.icon
-
-  return (
-    <div className={cn(
-      'flex flex-col rounded-xl border bg-card/60 transition-all duration-200',
-      inCart ? 'border-primary/30 shadow-[0_0_20px_-8px_hsl(var(--glow)/0.3)]' : 'border-border/50 hover:border-border'
-    )}>
-      {/* Header */}
-      <div className="p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', tool.bg)}>
-              <Icon className={cn('h-5 w-5', tool.color)} />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-semibold text-foreground">{tool.label}</h3>
-                {inCart && (
-                  <span className="flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium text-primary border border-primary/20">
-                    <Check className="h-2.5 w-2.5" /> In cart
-                  </span>
-                )}
-              </div>
-              <p className="mt-0.5 text-xs text-muted-foreground">{tool.tagline}</p>
-            </div>
-          </div>
-          {!tool.hasBundle && (
-            <div className="shrink-0 text-right">
-              <p className="text-lg font-bold text-foreground">${tool.price}</p>
-              <p className="text-[10px] text-muted-foreground">per KvK</p>
-            </div>
-          )}
-        </div>
-
-        {/* Feature pills */}
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {tool.features.map(f => (
-            <span key={f} className="rounded-md bg-muted/40 px-2 py-0.5 text-[10px] text-muted-foreground">
-              {f}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* Expanded description + bundle picker */}
-      {expanded && (
-        <div className="border-t border-border/50 px-5 py-4">
-          <p className="text-sm text-muted-foreground">{tool.description}</p>
-          {tool.hasBundle && tool.bundles && (
-            <BundlePicker
-              bundles={tool.bundles}
-              onAdd={(bundle, isSoC, price, bundleLabel) => {
-                onAddToCart({
-                  toolId: tool.id,
-                  label: `${tool.label} — ${bundleLabel}`,
-                  bundle,
-                  isSoC,
-                  price,
-                })
-              }}
-            />
-          )}
-        </div>
-      )}
-
-      {/* Footer actions */}
-      <div className="mt-auto flex items-center justify-between border-t border-border/50 px-5 py-3">
-        <button
-          onClick={() => setExpanded(e => !e)}
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-          {expanded ? 'Less' : 'Details'}
-        </button>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => onNavigate(tool.id)}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ExternalLink className="h-3 w-3" />
-            Preview
-          </button>
-
-          {!tool.hasBundle && !inCart && (
-            <button
-              onClick={() =>
-                onAddToCart({
-                  toolId: tool.id,
-                  label: tool.label,
-                  price: tool.price!,
-                })
-              }
-              className="flex items-center gap-1.5 rounded-lg bg-primary/15 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/25 border border-primary/20"
-            >
-              <ShoppingCart className="h-3 w-3" />
-              Add to cart
-            </button>
-          )}
-
-          {!tool.hasBundle && inCart && (
-            <span className="flex items-center gap-1.5 rounded-lg bg-green-500/10 px-3 py-1.5 text-xs font-medium text-green-400 border border-green-500/20">
-              <Check className="h-3 w-3" /> Added
-            </span>
-          )}
-
-          {tool.hasBundle && !expanded && (
-            <button
-              onClick={() => setExpanded(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-primary/15 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/25 border border-primary/20"
-            >
-              <ShoppingCart className="h-3 w-3" />
-              Choose bundle
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Checkout panel (product key display) ─────────────────────────────────────
+// ─── Checkout panel ───────────────────────────────────────────────────────────
 
 interface CheckoutProps {
   cart: CartItem[]
@@ -408,12 +173,8 @@ function CheckoutPanel({ cart, onClose, onRemove, onCheckoutComplete }: Checkout
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-end sm:items-center sm:justify-end">
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-
-      {/* Panel */}
       <div className="relative z-10 flex h-full max-h-screen w-full max-w-sm flex-col border-l border-border bg-card shadow-2xl">
-        {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <div className="flex items-center gap-2">
             <ShoppingCart className="h-4 w-4 text-primary" />
@@ -433,7 +194,7 @@ function CheckoutPanel({ cart, onClose, onRemove, onCheckoutComplete }: Checkout
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <ShoppingCart className="h-10 w-10 text-muted-foreground/30 mb-3" />
                   <p className="text-sm text-muted-foreground">Your cart is empty</p>
-                  <p className="text-xs text-muted-foreground/60 mt-1">Browse the tools below and add them to your cart.</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">Choose a plan or package below.</p>
                 </div>
               ) : (
                 cart.map(item => (
@@ -446,10 +207,7 @@ function CheckoutPanel({ cart, onClose, onRemove, onCheckoutComplete }: Checkout
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className="text-sm font-semibold text-foreground">${item.price}</span>
-                      <button
-                        onClick={() => onRemove(item.cartId)}
-                        className="rounded p-0.5 text-muted-foreground hover:text-foreground transition-colors"
-                      >
+                      <button onClick={() => onRemove(item.cartId)} className="rounded p-0.5 text-muted-foreground hover:text-foreground transition-colors">
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </div>
@@ -464,8 +222,6 @@ function CheckoutPanel({ cart, onClose, onRemove, onCheckoutComplete }: Checkout
               <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-4 text-sm text-green-400">
                 Order placed! Copy your product key and redeem it in our Discord server.
               </div>
-
-              {/* Items summary */}
               <div className="rounded-xl border border-border/50 bg-muted/20 p-4 space-y-2">
                 <p className="text-xs font-semibold text-foreground mb-2">Order summary</p>
                 {cart.map(item => (
@@ -479,44 +235,35 @@ function CheckoutPanel({ cart, onClose, onRemove, onCheckoutComplete }: Checkout
                   <span>${total}</span>
                 </div>
               </div>
-
-              {/* Single product key */}
               {productKey && (
                 <div className="rounded-xl border border-border/50 bg-muted/20 p-4 space-y-2">
                   <p className="text-xs font-medium text-muted-foreground">Your product key</p>
                   <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm font-semibold text-foreground tracking-widest">
                     <span className="flex-1 select-all">{productKey}</span>
-                    <button
-                      onClick={copyKey}
-                      className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                    >
+                    <button onClick={copyKey} className="shrink-0 text-muted-foreground hover:text-foreground transition-colors">
                       {copied ? <CheckCheck className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
                     </button>
                   </div>
                 </div>
               )}
-
               <div className="rounded-xl border border-border/50 bg-muted/20 p-4 space-y-3">
                 <p className="text-xs font-semibold text-foreground">Next steps</p>
                 <ol className="space-y-2 text-xs text-muted-foreground list-decimal list-inside">
                   <li>Join the TFN Discord server</li>
-                  <li>Use the <span className="font-mono bg-muted/50 px-1 rounded">/activate</span> slash command (visible only to you)</li>
+                  <li>Use the <span className="font-mono bg-muted/50 px-1 rounded">/activate</span> slash command</li>
                   <li>Paste your product key when prompted</li>
                   <li>A private ticket will open with our staff team</li>
-                  <li>Complete payment via PayPal — staff will set everything up for you</li>
+                  <li>Complete payment via PayPal — staff will set everything up</li>
                 </ol>
               </div>
             </div>
           )}
 
           {error && (
-            <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-xs text-red-400">
-              {error}
-            </div>
+            <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-xs text-red-400">{error}</div>
           )}
         </div>
 
-        {/* Footer */}
         {step === 'cart' && cart.length > 0 && (
           <div className="border-t border-border p-5 space-y-3">
             <div className="flex items-center justify-between text-sm">
@@ -526,21 +273,14 @@ function CheckoutPanel({ cart, onClose, onRemove, onCheckoutComplete }: Checkout
             {!user ? (
               <>
                 <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-400">
-                  You need to sign in with Discord before placing an order.
+                  Sign in with Discord before placing an order.
                 </div>
-                <button
-                  onClick={login}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
-                >
+                <button onClick={login} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90">
                   Sign in with Discord
                 </button>
               </>
             ) : (
-              <button
-                onClick={handleCheckout}
-                disabled={loading}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
-              >
+              <button onClick={handleCheckout} disabled={loading} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60">
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 {loading ? 'Processing...' : 'Confirm Order'}
               </button>
@@ -555,26 +295,62 @@ function CheckoutPanel({ cart, onClose, onRemove, onCheckoutComplete }: Checkout
   )
 }
 
+// ─── Section header ────────────────────────────────────────────────────────────
+
+function SectionTitle({ icon: Icon, title, subtitle }: { icon: React.ElementType; title: string; subtitle: string }) {
+  return (
+    <div className="flex items-start gap-3 mb-5">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary mt-0.5">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div>
+        <h2 className="text-base font-semibold text-foreground">{title}</h2>
+        <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main export ──────────────────────────────────────────────────────────────
 
 export function BotToolsHome({ cart, onAddToCart, onRemoveFromCart, onOpenCart, onNavigate }: BotToolsHomeProps) {
   const [cartOpen, setCartOpen] = useState(false)
+  const [kvkType, setKvkType] = useState<'soc' | 'nonSoc'>('soc')
   const cartCount = cart.length
+  const cartIds = new Set(cart.map(i => i.toolId))
 
-  const cartToolIds = new Set(cart.map(i => i.toolId))
-
-  function addToCart(item: Omit<CartItem, 'cartId'>) {
+  function addItem(item: Omit<CartItem, 'cartId'>) {
     onAddToCart(item)
   }
 
+  function AddButton({ toolId, label, price, bundle, isSoC }: { toolId: string; label: string; price: number; bundle?: string; isSoC?: boolean }) {
+    const inCart = cartIds.has(toolId)
+    if (inCart) {
+      return (
+        <span className="flex items-center gap-1.5 rounded-lg bg-green-500/10 px-3 py-1.5 text-xs font-medium text-green-400 border border-green-500/20">
+          <Check className="h-3 w-3" /> Added
+        </span>
+      )
+    }
+    return (
+      <button
+        onClick={() => addItem({ toolId, label, price, bundle, isSoC })}
+        className="flex items-center gap-1.5 rounded-lg bg-primary/15 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/25 border border-primary/20"
+      >
+        <ShoppingCart className="h-3 w-3" />
+        Add to cart
+      </button>
+    )
+  }
+
   return (
-    <div className="space-y-8 max-w-5xl">
-      {/* Hero */}
+    <div className="space-y-10 max-w-5xl">
+      {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-foreground">Bot Tools Store</h2>
           <p className="mt-1 text-sm text-muted-foreground max-w-xl">
-            Automate your Rise of Kingdoms kingdom with our suite of bots. Each tool is set up by our staff — you just provide the kingdom details.
+            Automate your Rise of Kingdoms kingdom with TFN&apos;s bot suite. Staff handles setup — you just provide kingdom details.
           </p>
         </div>
         <button
@@ -594,31 +370,164 @@ export function BotToolsHome({ cart, onAddToCart, onRemoveFromCart, onOpenCart, 
       {/* How it works */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         {[
-          { n: '1', text: 'Add tools to cart' },
+          { n: '1', text: 'Choose a plan or package' },
           { n: '2', text: 'Confirm order — get product key' },
           { n: '3', text: 'Redeem key in TFN Discord' },
           { n: '4', text: 'Staff sets up & activates your bot' },
         ].map(s => (
           <div key={s.n} className="flex items-center gap-3 rounded-lg border border-border/40 bg-muted/20 px-4 py-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
-              {s.n}
-            </span>
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">{s.n}</span>
             <p className="text-xs text-muted-foreground">{s.text}</p>
           </div>
         ))}
       </div>
 
-      {/* Tool cards grid */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {TOOLS.map(tool => (
-          <ToolCard
-            key={tool.id}
-            tool={tool}
-            inCart={cartToolIds.has(tool.id)}
-            onAddToCart={addToCart}
-            onNavigate={onNavigate}
-          />
-        ))}
+      {/* ── Section 1: Alliance Control ─────────────────────────────────────── */}
+      <div>
+        <SectionTitle
+          icon={Crown}
+          title="Alliance Control"
+          subtitle="Monthly subscription. Includes Title Giving, Fort Tracking, Player Finder, and more depending on tier."
+        />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {ALLIANCE_TIERS.map(tier => {
+            const Icon = tier.icon
+            const savings = Math.round((1 - tier.price / tier.individualValue) * 100)
+            return (
+              <div
+                key={tier.id}
+                className={cn(
+                  'relative flex flex-col rounded-xl border p-5',
+                  tier.highlight
+                    ? 'border-primary/40 bg-primary/5 shadow-[0_0_30px_-10px_hsl(var(--glow)/0.25)]'
+                    : 'border-border/50 bg-card/60'
+                )}
+              >
+                {tier.badge && (
+                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-0.5 text-[10px] font-bold text-primary-foreground">
+                    {tier.badge}
+                  </span>
+                )}
+                <div className="flex items-center gap-3 mb-4">
+                  <div className={cn('flex h-9 w-9 items-center justify-center rounded-xl', tier.bg)}>
+                    <Icon className={cn('h-4 w-4', tier.color)} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">{tier.label}</p>
+                    <p className="text-[10px] text-muted-foreground">Save {savings}% vs individual</p>
+                  </div>
+                </div>
+                <div className="mb-4">
+                  <span className="text-3xl font-bold text-foreground">${tier.price}</span>
+                  <span className="text-xs text-muted-foreground ml-1">/mo</span>
+                  <p className="text-[10px] text-muted-foreground/60 mt-0.5">Individual value ~${tier.individualValue}/mo</p>
+                </div>
+                <ul className="space-y-2 flex-1 mb-5">
+                  {tier.features.map(f => (
+                    <li key={f} className="flex items-start gap-2 text-xs text-muted-foreground">
+                      <Check className="h-3.5 w-3.5 text-green-400 shrink-0 mt-0.5" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+                <AddButton toolId={tier.id} label={`Alliance Control — ${tier.label}`} price={tier.price} />
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ── Section 2: KvK Premium Bundles ──────────────────────────────────── */}
+      <div>
+        <SectionTitle
+          icon={ScanSearch}
+          title="KvK Premium Bundles"
+          subtitle="Done-for-you KvK data scanning. Staff sets up automated scans for the full event duration."
+        />
+        {/* SoC / Non-SoC toggle */}
+        <div className="flex items-center gap-2 mb-4">
+          <button
+            onClick={() => setKvkType('soc')}
+            className={cn(
+              'rounded-lg px-4 py-1.5 text-xs font-medium transition-colors border',
+              kvkType === 'soc'
+                ? 'bg-primary/15 text-primary border-primary/30'
+                : 'text-muted-foreground border-border/50 hover:bg-secondary'
+            )}
+          >
+            Season of Conquest
+          </button>
+          <button
+            onClick={() => setKvkType('nonSoc')}
+            className={cn(
+              'rounded-lg px-4 py-1.5 text-xs font-medium transition-colors border',
+              kvkType === 'nonSoc'
+                ? 'bg-primary/15 text-primary border-primary/30'
+                : 'text-muted-foreground border-border/50 hover:bg-secondary'
+            )}
+          >
+            Non-SoC
+          </button>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {KVK_BUNDLES[kvkType].map(bundle => (
+            <div key={bundle.id} className="flex flex-col rounded-xl border border-border/50 bg-card/60 p-5">
+              <p className="text-sm font-semibold text-foreground mb-1">{bundle.label}</p>
+              <p className="text-xs text-muted-foreground mb-4">{bundle.camps} camp{bundle.camps > 1 ? 's' : ''} tracked · Full event duration</p>
+              <div className="mb-5 mt-auto">
+                <span className="text-2xl font-bold text-foreground">${bundle.price}</span>
+                <span className="text-xs text-muted-foreground ml-1">one-time</span>
+              </div>
+              <AddButton toolId={`kvk-bundle-${bundle.id}`} label={`KvK Bundle — ${bundle.label} (${kvkType === 'soc' ? 'SoC' : 'Non-SoC'})`} price={bundle.price} bundle={bundle.id} isSoC={kvkType === 'soc'} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Section 3: KvK Data Tracking (self-service) ─────────────────────── */}
+      <div>
+        <SectionTitle
+          icon={Database}
+          title="KvK Data Tracking"
+          subtitle="Self-service access to the KvK scanner dashboard. You control the scans and schedule."
+        />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {KVK_TRACKING.map(plan => (
+            <div key={plan.id} className="flex flex-col rounded-xl border border-border/50 bg-card/60 p-5">
+              <p className="text-sm font-semibold text-foreground mb-1">{plan.label}</p>
+              <p className="text-xs text-muted-foreground mb-4">
+                ~${plan.perMonth}/mo · Full scanner access
+              </p>
+              <div className="mb-5 mt-auto">
+                <span className="text-2xl font-bold text-foreground">${plan.price}</span>
+                <span className="text-xs text-muted-foreground ml-1">total</span>
+              </div>
+              <AddButton toolId={`tracking-${plan.id}`} label={`KvK Data Tracking — ${plan.label}`} price={plan.price} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Section 4: Multi-Kingdom KvK Data ───────────────────────────────── */}
+      <div>
+        <SectionTitle
+          icon={Globe}
+          title="Multi-Kingdom KvK Data"
+          subtitle="One-time scan packages covering multiple kingdoms. Great for competitive intelligence across regions."
+        />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {MULTI_KVK.map(pkg => (
+            <div key={pkg.id} className="flex flex-col rounded-xl border border-border/50 bg-card/60 p-5">
+              <p className="text-sm font-semibold text-foreground mb-1">{pkg.label}</p>
+              <p className="text-xs text-muted-foreground mb-4">{pkg.scans} kingdom scans included</p>
+              <div className="mb-5 mt-auto">
+                <span className="text-2xl font-bold text-foreground">${pkg.price}</span>
+                <span className="text-xs text-muted-foreground ml-1">one-time</span>
+              </div>
+              <AddButton toolId={`multi-${pkg.id}`} label={`Multi-Kingdom Data — ${pkg.label} (${pkg.scans} scans)`} price={pkg.price} />
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Cart panel */}

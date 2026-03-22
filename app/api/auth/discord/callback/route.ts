@@ -36,7 +36,9 @@ export async function GET(request: NextRequest) {
   })
 
   if (!tokenRes.ok) {
-    return NextResponse.redirect(new URL('/?auth_error=token_failed', request.url))
+    const errBody = await tokenRes.text()
+    console.error('[discord/callback] token exchange failed:', tokenRes.status, errBody)
+    return NextResponse.redirect(new URL(`/?auth_error=token_failed&detail=${encodeURIComponent(errBody)}`, request.url))
   }
 
   const tokenData = await tokenRes.json()

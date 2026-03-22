@@ -33,8 +33,9 @@ import type { AccountProfile, CommanderGoal } from '@/lib/engine/types'
 import type { CommanderSkillSet } from '@/lib/kvk-engine'
 import { calcCommanderNeeds } from '@/lib/engine/commanderEngine'
 import { getCommanderRoster, getCommanderSeasons, type CommanderEntry } from '@/lib/commander-data'
-import { EQUIPMENT_DB, type Equipment, RARITY_COLORS, STAT_LABELS } from '@/lib/game/equipment'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { EQUIPMENT_FORGE_SEED_ITEMS } from '@/lib/game/equipment-forge-seed'
+import { RARITY_CONFIG, type ForgeRarity, type ForgeSlot } from '@/lib/game/equipment-forge-data'
 
 /* ---- Searchable Commander Combobox ---- */
 
@@ -104,251 +105,273 @@ function createDefaultCommander(name?: string): CommanderGoal {
     allocationPct: 100,
     currentEquipment: {},
     targetEquipment: {},
+    currentEquipmentMeta: {},
+    targetEquipmentMeta: {},
   }
 }
 
-/* ---- Equipment slot selector ---- */
+/* ---- Craft time estimate ---- */
 
-function EquipmentSlotDisplay({
-  slot,
-  equipment,
-  isActive,
-  onClick,
-}: {
-  slot: string
-  equipment?: Equipment
-  isActive: boolean
-  onClick: () => void
-}) {
-  const rc = equipment ? RARITY_COLORS[equipment.rarity] : null
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex flex-col items-center gap-1 rounded-lg border px-2 py-2 transition-colors ${
-        isActive ? 'border-primary bg-primary/10' : 'border-border bg-secondary/30 hover:bg-secondary/50'
-      }`}
-    >
-      <div
-        className={
-          rc
-            ? `flex h-8 w-8 items-center justify-center rounded-md border text-xs font-semibold ${rc.bg} ${rc.border} ${rc.text}`
-            : 'flex h-8 w-8 items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground'
-        }
-      >
-        <Shield className={`h-4 w-4 ${rc ? rc.text : 'text-muted-foreground'}`} />
-      </div>
-      <span className="text-[10px] font-medium text-foreground capitalize line-clamp-1 max-w-[50px]">
-        {slot === 'accessory' ? 'Acc' : slot}
-      </span>
-      {equipment && <span className="text-[9px] text-muted-foreground line-clamp-1 max-w-[60px]">{equipment.name}</span>}
-    </button>
-  )
+const CRAFT_MINUTES: Record<ForgeRarity, number> = {
+  common: 5,
+  uncommon: 15,
+  rare: 60,
+  epic: 180,
+  legendary: 480,
+}
+
+function craftTimeLabel(rarity: ForgeRarity): string {
+  const mins = CRAFT_MINUTES[rarity]
+  if (mins < 60) return `~${mins}m`
+  const h = Math.round(mins / 60)
+  return `~${h}h`
 }
 
 /* ---- Equipment section component ---- */
+
+const EQUIP_SLOTS: ForgeSlot[] = ['helmet', 'weapon', 'chest', 'gloves', 'legs', 'boots', 'accessory']
+const SLOT_LABEL: Record<ForgeSlot, string> = {
+  helmet: 'Helmet', weapon: 'Weapon', chest: 'Chest',
+  gloves: 'Gloves', legs: 'Legs', boots: 'Boots', accessory: 'Accessory',
+}
 
 function EquipmentSection({
   cmdId,
   currentEquipment,
   targetEquipment,
+  currentMeta,
+  targetMeta,
   onUpdateCurrent,
   onUpdateTarget,
+  onUpdateCurrentMeta,
+  onUpdateTargetMeta,
 }: {
   cmdId: string
   currentEquipment: Record<string, string>
   targetEquipment: Record<string, string>
+  currentMeta: Record<string, { refined: boolean; awakenLevel: number }>
+  targetMeta: Record<string, { refined: boolean; awakenLevel: number }>
   onUpdateCurrent: (eq: Record<string, string>) => void
   onUpdateTarget: (eq: Record<string, string>) => void
+  onUpdateCurrentMeta: (m: Record<string, { refined: boolean; awakenLevel: number }>) => void
+  onUpdateTargetMeta: (m: Record<string, { refined: boolean; awakenLevel: number }>) => void
 }) {
-  const [activeSlot, setActiveSlot] = useState<string | null>(null)
+  const [activeSlot, setActiveSlot] = useState<ForgeSlot | null>(null)
   const [editMode, setEditMode] = useState<'current' | 'target'>('current')
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(true)
 
-  const slots = ['helmet', 'weapon', 'chest', 'gloves', 'boots', 'accessory']
-
-  const getCurrentEquip = (slot: string) => {
-    const id = currentEquipment[slot]
-    return id ? EQUIPMENT_DB.find((e) => e.id === id) : undefined
+  const getItem = (slot: ForgeSlot, mode: 'current' | 'target') => {
+    const id = mode === 'current' ? currentEquipment[slot] : targetEquipment[slot]
+    return id ? EQUIPMENT_FORGE_SEED_ITEMS.find((e) => e.id === id) : undefined
   }
 
-  const getTargetEquip = (slot: string) => {
-    const id = targetEquipment[slot]
-    return id ? EQUIPMENT_DB.find((e) => e.id === id) : undefined
+  const getMeta = (slot: ForgeSlot, mode: 'current' | 'target') => {
+    const m = mode === 'current' ? currentMeta[slot] : targetMeta[slot]
+    return m ?? { refined: false, awakenLevel: 0 }
   }
 
-  const getVisibleEquipment = () => {
-    if (!activeSlot) return []
-    let list = EQUIPMENT_DB.filter((e) => e.slot === activeSlot)
-    if (search.trim()) {
-      list = list.filter((e) => e.name.toLowerCase().includes(search.toLowerCase()))
-    }
-    return list
-  }
-
-  const handleEquipSelect = (equipmentId: string) => {
-    if (!activeSlot) return
-    const currentMap = editMode === 'current' ? { ...currentEquipment } : { ...targetEquipment }
-    currentMap[activeSlot] = equipmentId
-    if (editMode === 'current') {
-      onUpdateCurrent(currentMap)
+  const setMeta = (slot: ForgeSlot, mode: 'current' | 'target', patch: Partial<{ refined: boolean; awakenLevel: number }>) => {
+    const prev = getMeta(slot, mode)
+    const next = { ...prev, ...patch }
+    if (mode === 'current') {
+      onUpdateCurrentMeta({ ...currentMeta, [slot]: next })
     } else {
-      onUpdateTarget(currentMap)
+      onUpdateTargetMeta({ ...targetMeta, [slot]: next })
+    }
+  }
+
+  const visibleItems = activeSlot
+    ? EQUIPMENT_FORGE_SEED_ITEMS.filter((e) => e.slot === activeSlot && (
+        !search.trim() || e.name.toLowerCase().includes(search.toLowerCase())
+      ))
+    : []
+
+  const handleEquipSelect = (itemId: string) => {
+    if (!activeSlot) return
+    if (editMode === 'current') {
+      onUpdateCurrent({ ...currentEquipment, [activeSlot]: itemId })
+    } else {
+      onUpdateTarget({ ...targetEquipment, [activeSlot]: itemId })
     }
     setActiveSlot(null)
     setSearch('')
   }
 
+  const handleClear = (slot: ForgeSlot, mode: 'current' | 'target') => {
+    if (mode === 'current') {
+      const next = { ...currentEquipment }; delete next[slot]; onUpdateCurrent(next)
+    } else {
+      const next = { ...targetEquipment }; delete next[slot]; onUpdateTarget(next)
+    }
+  }
+
+  // Summary: how many target pieces differ from current + their total craft time
+  const toCraft = EQUIP_SLOTS.filter((s) => targetEquipment[s] && targetEquipment[s] !== currentEquipment[s])
+  const totalCraftMins = toCraft.reduce((sum, s) => {
+    const item = getItem(s, 'target')
+    return sum + (item ? CRAFT_MINUTES[item.rarity] : 0)
+  }, 0)
+
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border border-border px-3 py-2 hover:bg-secondary/30 transition-colors">
         <Label className="text-xs font-medium cursor-pointer">Equipment</Label>
-        {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        <div className="flex items-center gap-2">
+          {toCraft.length > 0 && (
+            <span className="text-[10px] text-muted-foreground">
+              {toCraft.length} to craft · {totalCraftMins >= 60 ? `~${Math.round(totalCraftMins / 60)}h` : `~${totalCraftMins}m`}
+            </span>
+          )}
+          {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </div>
       </CollapsibleTrigger>
       <CollapsibleContent className="pt-3 space-y-3">
+        {/* Mode toggle */}
         <div className="flex gap-1">
-          <button
-            type="button"
-            onClick={() => {
-              setEditMode('current')
-              setActiveSlot(null)
-            }}
-            className={`text-[10px] px-2 py-1 rounded border transition-colors ${
-              editMode === 'current'
-                ? 'border-primary bg-primary/20 text-primary'
-                : 'border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/50'
-            }`}
-          >
-            Current
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setEditMode('target')
-              setActiveSlot(null)
-            }}
-            className={`text-[10px] px-2 py-1 rounded border transition-colors ${
-              editMode === 'target'
-                ? 'border-primary bg-primary/20 text-primary'
-                : 'border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/50'
-            }`}
-          >
-            Target
-          </button>
+          {(['current', 'target'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => { setEditMode(m); setActiveSlot(null) }}
+              className={`text-[10px] px-2 py-1 rounded border transition-colors capitalize ${
+                editMode === m
+                  ? 'border-primary bg-primary/20 text-primary'
+                  : 'border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/50'
+              }`}
+            >
+              {m}
+            </button>
+          ))}
         </div>
 
-        {/* Equipment slots - vertical layout like CommanderStatePanel */}
-        <div className="space-y-2">
-          {slots.map((slot) => {
-            const equip = editMode === 'current' ? getCurrentEquip(slot) : getTargetEquip(slot)
-            const rc = equip ? RARITY_COLORS[equip.rarity] : null
+        {/* Slots */}
+        <div className="space-y-1.5">
+          {EQUIP_SLOTS.map((slot) => {
+            const item = getItem(slot, editMode)
+            const meta = getMeta(slot, editMode)
+            const rc = item ? RARITY_CONFIG[item.rarity] : null
             return (
-              <div
-                key={slot}
-                className="flex items-start justify-between rounded-md border border-border bg-secondary/30 px-2.5 py-2 gap-2"
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveSlot((prev) => (prev === slot ? null : slot))
-                    setSearch('')
-                  }}
-                  className="flex-1 text-left"
-                >
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={
-                        rc
-                          ? `flex h-7 w-7 items-center justify-center rounded-md border text-[10px] font-semibold ${rc.bg} ${rc.border} ${rc.text}`
-                          : 'flex h-7 w-7 items-center justify-center rounded-md border border-dashed border-border text-[10px] text-muted-foreground'
-                      }
-                    >
-                      <Shield className={`h-3.5 w-3.5 ${rc ? rc.text : 'text-muted-foreground'}`} />
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-[11px] font-medium text-foreground capitalize">
-                        {slot === 'accessory' ? 'Accessory' : slot}
-                      </span>
-                      <span className="text-[11px] text-muted-foreground line-clamp-1">
-                        {equip ? equip.name : 'Select equipment'}
-                      </span>
-                    </div>
-                  </div>
-                  {equip && (
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {equip.stats.map((s) => (
-                        <span key={s.type} className="text-[9px] text-muted-foreground">
-                          {STAT_LABELS[s.type]} <span className="text-green-400">+{s.value}%</span>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </button>
-                {equip && (
+              <div key={slot} className="rounded-md border border-border bg-secondary/30 px-2.5 py-2 space-y-1.5">
+                <div className="flex items-center gap-2">
+                  {/* icon / placeholder */}
                   <button
                     type="button"
-                    onClick={() => {
-                      const currentMap = editMode === 'current' ? { ...currentEquipment } : { ...targetEquipment }
-                      delete currentMap[slot]
-                      if (editMode === 'current') {
-                        onUpdateCurrent(currentMap)
-                      } else {
-                        onUpdateTarget(currentMap)
-                      }
-                    }}
-                    className="text-muted-foreground hover:text-destructive h-6 w-6 flex items-center justify-center"
+                    onClick={() => { setActiveSlot((p) => p === slot ? null : slot); setSearch('') }}
+                    className="flex items-center gap-2 flex-1 text-left"
                   >
-                    <X className="h-3 w-3" />
+                    <div
+                      className="flex h-8 w-8 items-center justify-center rounded-md border overflow-hidden shrink-0"
+                      style={rc ? { borderColor: rc.glowColor, background: rc.itemBg } : undefined}
+                    >
+                      {item?.iconUrl ? (
+                        <img src={item.iconUrl} alt={item.name} className="h-7 w-7 object-contain" />
+                      ) : (
+                        <Shield className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] font-medium text-muted-foreground">{SLOT_LABEL[slot]}</p>
+                      {item ? (
+                        <p className={`text-[11px] font-semibold line-clamp-1 ${rc?.nameCls}`}>{item.name}</p>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground/60">Select equipment</p>
+                      )}
+                    </div>
                   </button>
+                  {item && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <span className="text-[9px] text-muted-foreground">{craftTimeLabel(item.rarity)}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleClear(slot, editMode)}
+                        className="text-muted-foreground hover:text-destructive h-5 w-5 flex items-center justify-center"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Refine / Awaken toggles — only when item is set */}
+                {item && (
+                  <div className="flex items-center gap-3 pl-10">
+                    <button
+                      type="button"
+                      onClick={() => setMeta(slot, editMode, { refined: !meta.refined })}
+                      className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${
+                        meta.refined
+                          ? 'border-amber-500 bg-amber-500/20 text-amber-400'
+                          : 'border-border bg-secondary/30 text-muted-foreground hover:bg-secondary/50'
+                      }`}
+                    >
+                      Refined
+                    </button>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] text-muted-foreground">Awaken</span>
+                      {[0, 1, 2, 3, 4, 5].map((lvl) => (
+                        <button
+                          key={lvl}
+                          type="button"
+                          onClick={() => setMeta(slot, editMode, { awakenLevel: lvl })}
+                          className={`h-4 w-4 rounded-sm text-[9px] border transition-colors ${
+                            meta.awakenLevel >= lvl && lvl > 0
+                              ? 'border-purple-500 bg-purple-500/30 text-purple-300'
+                              : lvl === 0 && meta.awakenLevel === 0
+                              ? 'border-border bg-secondary/50 text-muted-foreground'
+                              : 'border-border bg-secondary/30 text-muted-foreground/50 hover:bg-secondary/50'
+                          }`}
+                        >
+                          {lvl === 0 ? '—' : lvl}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
             )
           })}
         </div>
 
-        {/* Equipment selector (inline) */}
+        {/* Inline item picker */}
         {activeSlot && (
           <div className="space-y-2 rounded-lg border border-border bg-background/60 p-3">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold text-muted-foreground">
-                Select {activeSlot === 'accessory' ? 'Accessory' : activeSlot}
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveSlot(null)
-                  setSearch('')
-                }}
-                className="text-muted-foreground hover:text-foreground"
-              >
+              <p className="text-xs font-semibold text-muted-foreground">Select {SLOT_LABEL[activeSlot]}</p>
+              <button type="button" onClick={() => { setActiveSlot(null); setSearch('') }} className="text-muted-foreground hover:text-foreground">
                 <X className="h-3 w-3" />
               </button>
             </div>
             <input
               type="text"
-              placeholder="Search equipment..."
+              placeholder="Search..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full h-7 px-2 text-xs rounded border border-input bg-background"
             />
-            <div className="max-h-40 space-y-1 overflow-y-auto">
-              {getVisibleEquipment().length === 0 && (
+            <div className="max-h-44 space-y-1 overflow-y-auto">
+              {visibleItems.length === 0 && (
                 <p className="text-[11px] text-muted-foreground text-center py-2">No equipment found.</p>
               )}
-              {getVisibleEquipment().map((eq) => {
-                const rc = RARITY_COLORS[eq.rarity]
+              {visibleItems.map((item) => {
+                const rc = RARITY_CONFIG[item.rarity]
                 return (
                   <button
-                    key={eq.id}
+                    key={item.id}
                     type="button"
-                    onClick={() => handleEquipSelect(eq.id)}
-                    className={`w-full flex items-center gap-2 p-1.5 rounded text-left text-[10px] border transition-colors ${rc.bg} ${rc.border} hover:opacity-80`}
+                    onClick={() => handleEquipSelect(item.id)}
+                    className="w-full flex items-center gap-2 p-1.5 rounded text-left border transition-colors hover:opacity-80"
+                    style={{ borderColor: rc.glowColor + '55', background: rc.itemBg }}
                   >
-                    <Shield className={`h-3 w-3 flex-shrink-0 ${rc.text}`} />
+                    {item.iconUrl ? (
+                      <img src={item.iconUrl} alt={item.name} className="h-6 w-6 object-contain rounded shrink-0" />
+                    ) : (
+                      <Shield className={`h-4 w-4 shrink-0 ${rc.nameCls}`} />
+                    )}
                     <div className="flex-1 min-w-0">
-                      <div className={`font-semibold text-[10px] ${rc.text} line-clamp-1`}>{eq.name}</div>
+                      <div className={`font-semibold text-[10px] line-clamp-1 ${rc.nameCls}`}>{item.name}</div>
                     </div>
+                    <span className="text-[9px] text-muted-foreground shrink-0">{craftTimeLabel(item.rarity)}</span>
                   </button>
                 )
               })}
@@ -622,16 +645,18 @@ export function CommandersSection({
                     </div>
                   )}
 
-                  {/* Equipment Section - moved to commander planner tab */}
-                  {/* 
-                  <EquipmentSection 
-                    cmdId={cmd.id} 
+                  {/* Equipment Section */}
+                  <EquipmentSection
+                    cmdId={cmd.id}
                     currentEquipment={cmd.currentEquipment || {}}
                     targetEquipment={cmd.targetEquipment || {}}
+                    currentMeta={cmd.currentEquipmentMeta || {}}
+                    targetMeta={cmd.targetEquipmentMeta || {}}
                     onUpdateCurrent={(eq) => updateCommander(cmd.id, { currentEquipment: eq })}
                     onUpdateTarget={(eq) => updateCommander(cmd.id, { targetEquipment: eq })}
+                    onUpdateCurrentMeta={(m) => updateCommander(cmd.id, { currentEquipmentMeta: m })}
+                    onUpdateTargetMeta={(m) => updateCommander(cmd.id, { targetEquipmentMeta: m })}
                   />
-                  */}
                 </CardContent>
               </Card>
             )

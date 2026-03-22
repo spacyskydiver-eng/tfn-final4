@@ -2182,6 +2182,17 @@ function ForgeTabContent({
                     )
                   })()}
                 </div>
+                {/* Craft time estimate */}
+                <div className="flex items-center justify-center gap-1.5 pt-1">
+                  <span className="text-[10px] text-muted-foreground">Craft time:</span>
+                  <span className="text-[10px] font-medium text-foreground">
+                    {(() => {
+                      const mins: Record<string, number> = { common: 5, uncommon: 15, rare: 60, epic: 180, legendary: 480 }
+                      const m = mins[selectedItem.rarity] ?? 60
+                      return m >= 60 ? `~${Math.round(m / 60)}h` : `~${m}m`
+                    })()}
+                  </span>
+                </div>
               </div>
             ) : (
               <div className="flex justify-center pt-2">

@@ -46,7 +46,7 @@ function SetupTab({ server, onUpdated }: { server: VerificationServer; onUpdated
   const [saved, setSaved] = useState(false)
   const [copied, setCopied] = useState(false)
   const botClientId = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID ?? ''
-  const inviteUrl = `https://discord.com/api/oauth2/authorize?client_id=${botClientId}&permissions=268435456&scope=bot`
+  const inviteUrl = `https://discord.com/api/oauth2/authorize?client_id=${botClientId}&permissions=268520512&scope=bot%20applications.commands`
 
   async function save() {
     setSaving(true); setError(null); setSaved(false)
@@ -74,8 +74,11 @@ function SetupTab({ server, onUpdated }: { server: VerificationServer; onUpdated
     <div className="space-y-5">
       {/* Invite bot */}
       <div className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-        <p className="text-sm font-semibold text-foreground mb-1">Step 1 — Invite the TFN Bot</p>
-        <p className="text-xs text-muted-foreground mb-3">The bot needs to be in your Discord server to watch for verification images.</p>
+        <p className="text-sm font-semibold text-foreground mb-1">Step 1 — Add the TFN Bot to Your Server</p>
+        <p className="text-xs text-muted-foreground mb-1">The TFN Bot must be in your project's Discord server to watch for verification screenshots.</p>
+        <p className="text-xs text-muted-foreground mb-3">
+          <span className="font-medium text-foreground">Note:</span> During the invite flow, Discord may show the application name as <span className="font-mono">"rok"</span> — this is correct. Once added, the bot will appear as <span className="font-mono">TFN App</span> in your server.
+        </p>
         <a href={inviteUrl} target="_blank" rel="noopener noreferrer"
           className="inline-flex items-center gap-2 rounded-lg bg-primary/15 border border-primary/25 px-4 py-2 text-sm font-medium text-primary hover:bg-primary/25 transition-colors"
         >
@@ -457,7 +460,26 @@ export function VerifyContent() {
           <Shield className="h-8 w-8 text-primary" />
         </div>
         <h2 className="text-lg font-semibold text-foreground mb-2">Discord Verification</h2>
-        <p className="text-sm text-muted-foreground mb-6">Sign in with Discord to configure the TFN verification bot for your server. Free up to 150 verifications.</p>
+        <p className="text-sm text-muted-foreground mb-6">Sign in with Discord to configure the TFN Bot verification system for your project server.</p>
+      </div>
+    )
+  }
+
+  const hasAccess = user?.isAdmin || user?.isLeadership
+
+  if (!hasAccess) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center max-w-md mx-auto">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-yellow-500/10 mb-5">
+          <Shield className="h-8 w-8 text-yellow-400" />
+        </div>
+        <h2 className="text-lg font-semibold text-foreground mb-2">Project Leadership Required</h2>
+        <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
+          Discord Verification is only available to verified project servers. You need project leadership access to register your server and use the TFN Bot verification system.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Apply for leadership access via the <span className="font-medium text-foreground">Project Tools</span> guide in the sidebar.
+        </p>
       </div>
     )
   }
@@ -468,7 +490,7 @@ export function VerifyContent() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-foreground">Discord Verification</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Auto-verify players by scanning governor profile screenshots. Free up to 150 verifications per server.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Auto-verify players in your project server by scanning governor profile screenshots. 150 free verifications included.</p>
         </div>
         <button onClick={() => setShowAdd(v => !v)} className="flex-shrink-0 flex items-center gap-2 rounded-xl border border-border/50 bg-card/60 px-4 py-2 text-sm text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
           <Plus className="h-4 w-4" />

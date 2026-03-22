@@ -1768,7 +1768,7 @@ export function ArkContent() {
             Command center for Ark registration, team building, and strategy planning.
           </p>
         </div>
-        {user?.isAdmin && (
+        {(user?.isAdmin || user?.isLeadership) && (
           <button onClick={() => setCreatingEvent(true)}
             className="flex items-center gap-2 rounded-xl bg-primary/15 border border-primary/25 text-primary text-sm font-medium px-4 py-2 hover:bg-primary/25 transition">
             <Plus className="h-4 w-4" /> New Ark Event
@@ -1820,14 +1820,14 @@ export function ArkContent() {
           <p className="text-sm text-muted-foreground mb-5 max-w-sm">
             Create your first Ark event to start building registration forms, collecting player availability, and assigning teams.
           </p>
-          {user?.isAdmin && (
+          {(user?.isAdmin || user?.isLeadership) && (
             <button onClick={() => setCreatingEvent(true)}
               className="flex items-center gap-2 rounded-xl bg-primary/15 border border-primary/25 text-primary text-sm font-medium px-5 py-2.5 hover:bg-primary/25 transition">
               <Plus className="h-4 w-4" /> Create First Event
             </button>
           )}
           {!user && (
-            <p className="text-xs text-muted-foreground">Sign in as an admin to create events.</p>
+            <p className="text-xs text-muted-foreground">Sign in with Discord to create events.</p>
           )}
         </div>
       ) : (

@@ -1,6 +1,6 @@
 "use client"
 
-import { Sword, Map, Crown, ExternalLink, CheckCircle2, ChevronRight, Users, Shield, Globe } from "lucide-react"
+import { Sword, Map, Crown, ExternalLink, CheckCircle2, ChevronRight, Users, Shield, Globe, MessageSquare } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 
 interface ProjectToolsHomeProps {
@@ -19,10 +19,10 @@ const STEPS = [
     num: 2,
     icon: Crown,
     title: "Invite the TFN Bot to Your Project Server",
-    body: "The TFN Bot must be installed in your project's own Discord server. This is required for project registration.",
+    body: "The TFN Bot must be installed in your project's own Discord server — this is required for project registration.\n\nNote: During the Discord invite flow the application may appear as \"rok\" — this is correct. Once added it will show as TFN App in your server.",
     action: {
       label: "Invite TFN Bot",
-      href: `https://discord.com/oauth2/authorize?client_id=${process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID ?? "1469309783332098140"}&scope=bot%20applications.commands&permissions=8`,
+      href: `https://discord.com/oauth2/authorize?client_id=1469309783332098140&scope=bot%20applications.commands&permissions=268520512`,
     },
   },
   {
@@ -67,6 +67,13 @@ const TOOLS = [
     description: "Visually plan your kingdom territory layout for Ark of Osiris and other events. Assign tiles, plan routes, and coordinate your team's positioning.",
     features: ["Visual tile assignment", "Team coordination", "Shared planning board"],
   },
+  {
+    id: "discord-verify",
+    icon: MessageSquare,
+    title: "Discord Verification",
+    description: "Set up governor verification in your project's Discord server. Members confirm their in-game governor ID via screenshot — the TFN Bot automatically assigns kingdom, alliance, and rank roles.",
+    features: ["Governor ID verification", "Auto role assignment", "150 free verification slots", "Screenshot OCR via Google Vision"],
+  },
 ]
 
 export function ProjectToolsHome({ onNavigate }: ProjectToolsHomeProps) {
@@ -98,12 +105,15 @@ export function ProjectToolsHome({ onNavigate }: ProjectToolsHomeProps) {
             <p className="text-sm font-medium text-green-300">You have project leadership access</p>
             <p className="text-xs text-green-400/80 mt-0.5">The tools below are unlocked for your account.</p>
           </div>
-          <div className="ml-auto flex gap-2">
+          <div className="ml-auto flex flex-wrap gap-2">
             <button onClick={() => onNavigate("ark")} className="text-xs rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-300 px-3 py-1.5 font-medium transition">
               Ark of Osiris →
             </button>
             <button onClick={() => onNavigate("territory-planner")} className="text-xs rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-300 px-3 py-1.5 font-medium transition">
               Territory Planner →
+            </button>
+            <button onClick={() => onNavigate("discord-verify")} className="text-xs rounded-lg bg-green-500/20 hover:bg-green-500/30 text-green-300 px-3 py-1.5 font-medium transition">
+              Discord Verify →
             </button>
           </div>
         </div>
