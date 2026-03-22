@@ -47,7 +47,6 @@ import { VerifyContent } from "@/components/verify-content";
 import { ArkContent } from "@/components/ark-content";
 import { ProjectToolsHome } from "@/components/project-tools-home";
 import { RokMailContent } from "@/components/rok-mail-content";
-import { FlagCalculatorContent } from "@/components/flag-calculator-content";
 import { SunsetCanyonContent } from "@/components/sunset-canyon-content";
 import { GatheringOfHeroesContent } from "@/components/gathering-of-heroes-content";
 import { KvkHealingContent } from "@/components/kvk-healing-content";
@@ -170,12 +169,7 @@ const tabMeta: Record<string, { label: string; description: string; icon: React.
     description: "Format in-game mail with colours, bold, and templates",
     icon: MessageSquare,
   },
-  "flag-calculator": {
-    label: "Flag Calculator",
-    description: "Calculate Lost Kingdom flag costs with production simulation",
-    icon: Flag,
-  },
-  "sunset-canyon": {
+"sunset-canyon": {
     label: "Sunset Canyon",
     description: "Optimise your defensive formation for Sunset Canyon",
     icon: Shield,

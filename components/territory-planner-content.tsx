@@ -3438,22 +3438,6 @@ ctx.fillText(
 
       {activeTab === "flags" ? (
         <div className="space-y-4">
-          {isLeadership && (
-            <div className="flex items-center justify-between rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
-              <div>
-                <p className="text-sm font-semibold text-foreground">Kings Codex Flag Calculator</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Verify flag costs and production with the official Kings Codex tool</p>
-              </div>
-              <a
-                href="https://riseofkingdoms.codexhelper.com/flag-cost-calculator"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/15 hover:bg-primary/25 text-primary text-xs font-semibold transition-colors flex-shrink-0"
-              >
-                Open Kings Codex <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
-          )}
           <FlagCalculatorContent />
         </div>
       ) : activeTab === "timers" ? (

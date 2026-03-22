@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/auth-context'
 import {
   ShoppingCart, Check, X, Copy, CheckCheck, Loader2,
   Zap, Star, Trophy, ScanSearch, Database, Globe,
-  ChevronDown, ChevronUp, ArrowRight,
+  ChevronDown, ChevronUp, ArrowRight, Crown,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -130,6 +130,48 @@ const ALLIANCE_TIERS: AllianceTier[] = [
       { name: 'Auto Refresh Mobilization', price: 7, sub: ['Automatically refresh mobilization alerts'] },
     ],
   },
+]
+
+// ─── VIP Bundle data ─────────────────────────────────────────────────────────
+
+const VIP_LEGENDARY_FEATURES = [
+  'Fort Tracker — real-time barbarian fort tracker',
+  'Title Service — automated kingdom title rotation',
+  'Alliance Activity — Gift Tracking, Member Tracking, Comparison, Reports, Analytics, Storehouse Analytics',
+  'Player Finder — search by name, ID, or alliance',
+  'Alliance Tracker L2 — Fort & Flag Tracking, Building & Repair Times, Under Attack Alerts, Burning/Destruction Timers, Dashboard + Discord Alerts',
+  'Alliance Tracker L3 — Flag & Fort Placement with coordinates, Home Kingdom + KvK maps, Real-time map updates',
+  'Alliance Mobilization — auto-ping rallies & war actions',
+  'Auto Refresh Mobilization — automatically refresh mobilization alerts',
+  'Discord Verification — link accounts + auto-assign roles',
+  'Alliance Rank Manager — auto assign ranks & roles',
+  'Barbarian Fort Finder — locate forts across the map',
+]
+
+const VIP_KVK_PREMIUM_FEATURES = [
+  'Full KvK — All Camps covered',
+  'Daily Full Scans (all kingdoms / camps)',
+  'Extra Scans on Request (Passes, Altars, Events)',
+  'PreKvK + Honor Rankings',
+  'Stage-by-Stage Tracking',
+  'DKP Setup + Management',
+  'Goals & Requirements',
+  'Penalty & Bonus System',
+  'Scheduled Scans handled for you',
+  'Website Dashboard + Discord Reports',
+  'Ongoing Support',
+]
+
+const VIP_KVK_TRACKING_FEATURES = [
+  'Unlimited Kingdom Scans',
+  'Scan within ~5 minutes',
+  'Schedule Scans yourself',
+  'Daily Honor + PreKvK Tracking',
+  'Stage-by-Stage Tracking',
+  'DKP Management',
+  'Goals & Requirements',
+  'Penalty & Bonus System',
+  'Website Dashboard + Discord Access',
 ]
 
 // ─── KvK Premium bundle data ──────────────────────────────────────────────────
@@ -533,6 +575,188 @@ function AllianceTierCard({ tier, inCart, onAdd }: { tier: AllianceTier; inCart:
   )
 }
 
+// ─── VIP Bundle card ──────────────────────────────────────────────────────────
+
+function VipBundleCard({ inCart, onAdd }: { inCart: (id: string) => boolean; onAdd: (toolId: string, label: string, isSoC?: boolean) => void }) {
+  const [kvkOption, setKvkOption] = useState<'premium' | 'tracking'>('premium')
+  const [socType, setSocType] = useState<'soc' | 'nonSoc'>('soc')
+  const [showFeatures, setShowFeatures] = useState(false)
+
+  const toolId = kvkOption === 'premium'
+    ? (socType === 'soc' ? 'vip-premium-soc' : 'vip-premium-nonsoc')
+    : 'vip-tracking'
+  const isSoC = kvkOption === 'premium' ? socType === 'soc' : undefined
+  const label = kvkOption === 'premium'
+    ? `VIP Bundle — Legendary + KvK Premium (${socType === 'soc' ? 'SoC' : 'Non-SoC'})`
+    : 'VIP Bundle — Legendary + KvK Data Tracking'
+  const inCartNow = inCart(toolId)
+
+  const premiumValue = socType === 'soc' ? 150 : 80
+  const totalValue = 39 + (kvkOption === 'premium' ? premiumValue : 29)
+  const saving = totalValue - 79
+
+  return (
+    <div className="relative rounded-2xl border-2 border-primary/50 bg-gradient-to-br from-primary/10 via-primary/5 to-card shadow-[0_0_60px_-15px_hsl(var(--glow)/0.35)]">
+      {/* Best Value badge */}
+      <div className="absolute -top-4 inset-x-0 flex justify-center">
+        <span className="rounded-full bg-primary px-4 py-1 text-xs font-bold uppercase tracking-wide text-primary-foreground shadow-lg">
+          Best Value
+        </span>
+      </div>
+
+      <div className="p-6 pt-8">
+        <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+          {/* Title + tagline */}
+          <div>
+            <h3 className="text-xl font-bold text-foreground">VIP Bundle</h3>
+            <p className="text-sm text-muted-foreground mt-0.5">Alliance Control (Legendary) + your choice of KvK coverage</p>
+          </div>
+          {/* Price */}
+          <div className="text-right">
+            <div className="flex items-end gap-1.5">
+              <span className="text-4xl font-bold text-foreground">$79</span>
+              <span className="text-sm text-muted-foreground pb-1">/mo</span>
+            </div>
+            <p className="text-xs text-green-400 font-medium mt-0.5">
+              {saving > 0 ? `Save $${saving}+/mo` : 'Best all-in-one value'}
+              {kvkOption === 'premium' && socType === 'soc' && <span className="text-muted-foreground/60"> (~{Math.round(saving/totalValue*100)}% off)</span>}
+            </p>
+          </div>
+        </div>
+
+        {/* Value comparison */}
+        <div className="grid grid-cols-2 gap-3 mb-6 sm:grid-cols-3">
+          <div className="rounded-xl border border-border/40 bg-muted/20 px-3 py-2.5 text-center">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Alliance Control</p>
+            <p className="text-sm font-bold text-foreground">$39/mo</p>
+            <p className="text-[10px] text-muted-foreground/60">Legendary tier</p>
+          </div>
+          <div className="rounded-xl border border-border/40 bg-muted/20 px-3 py-2.5 text-center">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">{kvkOption === 'premium' ? 'KvK Premium' : 'Data Tracking'}</p>
+            <p className="text-sm font-bold text-foreground">${kvkOption === 'premium' ? premiumValue : 29}{kvkOption === 'premium' ? '' : '/mo'}</p>
+            <p className="text-[10px] text-muted-foreground/60">{kvkOption === 'premium' ? 'one-time per KvK' : 'self-service'}</p>
+          </div>
+          <div className="rounded-xl border border-primary/30 bg-primary/10 px-3 py-2.5 text-center col-span-2 sm:col-span-1">
+            <p className="text-[10px] text-primary uppercase tracking-wide mb-0.5 font-semibold">You pay</p>
+            <p className="text-sm font-bold text-primary">$79/mo</p>
+            <p className="text-[10px] text-green-400">{saving > 0 ? `Save $${saving}+` : 'All-in-one'}</p>
+          </div>
+        </div>
+
+        {/* Competitor callout */}
+        <div className="rounded-xl border border-border/30 bg-muted/20 px-4 py-3 mb-6 text-xs text-muted-foreground">
+          <span className="font-semibold text-foreground">Why $79 works: </span>
+          Competitors charge ~$70 for bots + ~$200 for KvK scanning = ~$270 total. You pay $79 — all-in. A no-brainer for serious alliances.
+        </div>
+
+        {/* KvK option selector */}
+        <div className="mb-5">
+          <p className="text-xs font-semibold text-foreground mb-2">Choose your KvK coverage</p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setKvkOption('premium')}
+              className={cn(
+                'rounded-xl border p-3 text-left transition-colors',
+                kvkOption === 'premium' ? 'border-primary/40 bg-primary/10' : 'border-border/50 bg-muted/10 hover:bg-muted/20'
+              )}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <div className={cn('h-3 w-3 rounded-full border-2 flex-shrink-0', kvkOption === 'premium' ? 'border-primary bg-primary' : 'border-muted-foreground')} />
+                <p className="text-xs font-semibold text-foreground">KvK Premium Bundle</p>
+              </div>
+              <p className="text-[11px] text-muted-foreground pl-5">Done for you — staff handle everything</p>
+            </button>
+            <button
+              onClick={() => setKvkOption('tracking')}
+              className={cn(
+                'rounded-xl border p-3 text-left transition-colors',
+                kvkOption === 'tracking' ? 'border-primary/40 bg-primary/10' : 'border-border/50 bg-muted/10 hover:bg-muted/20'
+              )}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <div className={cn('h-3 w-3 rounded-full border-2 flex-shrink-0', kvkOption === 'tracking' ? 'border-primary bg-primary' : 'border-muted-foreground')} />
+                <p className="text-xs font-semibold text-foreground">KvK Data Tracking</p>
+              </div>
+              <p className="text-[11px] text-muted-foreground pl-5">Self-service — full control in your hands</p>
+            </button>
+          </div>
+
+          {/* SoC toggle for premium */}
+          {kvkOption === 'premium' && (
+            <div className="flex items-center gap-2 mt-3">
+              <span className="text-[11px] text-muted-foreground">KvK type:</span>
+              <button onClick={() => setSocType('soc')} className={cn('rounded-lg px-3 py-1 text-xs font-medium transition-colors border', socType === 'soc' ? 'bg-primary/15 text-primary border-primary/30' : 'text-muted-foreground border-border/50 hover:bg-secondary')}>
+                Season of Conquest
+              </button>
+              <button onClick={() => setSocType('nonSoc')} className={cn('rounded-lg px-3 py-1 text-xs font-medium transition-colors border', socType === 'nonSoc' ? 'bg-primary/15 text-primary border-primary/30' : 'text-muted-foreground border-border/50 hover:bg-secondary')}>
+                Non-SoC
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Add to cart */}
+        {inCartNow ? (
+          <div className="flex items-center justify-center gap-2 w-full rounded-xl bg-green-500/10 border border-green-500/20 py-3 text-sm font-semibold text-green-400 mb-4">
+            <Check className="h-4 w-4" /> Added to cart
+          </div>
+        ) : (
+          <button
+            onClick={() => onAdd(toolId, label, isSoC)}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity mb-4"
+          >
+            <ShoppingCart className="h-4 w-4" />
+            Add VIP Bundle to cart — $79/mo
+          </button>
+        )}
+
+        {/* Feature toggle */}
+        <button
+          onClick={() => setShowFeatures(f => !f)}
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {showFeatures ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          {showFeatures ? 'Hide full feature list' : 'View full feature list'}
+        </button>
+      </div>
+
+      {/* Expanded feature list */}
+      {showFeatures && (
+        <div className="border-t border-primary/20 px-6 pb-6 pt-5 grid grid-cols-1 gap-6 sm:grid-cols-2">
+          <div>
+            <p className="text-xs font-bold text-foreground mb-3 flex items-center gap-2">
+              <Trophy className="h-3.5 w-3.5 text-amber-400" />
+              Alliance Control — Legendary (all tools)
+            </p>
+            <ul className="space-y-1.5">
+              {VIP_LEGENDARY_FEATURES.map((f, i) => (
+                <li key={i} className="flex items-start gap-2 text-[11px] text-muted-foreground">
+                  <Check className="h-3 w-3 text-green-400 shrink-0 mt-0.5" />
+                  {f}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <p className="text-xs font-bold text-foreground mb-3 flex items-center gap-2">
+              <ScanSearch className="h-3.5 w-3.5 text-primary" />
+              {kvkOption === 'premium' ? 'KvK Premium Bundle (Done For You)' : 'KvK Data Tracking (Self-Service)'}
+            </p>
+            <ul className="space-y-1.5">
+              {(kvkOption === 'premium' ? VIP_KVK_PREMIUM_FEATURES : VIP_KVK_TRACKING_FEATURES).map((f, i) => (
+                <li key={i} className="flex items-start gap-2 text-[11px] text-muted-foreground">
+                  <Check className="h-3 w-3 text-green-400 shrink-0 mt-0.5" />
+                  {f}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Section heading ──────────────────────────────────────────────────────────
 
 function SectionHeading({ icon: Icon, title, subtitle, label }: { icon: React.ElementType; title: string; subtitle: string; label: string }) {
@@ -637,6 +861,20 @@ export function BotToolsHome({ cart, onAddToCart, onRemoveFromCart, onOpenCart, 
             <p className="text-xs text-muted-foreground">{s.text}</p>
           </div>
         ))}
+      </div>
+
+      {/* ── VIP Bundle ──────────────────────────────────────────────────────── */}
+      <div>
+        <SectionHeading
+          icon={Crown}
+          title="VIP Bundle"
+          label="All-In-One"
+          subtitle="Everything in Legendary Alliance Control plus full KvK coverage — one price, zero compromises."
+        />
+        <VipBundleCard
+          inCart={(id) => cartIds.has(id)}
+          onAdd={(toolId, label, isSoC) => addItem({ toolId, label, price: 79, isSoC })}
+        />
       </div>
 
       {/* ── Section 1: Alliance Control ─────────────────────────────────────── */}
