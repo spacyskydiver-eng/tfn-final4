@@ -3,9 +3,9 @@
 import { useState } from 'react'
 import { useAuth } from '@/lib/auth-context'
 import {
-  Crown, Flag, Search, Bell, ScanSearch,
-  ShoppingCart, Check, X, Copy, CheckCheck,
-  Loader2, Star, Zap, Trophy, Database, Globe, Users,
+  ShoppingCart, Check, X, Copy, CheckCheck, Loader2,
+  Zap, Star, Trophy, ScanSearch, Database, Globe,
+  ChevronDown, ChevronUp, ArrowRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -28,92 +28,217 @@ interface BotToolsHomeProps {
   onNavigate: (tab: string) => void
 }
 
-// ─── Alliance Control tiers ───────────────────────────────────────────────────
+// ─── Alliance Control data ────────────────────────────────────────────────────
 
-const ALLIANCE_TIERS = [
+interface FeatureGroup {
+  name: string
+  price?: number
+  inherited?: boolean
+  sub: string[]
+}
+
+interface AllianceTier {
+  id: string
+  label: string
+  price: number
+  individualValue: number
+  savingsAmount: number
+  savePercent: number
+  icon: React.ElementType
+  color: string
+  bg: string
+  border: string
+  ring: string
+  highlight: boolean
+  badge?: string
+  tagline: string
+  featureGroups: FeatureGroup[]
+}
+
+const ALLIANCE_TIERS: AllianceTier[] = [
   {
     id: 'alliance-basic',
     label: 'Basic',
     price: 19,
+    individualValue: 42,
+    savingsAmount: 23,
+    savePercent: 55,
     icon: Zap,
-    color: 'text-blue-400',
-    bg: 'bg-blue-500/10',
-    border: 'border-blue-500/20',
+    color: 'text-sky-400',
+    bg: 'bg-sky-500/10',
+    border: 'border-sky-500/20',
+    ring: 'ring-sky-500/20',
     highlight: false,
-    features: [
-      'Title Giving (auto-rotate 24/7)',
-      'Player Finder (cross-kingdom search)',
-      'Fort Tracking (real-time alerts)',
+    tagline: 'Core automation for active alliances',
+    featureGroups: [
+      { name: 'Fort Tracker', price: 14, sub: ['Real-time barbarian fort tracker'] },
+      { name: 'Title Service', price: 12, sub: ['Automated kingdom title rotation'] },
+      {
+        name: 'Alliance Activity', price: 9,
+        sub: ['Gift Tracking', 'Member Activity Tracking', 'Member Comparison', 'Automated Reports', 'Performance Analytics', 'Storehouse Analytics'],
+      },
+      { name: 'Player Finder', price: 7, sub: ['Search players by name, ID, or alliance'] },
     ],
-    individualValue: 55,
   },
   {
     id: 'alliance-elite',
     label: 'Elite',
     price: 29,
+    individualValue: 75,
+    savingsAmount: 46,
+    savePercent: 61,
     icon: Star,
     color: 'text-primary',
     bg: 'bg-primary/10',
     border: 'border-primary/30',
+    ring: 'ring-primary/20',
     highlight: true,
     badge: 'Most Popular',
-    features: [
-      'Title Giving (auto-rotate 24/7)',
-      'Player Finder (cross-kingdom search)',
-      'Fort Tracking (real-time alerts)',
-      'Alliance Mobilization (auto-ping on attack)',
+    tagline: 'Most alliances upgrade to Elite for full automation',
+    featureGroups: [
+      { name: 'Everything in Basic', inherited: true, sub: [] },
+      {
+        name: 'Alliance Tracker (Level 2)', price: 10,
+        sub: ['Fort & Flag Tracking', 'Building Time Tracking', 'Repair Time Tracking', 'Under Attack Alerts', 'Burning / Destruction Timers', 'Alerts on Dashboard + Discord'],
+      },
+      { name: 'Alliance Mobilization', price: 9, sub: ['Auto-ping rallies & war actions'] },
+      { name: 'Discord Verification', price: 7, sub: ['Link accounts + auto-assign roles'] },
+      { name: 'Alliance Rank Manager', price: 7, sub: ['Auto assign ranks & roles'] },
     ],
-    individualValue: 75,
   },
   {
     id: 'alliance-legendary',
     label: 'Legendary',
     price: 39,
+    individualValue: 97,
+    savingsAmount: 58,
+    savePercent: 60,
     icon: Trophy,
     color: 'text-amber-400',
     bg: 'bg-amber-500/10',
     border: 'border-amber-500/20',
+    ring: 'ring-amber-500/20',
     highlight: false,
-    features: [
-      'Title Giving (auto-rotate 24/7)',
-      'Player Finder (cross-kingdom search)',
-      'Fort Tracking (real-time alerts)',
-      'Alliance Mobilization (auto-ping on attack)',
-      'KvK Data Tracking (1 month self-service)',
+    tagline: 'Complete alliance control for competitive KvK',
+    featureGroups: [
+      { name: 'Everything in Elite', inherited: true, sub: [] },
+      {
+        name: 'Alliance Tracker (Level 3)', price: 8,
+        sub: ['Flag & Fort Placement with coordinates', 'Home Kingdom + KvK maps', 'Real-time map updates'],
+      },
+      { name: 'Barbarian Fort Finder', price: 7, sub: ['Locate forts across the map'] },
+      { name: 'Auto Refresh Mobilization', price: 7, sub: ['Automatically refresh mobilization alerts'] },
     ],
-    individualValue: 104,
   },
 ]
 
-// ─── KvK Premium bundles ──────────────────────────────────────────────────────
+// ─── KvK Premium bundle data ──────────────────────────────────────────────────
+
+const KVK_FULL_FEATURES_SOC = [
+  'Daily Full Scans (All Kingdoms / Camps)',
+  'Extra Scans on Request (Passes, Altars, Events)',
+  'PreKvK Rankings',
+  'Daily Honor Rankings',
+  'Stage-by-Stage Tracking',
+  'DKP Setup + Management',
+  'Goals & Requirements',
+  'Penalty & Bonus System',
+  'Scheduled Scans handled for you',
+  'Website Dashboard',
+  'Discord Reports',
+  'Ongoing Support',
+]
+
+const KVK_FULL_FEATURES_NONSOC = [
+  'Daily Full Scans (All Kingdoms)',
+  'Extra Scans on Request',
+  'PreKvK Rankings',
+  'Daily Honor Rankings',
+  'Stage-by-Stage Tracking',
+  'DKP Setup + Management',
+  'Goals & Requirements',
+  'Penalty & Bonus System',
+  'Scheduled Scans handled for you',
+  'Website Dashboard',
+  'Discord Reports',
+]
 
 const KVK_BUNDLES = {
   soc: [
-    { id: 'soc-full',     label: 'Full KvK',       camps: 4, price: 150 },
-    { id: 'soc-two',      label: 'Two Camp Bundle', camps: 2, price: 80  },
-    { id: 'soc-one',      label: 'One Camp Bundle', camps: 1, price: 40  },
+    { id: 'kvk-soc-full', label: 'Full KvK',        camps: 'All camps',   price: 150, features: KVK_FULL_FEATURES_SOC },
+    { id: 'kvk-soc-two',  label: 'Two Camp Bundle',  camps: '2 camps',     price: 80,  features: [...KVK_FULL_FEATURES_SOC] },
+    { id: 'kvk-soc-one',  label: 'One Camp Bundle',  camps: '1 camp',      price: 40,  features: [...KVK_FULL_FEATURES_SOC] },
   ],
   nonSoc: [
-    { id: 'nonsoc-full',  label: 'Full KvK',        camps: 4, price: 80  },
-    { id: 'nonsoc-two',   label: 'Two Camp Bundle',  camps: 2, price: 40  },
-    { id: 'nonsoc-one',   label: 'One Camp Bundle',  camps: 1, price: 20  },
+    { id: 'kvk-nonsoc-full', label: 'Full KvK',       camps: 'All kingdoms', price: 80,  features: KVK_FULL_FEATURES_NONSOC },
+    { id: 'kvk-nonsoc-two',  label: 'Two Camp Bundle', camps: '2 camps',      price: 40,  features: [...KVK_FULL_FEATURES_NONSOC] },
+    { id: 'kvk-nonsoc-one',  label: 'One Camp Bundle', camps: '1 camp',       price: 20,  features: [...KVK_FULL_FEATURES_NONSOC] },
   ],
 }
 
-// ─── KvK Data Tracking (self-service) ─────────────────────────────────────────
+// ─── KvK Data Tracking data ───────────────────────────────────────────────────
 
-const KVK_TRACKING = [
-  { id: 'tracking-1mo',  label: '1 Month',  price: 29,  perMonth: 29  },
-  { id: 'tracking-2mo',  label: '2 Months', price: 55,  perMonth: 27.5 },
-  { id: 'tracking-1yr',  label: '1 Year',   price: 240, perMonth: 20  },
+const KVK_TRACKING_FEATURES = [
+  'Unlimited Kingdom Scans',
+  'Scan within ~5 minutes',
+  'Schedule Scans yourself',
+  'Daily Honor Scans',
+  'PreKvK & Stage-by-Stage Tracking',
+  'DKP Management',
+  'Goals & Requirements',
+  'Penalty & Bonus System',
+  'Hall of Heroes Processing',
+  'Website Dashboard',
+  'Discord Access',
 ]
 
-// ─── Multi-Kingdom scan packages ──────────────────────────────────────────────
+const KVK_TRACKING = [
+  { id: 'kvk-track-1mo', label: 'Monthly',  price: 29,  perMonth: 29,   saving: null },
+  { id: 'kvk-track-2mo', label: '2 Months', price: 55,  perMonth: 27.5, saving: 3  },
+  { id: 'kvk-track-1yr', label: '1 Year',   price: 240, perMonth: 20,   saving: 108 },
+]
+
+// ─── Multi-Kingdom data ───────────────────────────────────────────────────────
 
 const MULTI_KVK = [
-  { id: 'multi-basic',     label: 'Basic',     scans: 10,  price: 55  },
-  { id: 'multi-elite',     label: 'Elite',     scans: 25,  price: 85  },
-  { id: 'multi-legendary', label: 'Legendary', scans: 60,  price: 150 },
+  {
+    id: 'kvk-multi-basic',
+    label: 'Basic',
+    price: 55,
+    scans: 10,
+    features: [
+      '10 Full KvK Scans',
+      'Scan All Kingdoms in KvK',
+      'Website Dashboard',
+    ],
+  },
+  {
+    id: 'kvk-multi-elite',
+    label: 'Elite',
+    price: 85,
+    scans: 25,
+    features: [
+      '25 Full KvK Scans',
+      'Scan All Kingdoms',
+      'Website Dashboard',
+      'Honor Rankings',
+      'PreKvK Rankings',
+    ],
+  },
+  {
+    id: 'kvk-multi-legendary',
+    label: 'Legendary',
+    price: 150,
+    scans: 60,
+    features: [
+      '60 Full KvK Scans',
+      'Scan All Kingdoms',
+      'Website Dashboard',
+      'Honor Rankings',
+      'PreKvK Rankings',
+      'Autarch Rankings',
+    ],
+  },
 ]
 
 // ─── Checkout panel ───────────────────────────────────────────────────────────
@@ -178,9 +303,7 @@ function CheckoutPanel({ cart, onClose, onRemove, onCheckoutComplete }: Checkout
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <div className="flex items-center gap-2">
             <ShoppingCart className="h-4 w-4 text-primary" />
-            <h2 className="text-sm font-semibold text-foreground">
-              {step === 'cart' ? 'Cart' : 'Order Confirmed'}
-            </h2>
+            <h2 className="text-sm font-semibold text-foreground">{step === 'cart' ? 'Cart' : 'Order Confirmed'}</h2>
           </div>
           <button onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors">
             <X className="h-4 w-4" />
@@ -220,19 +343,18 @@ function CheckoutPanel({ cart, onClose, onRemove, onCheckoutComplete }: Checkout
           {step === 'keys' && (
             <div className="space-y-5">
               <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-4 text-sm text-green-400">
-                Order placed! Copy your product key and redeem it in our Discord server.
+                Order placed. Copy your product key and redeem it in the TFN Discord server.
               </div>
               <div className="rounded-xl border border-border/50 bg-muted/20 p-4 space-y-2">
                 <p className="text-xs font-semibold text-foreground mb-2">Order summary</p>
                 {cart.map(item => (
                   <div key={item.cartId} className="flex justify-between text-xs text-muted-foreground">
-                    <span>{item.label}{item.isSoC !== undefined ? ` (${item.isSoC ? 'SoC' : 'Non-SoC'})` : ''}</span>
-                    <span>${item.price}</span>
+                    <span className="truncate pr-2">{item.label}{item.isSoC !== undefined ? ` (${item.isSoC ? 'SoC' : 'Non-SoC'})` : ''}</span>
+                    <span className="shrink-0">${item.price}</span>
                   </div>
                 ))}
                 <div className="flex justify-between text-xs font-semibold text-foreground border-t border-border/50 pt-2 mt-2">
-                  <span>Total</span>
-                  <span>${total}</span>
+                  <span>Total</span><span>${total}</span>
                 </div>
               </div>
               {productKey && (
@@ -253,15 +375,13 @@ function CheckoutPanel({ cart, onClose, onRemove, onCheckoutComplete }: Checkout
                   <li>Use the <span className="font-mono bg-muted/50 px-1 rounded">/activate</span> slash command</li>
                   <li>Paste your product key when prompted</li>
                   <li>A private ticket will open with our staff team</li>
-                  <li>Complete payment via PayPal — staff will set everything up</li>
+                  <li>Complete payment via PayPal — staff set everything up</li>
                 </ol>
               </div>
             </div>
           )}
 
-          {error && (
-            <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-xs text-red-400">{error}</div>
-          )}
+          {error && <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-xs text-red-400">{error}</div>}
         </div>
 
         {step === 'cart' && cart.length > 0 && (
@@ -281,13 +401,11 @@ function CheckoutPanel({ cart, onClose, onRemove, onCheckoutComplete }: Checkout
               </>
             ) : (
               <button onClick={handleCheckout} disabled={loading} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60">
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {loading && <Loader2 className="h-4 w-4 animate-spin" />}
                 {loading ? 'Processing...' : 'Confirm Order'}
               </button>
             )}
-            <p className="text-center text-[10px] text-muted-foreground/60">
-              Payment via PayPal after staff review. No charge yet.
-            </p>
+            <p className="text-center text-[10px] text-muted-foreground/60">Payment via PayPal after staff review. No charge yet.</p>
           </div>
         )}
       </div>
@@ -295,19 +413,157 @@ function CheckoutPanel({ cart, onClose, onRemove, onCheckoutComplete }: Checkout
   )
 }
 
-// ─── Section header ────────────────────────────────────────────────────────────
+// ─── Alliance tier card ───────────────────────────────────────────────────────
 
-function SectionTitle({ icon: Icon, title, subtitle }: { icon: React.ElementType; title: string; subtitle: string }) {
+function AllianceTierCard({ tier, inCart, onAdd }: { tier: AllianceTier; inCart: boolean; onAdd: () => void }) {
+  const [expanded, setExpanded] = useState(tier.highlight)
+  const Icon = tier.icon
+
   return (
-    <div className="flex items-start gap-3 mb-5">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary mt-0.5">
-        <Icon className="h-4 w-4" />
+    <div className={cn(
+      'relative flex flex-col rounded-xl border transition-all duration-200',
+      tier.highlight
+        ? 'border-primary/40 bg-primary/5 shadow-[0_0_40px_-12px_hsl(var(--glow)/0.3)]'
+        : 'border-border/50 bg-card/60',
+      inCart && 'ring-2 ring-green-500/30',
+    )}>
+      {tier.badge && (
+        <div className="absolute -top-3.5 inset-x-0 flex justify-center">
+          <span className="rounded-full bg-primary px-3 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary-foreground">
+            {tier.badge}
+          </span>
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="p-5 pb-4">
+        <div className="flex items-center gap-2.5 mb-4">
+          <div className={cn('flex h-9 w-9 items-center justify-center rounded-xl', tier.bg)}>
+            <Icon className={cn('h-4 w-4', tier.color)} />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-foreground">Alliance Control — {tier.label}</p>
+            <p className="text-[11px] text-muted-foreground">{tier.tagline}</p>
+          </div>
+        </div>
+
+        {/* Pricing */}
+        <div className="flex items-end gap-3 mb-3">
+          <div>
+            <span className="text-3xl font-bold text-foreground">${tier.price}</span>
+            <span className="text-sm text-muted-foreground ml-1">/mo</span>
+          </div>
+          <div className="pb-0.5">
+            <span className={cn('rounded-md px-2 py-0.5 text-[11px] font-semibold', tier.bg, tier.color)}>
+              Save {tier.savePercent}%
+            </span>
+          </div>
+        </div>
+
+        {/* Value breakdown */}
+        <div className="rounded-lg border border-border/40 bg-muted/20 px-3 py-2 text-xs text-muted-foreground mb-4">
+          Individual value: <span className="text-foreground font-medium">~${tier.individualValue}/mo</span>
+          <span className="mx-1.5 text-border">·</span>
+          You save: <span className="text-green-400 font-medium">${tier.savingsAmount}/mo</span>
+        </div>
+
+        {/* CTA */}
+        {inCart ? (
+          <div className="flex items-center justify-center gap-1.5 w-full rounded-xl bg-green-500/10 border border-green-500/20 py-2.5 text-sm font-medium text-green-400">
+            <Check className="h-4 w-4" /> Added to cart
+          </div>
+        ) : (
+          <button
+            onClick={onAdd}
+            className={cn(
+              'flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold transition-colors',
+              tier.highlight
+                ? 'bg-primary text-primary-foreground hover:opacity-90'
+                : 'bg-primary/15 border border-primary/20 text-primary hover:bg-primary/25'
+            )}
+          >
+            <ShoppingCart className="h-4 w-4" />
+            Add to cart
+          </button>
+        )}
+      </div>
+
+      {/* Features toggle */}
+      <button
+        onClick={() => setExpanded(e => !e)}
+        className="flex items-center justify-between border-t border-border/50 px-5 py-3 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+      >
+        <span className="font-medium">{expanded ? 'Hide features' : 'View all features'}</span>
+        {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+      </button>
+
+      {/* Feature list */}
+      {expanded && (
+        <div className="px-5 pb-5 space-y-3 border-t border-border/50 pt-4">
+          {tier.featureGroups.map((group, i) => (
+            <div key={i}>
+              {group.inherited ? (
+                <div className="flex items-center gap-2 rounded-lg bg-muted/30 px-3 py-2">
+                  <ArrowRight className="h-3 w-3 text-primary shrink-0" />
+                  <span className="text-xs font-semibold text-primary">{group.name}</span>
+                </div>
+              ) : (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-xs font-semibold text-foreground">{group.name}</p>
+                    {group.price && (
+                      <span className="text-[10px] text-muted-foreground/60 line-through">${group.price}/mo</span>
+                    )}
+                  </div>
+                  <ul className="space-y-1 pl-2">
+                    {group.sub.map((s, j) => (
+                      <li key={j} className="flex items-start gap-2 text-[11px] text-muted-foreground">
+                        <Check className="h-3 w-3 text-green-400 shrink-0 mt-0.5" />
+                        {s}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Section heading ──────────────────────────────────────────────────────────
+
+function SectionHeading({ icon: Icon, title, subtitle, label }: { icon: React.ElementType; title: string; subtitle: string; label: string }) {
+  return (
+    <div className="flex items-start gap-3 mb-6">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary mt-0.5">
+        <Icon className="h-5 w-5" />
       </div>
       <div>
-        <h2 className="text-base font-semibold text-foreground">{title}</h2>
-        <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
+        <div className="flex items-center gap-2 mb-0.5">
+          <h2 className="text-lg font-bold text-foreground">{title}</h2>
+          <span className="rounded-full border border-border/50 bg-muted/30 px-2 py-0.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">{label}</span>
+        </div>
+        <p className="text-sm text-muted-foreground">{subtitle}</p>
       </div>
     </div>
+  )
+}
+
+// ─── Feature checklist ────────────────────────────────────────────────────────
+
+function FeatureList({ features, highlight }: { features: string[]; highlight?: boolean }) {
+  return (
+    <ul className="space-y-1.5">
+      {features.map((f, i) => (
+        <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+          <Check className={cn('h-3.5 w-3.5 shrink-0 mt-0.5', highlight ? 'text-primary' : 'text-green-400')} />
+          {f}
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -316,46 +572,47 @@ function SectionTitle({ icon: Icon, title, subtitle }: { icon: React.ElementType
 export function BotToolsHome({ cart, onAddToCart, onRemoveFromCart, onOpenCart, onNavigate }: BotToolsHomeProps) {
   const [cartOpen, setCartOpen] = useState(false)
   const [kvkType, setKvkType] = useState<'soc' | 'nonSoc'>('soc')
+  const [trackingPlan, setTrackingPlan] = useState('kvk-track-1mo')
   const cartCount = cart.length
   const cartIds = new Set(cart.map(i => i.toolId))
 
-  function addItem(item: Omit<CartItem, 'cartId'>) {
-    onAddToCart(item)
-  }
+  function addItem(item: Omit<CartItem, 'cartId'>) { onAddToCart(item) }
 
-  function AddButton({ toolId, label, price, bundle, isSoC }: { toolId: string; label: string; price: number; bundle?: string; isSoC?: boolean }) {
-    const inCart = cartIds.has(toolId)
-    if (inCart) {
+  function AddBtn({ toolId, label, price, bundle, isSoC }: { toolId: string; label: string; price: number; bundle?: string; isSoC?: boolean }) {
+    if (cartIds.has(toolId)) {
       return (
-        <span className="flex items-center gap-1.5 rounded-lg bg-green-500/10 px-3 py-1.5 text-xs font-medium text-green-400 border border-green-500/20">
-          <Check className="h-3 w-3" /> Added
+        <span className="flex items-center justify-center gap-1.5 w-full rounded-xl bg-green-500/10 border border-green-500/20 py-2.5 text-sm font-medium text-green-400">
+          <Check className="h-3.5 w-3.5" /> Added
         </span>
       )
     }
     return (
       <button
         onClick={() => addItem({ toolId, label, price, bundle, isSoC })}
-        className="flex items-center gap-1.5 rounded-lg bg-primary/15 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/25 border border-primary/20"
+        className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary/15 border border-primary/20 py-2.5 text-sm font-medium text-primary hover:bg-primary/25 transition-colors"
       >
-        <ShoppingCart className="h-3 w-3" />
+        <ShoppingCart className="h-4 w-4" />
         Add to cart
       </button>
     )
   }
 
+  const selectedTracking = KVK_TRACKING.find(p => p.id === trackingPlan)!
+
   return (
-    <div className="space-y-10 max-w-5xl">
-      {/* Header */}
+    <div className="space-y-14 max-w-5xl">
+
+      {/* ── Page header ───────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-foreground">Bot Tools Store</h2>
+          <h1 className="text-xl font-bold text-foreground">Bot Tools Store</h1>
           <p className="mt-1 text-sm text-muted-foreground max-w-xl">
-            Automate your Rise of Kingdoms kingdom with TFN&apos;s bot suite. Staff handles setup — you just provide kingdom details.
+            Automate your Rise of Kingdoms kingdom with TFN&apos;s bot suite. Staff handle all setup — you just provide your kingdom details.
           </p>
         </div>
         <button
           onClick={() => setCartOpen(true)}
-          className="relative flex items-center gap-2 rounded-xl border border-border/50 bg-card/60 px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-card hover:border-border"
+          className="relative flex items-center gap-2 rounded-xl border border-border/50 bg-card/60 px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-card hover:border-border shrink-0"
         >
           <ShoppingCart className="h-4 w-4" />
           Cart
@@ -368,12 +625,12 @@ export function BotToolsHome({ cart, onAddToCart, onRemoveFromCart, onOpenCart, 
       </div>
 
       {/* How it works */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 -mt-8">
         {[
           { n: '1', text: 'Choose a plan or package' },
           { n: '2', text: 'Confirm order — get product key' },
           { n: '3', text: 'Redeem key in TFN Discord' },
-          { n: '4', text: 'Staff sets up & activates your bot' },
+          { n: '4', text: 'Staff set up & activate your bot' },
         ].map(s => (
           <div key={s.n} className="flex items-center gap-3 rounded-lg border border-border/40 bg-muted/20 px-4 py-3">
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">{s.n}</span>
@@ -384,147 +641,158 @@ export function BotToolsHome({ cart, onAddToCart, onRemoveFromCart, onOpenCart, 
 
       {/* ── Section 1: Alliance Control ─────────────────────────────────────── */}
       <div>
-        <SectionTitle
-          icon={Crown}
+        <SectionHeading
+          icon={Zap}
           title="Alliance Control"
-          subtitle="Monthly subscription. Includes Title Giving, Fort Tracking, Player Finder, and more depending on tier."
+          label="Bots — Automation"
+          subtitle="Monthly subscription. All tools run 24/7 — staff configure everything, you control the settings."
         />
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {ALLIANCE_TIERS.map(tier => {
-            const Icon = tier.icon
-            const savings = Math.round((1 - tier.price / tier.individualValue) * 100)
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+          {ALLIANCE_TIERS.map(tier => (
+            <AllianceTierCard
+              key={tier.id}
+              tier={tier}
+              inCart={cartIds.has(tier.id)}
+              onAdd={() => addItem({ toolId: tier.id, label: `Alliance Control — ${tier.label}`, price: tier.price })}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* ── Section 2: KvK Premium Bundles ──────────────────────────────────── */}
+      <div>
+        <SectionHeading
+          icon={ScanSearch}
+          title="KvK Premium Bundles"
+          label="Done For You"
+          subtitle="We handle everything — scans, tracking, DKP, reporting. You just receive the results."
+        />
+
+        {/* SoC / Non-SoC toggle */}
+        <div className="flex items-center gap-2 mb-5">
+          <button
+            onClick={() => setKvkType('soc')}
+            className={cn('rounded-lg px-4 py-2 text-sm font-medium transition-colors border', kvkType === 'soc' ? 'bg-primary/15 text-primary border-primary/30' : 'text-muted-foreground border-border/50 hover:bg-secondary')}
+          >
+            Season of Conquest
+          </button>
+          <button
+            onClick={() => setKvkType('nonSoc')}
+            className={cn('rounded-lg px-4 py-2 text-sm font-medium transition-colors border', kvkType === 'nonSoc' ? 'bg-primary/15 text-primary border-primary/30' : 'text-muted-foreground border-border/50 hover:bg-secondary')}
+          >
+            Non-SoC
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {KVK_BUNDLES[kvkType].map((bundle, idx) => {
+            const isFullKvk = idx === 0
             return (
-              <div
-                key={tier.id}
-                className={cn(
-                  'relative flex flex-col rounded-xl border p-5',
-                  tier.highlight
-                    ? 'border-primary/40 bg-primary/5 shadow-[0_0_30px_-10px_hsl(var(--glow)/0.25)]'
-                    : 'border-border/50 bg-card/60'
+              <div key={bundle.id} className={cn('flex flex-col rounded-xl border bg-card/60 p-5', isFullKvk ? 'border-primary/25' : 'border-border/50')}>
+                {isFullKvk && (
+                  <span className="self-start mb-3 rounded-md bg-primary/15 px-2 py-0.5 text-[10px] font-bold text-primary uppercase tracking-wide">Full Coverage</span>
                 )}
-              >
-                {tier.badge && (
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-0.5 text-[10px] font-bold text-primary-foreground">
-                    {tier.badge}
-                  </span>
-                )}
-                <div className="flex items-center gap-3 mb-4">
-                  <div className={cn('flex h-9 w-9 items-center justify-center rounded-xl', tier.bg)}>
-                    <Icon className={cn('h-4 w-4', tier.color)} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">{tier.label}</p>
-                    <p className="text-[10px] text-muted-foreground">Save {savings}% vs individual</p>
-                  </div>
+                <p className="text-sm font-bold text-foreground mb-1">{bundle.label}</p>
+                <p className="text-xs text-muted-foreground mb-4">{bundle.camps} tracked · Full event duration</p>
+                <div className="mb-5">
+                  <span className="text-2xl font-bold text-foreground">${bundle.price}</span>
+                  <span className="text-xs text-muted-foreground ml-1">one-time per KvK</span>
                 </div>
-                <div className="mb-4">
-                  <span className="text-3xl font-bold text-foreground">${tier.price}</span>
-                  <span className="text-xs text-muted-foreground ml-1">/mo</span>
-                  <p className="text-[10px] text-muted-foreground/60 mt-0.5">Individual value ~${tier.individualValue}/mo</p>
+                <div className="flex-1 mb-5">
+                  {isFullKvk ? (
+                    <FeatureList features={bundle.features} />
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 rounded-lg bg-muted/30 px-3 py-2">
+                        <ArrowRight className="h-3 w-3 text-primary shrink-0" />
+                        <span className="text-xs text-primary font-medium">All features from Full KvK</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground pl-1">
+                        <Check className="h-3 w-3 text-green-400 shrink-0" />
+                        Limited to {bundle.camps}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <ul className="space-y-2 flex-1 mb-5">
-                  {tier.features.map(f => (
-                    <li key={f} className="flex items-start gap-2 text-xs text-muted-foreground">
-                      <Check className="h-3.5 w-3.5 text-green-400 shrink-0 mt-0.5" />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-                <AddButton toolId={tier.id} label={`Alliance Control — ${tier.label}`} price={tier.price} />
+                <AddBtn toolId={bundle.id} label={`KvK Premium — ${bundle.label} (${kvkType === 'soc' ? 'SoC' : 'Non-SoC'})`} price={bundle.price} bundle={bundle.id} isSoC={kvkType === 'soc'} />
               </div>
             )
           })}
         </div>
       </div>
 
-      {/* ── Section 2: KvK Premium Bundles ──────────────────────────────────── */}
+      {/* ── Section 3: KvK Data Tracking ────────────────────────────────────── */}
       <div>
-        <SectionTitle
-          icon={ScanSearch}
-          title="KvK Premium Bundles"
-          subtitle="Done-for-you KvK data scanning. Staff sets up automated scans for the full event duration."
-        />
-        {/* SoC / Non-SoC toggle */}
-        <div className="flex items-center gap-2 mb-4">
-          <button
-            onClick={() => setKvkType('soc')}
-            className={cn(
-              'rounded-lg px-4 py-1.5 text-xs font-medium transition-colors border',
-              kvkType === 'soc'
-                ? 'bg-primary/15 text-primary border-primary/30'
-                : 'text-muted-foreground border-border/50 hover:bg-secondary'
-            )}
-          >
-            Season of Conquest
-          </button>
-          <button
-            onClick={() => setKvkType('nonSoc')}
-            className={cn(
-              'rounded-lg px-4 py-1.5 text-xs font-medium transition-colors border',
-              kvkType === 'nonSoc'
-                ? 'bg-primary/15 text-primary border-primary/30'
-                : 'text-muted-foreground border-border/50 hover:bg-secondary'
-            )}
-          >
-            Non-SoC
-          </button>
-        </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {KVK_BUNDLES[kvkType].map(bundle => (
-            <div key={bundle.id} className="flex flex-col rounded-xl border border-border/50 bg-card/60 p-5">
-              <p className="text-sm font-semibold text-foreground mb-1">{bundle.label}</p>
-              <p className="text-xs text-muted-foreground mb-4">{bundle.camps} camp{bundle.camps > 1 ? 's' : ''} tracked · Full event duration</p>
-              <div className="mb-5 mt-auto">
-                <span className="text-2xl font-bold text-foreground">${bundle.price}</span>
-                <span className="text-xs text-muted-foreground ml-1">one-time</span>
-              </div>
-              <AddButton toolId={`kvk-bundle-${bundle.id}`} label={`KvK Bundle — ${bundle.label} (${kvkType === 'soc' ? 'SoC' : 'Non-SoC'})`} price={bundle.price} bundle={bundle.id} isSoC={kvkType === 'soc'} />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Section 3: KvK Data Tracking (self-service) ─────────────────────── */}
-      <div>
-        <SectionTitle
+        <SectionHeading
           icon={Database}
           title="KvK Data Tracking"
-          subtitle="Self-service access to the KvK scanner dashboard. You control the scans and schedule."
+          label="Self-Service"
+          subtitle="Full control in your hands — run scans yourself, manage your own DKP, set your own schedule."
         />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {KVK_TRACKING.map(plan => (
-            <div key={plan.id} className="flex flex-col rounded-xl border border-border/50 bg-card/60 p-5">
-              <p className="text-sm font-semibold text-foreground mb-1">{plan.label}</p>
-              <p className="text-xs text-muted-foreground mb-4">
-                ~${plan.perMonth}/mo · Full scanner access
-              </p>
-              <div className="mb-5 mt-auto">
-                <span className="text-2xl font-bold text-foreground">${plan.price}</span>
-                <span className="text-xs text-muted-foreground ml-1">total</span>
-              </div>
-              <AddButton toolId={`tracking-${plan.id}`} label={`KvK Data Tracking — ${plan.label}`} price={plan.price} />
-            </div>
-          ))}
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {/* Plan picker */}
+          <div className="space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Choose a plan</p>
+            {KVK_TRACKING.map(plan => (
+              <button
+                key={plan.id}
+                onClick={() => setTrackingPlan(plan.id)}
+                className={cn(
+                  'w-full flex items-center justify-between rounded-xl border p-4 transition-colors text-left',
+                  trackingPlan === plan.id
+                    ? 'border-primary/40 bg-primary/5 ring-1 ring-primary/20'
+                    : 'border-border/50 bg-card/60 hover:border-border'
+                )}
+              >
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{plan.label}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">~${plan.perMonth}/mo</p>
+                  {plan.saving && <p className="text-[11px] text-green-400 mt-0.5">Save ${plan.saving} vs monthly</p>}
+                </div>
+                <div className="text-right">
+                  <p className="text-xl font-bold text-foreground">${plan.price}</p>
+                  <p className="text-[10px] text-muted-foreground">total</p>
+                </div>
+              </button>
+            ))}
+            <AddBtn
+              toolId={selectedTracking.id}
+              label={`KvK Data Tracking — ${selectedTracking.label}`}
+              price={selectedTracking.price}
+            />
+          </div>
+
+          {/* Features */}
+          <div className="rounded-xl border border-border/50 bg-card/60 p-5">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">Included in all plans</p>
+            <FeatureList features={KVK_TRACKING_FEATURES} />
+          </div>
         </div>
       </div>
 
       {/* ── Section 4: Multi-Kingdom KvK Data ───────────────────────────────── */}
       <div>
-        <SectionTitle
+        <SectionHeading
           icon={Globe}
           title="Multi-Kingdom KvK Data"
-          subtitle="One-time scan packages covering multiple kingdoms. Great for competitive intelligence across regions."
+          label="One-Time Scans"
+          subtitle="One-time scan packages across multiple kingdoms. Great for competitive intelligence."
         />
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {MULTI_KVK.map(pkg => (
             <div key={pkg.id} className="flex flex-col rounded-xl border border-border/50 bg-card/60 p-5">
-              <p className="text-sm font-semibold text-foreground mb-1">{pkg.label}</p>
-              <p className="text-xs text-muted-foreground mb-4">{pkg.scans} kingdom scans included</p>
-              <div className="mb-5 mt-auto">
+              <p className="text-sm font-bold text-foreground mb-1">{pkg.label}</p>
+              <p className="text-xs text-muted-foreground mb-4">{pkg.scans} full KvK scans</p>
+              <div className="mb-5">
                 <span className="text-2xl font-bold text-foreground">${pkg.price}</span>
                 <span className="text-xs text-muted-foreground ml-1">one-time</span>
               </div>
-              <AddButton toolId={`multi-${pkg.id}`} label={`Multi-Kingdom Data — ${pkg.label} (${pkg.scans} scans)`} price={pkg.price} />
+              <div className="flex-1 mb-5">
+                <FeatureList features={pkg.features} />
+              </div>
+              <AddBtn toolId={pkg.id} label={`Multi-Kingdom Data — ${pkg.label} (${pkg.scans} scans)`} price={pkg.price} />
             </div>
           ))}
         </div>
@@ -536,7 +804,7 @@ export function BotToolsHome({ cart, onAddToCart, onRemoveFromCart, onOpenCart, 
           cart={cart}
           onClose={() => setCartOpen(false)}
           onRemove={onRemoveFromCart}
-          onCheckoutComplete={() => {/* cart cleared by parent */}}
+          onCheckoutComplete={() => {}}
         />
       )}
     </div>

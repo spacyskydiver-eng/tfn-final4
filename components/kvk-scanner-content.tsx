@@ -370,13 +370,19 @@ export function KvkScannerContent({ onNavigate }: KvkScannerContentProps = {}) {
       const pending = kvkData.kvks?.find((k: { status: string }) => k.status === 'pending')
       if (pending && !active) setSubmitted(true)
 
+      const KVK_TOOL_IDS = [
+        'kvk-soc-full', 'kvk-soc-two', 'kvk-soc-one',
+        'kvk-nonsoc-full', 'kvk-nonsoc-two', 'kvk-nonsoc-one',
+        'kvk-track-1mo', 'kvk-track-2mo', 'kvk-track-1yr',
+        'kvk-multi-basic', 'kvk-multi-elite', 'kvk-multi-legendary',
+      ]
       const order = orderData.orders?.find((o: { items: Array<{toolId: string; bundle?: string; isSoC?: boolean}>, status: string }) =>
         (o.status === 'active' || o.status === 'confirmed') &&
-        o.items?.some((i) => i.toolId === 'kvk-scanner')
+        o.items?.some((i) => KVK_TOOL_IDS.includes(i.toolId))
       )
       if (order) {
         setHasPurchased(true)
-        const item = order.items?.find((i: {toolId: string}) => i.toolId === 'kvk-scanner')
+        const item = order.items?.find((i: {toolId: string}) => KVK_TOOL_IDS.includes(i.toolId))
         if (item?.bundle) setPurchaseBundle(item.bundle)
         if (item?.isSoC !== undefined) setPurchaseIsSoC(item.isSoC)
       }
@@ -536,13 +542,13 @@ export function KvkScannerContent({ onNavigate }: KvkScannerContentProps = {}) {
         </div>
         <h2 className="text-lg font-semibold text-foreground mb-2">No Active KvK</h2>
         <p className="text-sm text-muted-foreground mb-6">
-          You don&apos;t have an active KvK Scanner set up yet. Purchase a bundle from the Bot Tools Store to get started.
+          You don&apos;t have an active KvK Scanner set up yet. Purchase a KvK Premium Bundle or KvK Data Tracking plan from the Bot Store to get started.
         </p>
         <button
           onClick={() => onNavigate?.('bot-tools-home')}
           className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-opacity"
         >
-          Go to Bot Tools Store
+          Go to Bot Store
         </button>
       </div>
     )
