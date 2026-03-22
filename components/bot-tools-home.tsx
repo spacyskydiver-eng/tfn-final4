@@ -41,6 +41,7 @@ interface AllianceTier {
   id: string
   label: string
   price: number
+  firstMonthPrice: number
   individualValue: number
   savingsAmount: number
   savePercent: number
@@ -60,6 +61,7 @@ const ALLIANCE_TIERS: AllianceTier[] = [
     id: 'alliance-basic',
     label: 'Basic',
     price: 19,
+    firstMonthPrice: 9.50,
     individualValue: 42,
     savingsAmount: 23,
     savePercent: 55,
@@ -84,6 +86,7 @@ const ALLIANCE_TIERS: AllianceTier[] = [
     id: 'alliance-elite',
     label: 'Elite',
     price: 29,
+    firstMonthPrice: 14.50,
     individualValue: 75,
     savingsAmount: 46,
     savePercent: 61,
@@ -110,6 +113,7 @@ const ALLIANCE_TIERS: AllianceTier[] = [
     id: 'alliance-legendary',
     label: 'Legendary',
     price: 39,
+    firstMonthPrice: 19.50,
     individualValue: 97,
     savingsAmount: 58,
     savePercent: 60,
@@ -235,9 +239,9 @@ const KVK_TRACKING_FEATURES = [
 ]
 
 const KVK_TRACKING = [
-  { id: 'kvk-track-1mo', label: 'Monthly',  price: 29,  perMonth: 29,   saving: null },
-  { id: 'kvk-track-2mo', label: '2 Months', price: 55,  perMonth: 27.5, saving: 3  },
-  { id: 'kvk-track-1yr', label: '1 Year',   price: 240, perMonth: 20,   saving: 108 },
+  { id: 'kvk-track-1mo', label: 'Monthly',  price: 29,  firstMonthPrice: 21.75, perMonth: 29,   saving: null, planBadge: null,          discountNote: '25% off first month' },
+  { id: 'kvk-track-2mo', label: '2 Months', price: 55,  firstMonthPrice: null,  perMonth: 27.5, saving: 3,    planBadge: 'Better Value', discountNote: 'Includes 25% off first month' },
+  { id: 'kvk-track-1yr', label: '1 Year',   price: 240, firstMonthPrice: null,  perMonth: 20,   saving: 108,  planBadge: 'Best Value',   discountNote: 'Save $108 vs monthly' },
 ]
 
 // ─── Multi-Kingdom data ───────────────────────────────────────────────────────
@@ -489,45 +493,54 @@ function AllianceTierCard({ tier, inCart, onAdd }: { tier: AllianceTier; inCart:
           </div>
         </div>
 
-        {/* Pricing */}
-        <div className="flex items-end gap-3 mb-3">
-          <div>
-            <span className="text-3xl font-bold text-foreground">${tier.price}</span>
-            <span className="text-sm text-muted-foreground ml-1">/mo</span>
-          </div>
-          <div className="pb-0.5">
-            <span className={cn('rounded-md px-2 py-0.5 text-[11px] font-semibold', tier.bg, tier.color)}>
-              Save {tier.savePercent}%
-            </span>
-          </div>
+        {/* First month discount */}
+        <div className="mb-2">
+          <span className="inline-flex items-center rounded-md bg-green-500/15 border border-green-500/20 px-2 py-0.5 text-[10px] font-bold text-green-400 uppercase tracking-wide">
+            50% off first month
+          </span>
         </div>
+
+        {/* Pricing */}
+        <div className="mb-1">
+          <span className="text-3xl font-bold text-foreground">${tier.firstMonthPrice}</span>
+          <span className="text-sm text-muted-foreground ml-1">first month</span>
+        </div>
+        <p className="text-xs text-muted-foreground mb-3">
+          <span className="line-through text-muted-foreground/50">${tier.price}/mo</span>
+          <span className="ml-1">then ${tier.price}/mo</span>
+        </p>
 
         {/* Value breakdown */}
         <div className="rounded-lg border border-border/40 bg-muted/20 px-3 py-2 text-xs text-muted-foreground mb-4">
           Individual value: <span className="text-foreground font-medium">~${tier.individualValue}/mo</span>
-          <span className="mx-1.5 text-border">·</span>
-          You save: <span className="text-green-400 font-medium">${tier.savingsAmount}/mo</span>
+          <span className="mx-1.5 text-border/60">·</span>
+          Save <span className="text-green-400 font-medium">${tier.savingsAmount}/mo</span>
         </div>
 
         {/* CTA */}
         {inCart ? (
-          <div className="flex items-center justify-center gap-1.5 w-full rounded-xl bg-green-500/10 border border-green-500/20 py-2.5 text-sm font-medium text-green-400">
+          <div className="flex items-center justify-center gap-1.5 w-full rounded-xl bg-green-500/10 border border-green-500/20 py-2.5 text-sm font-medium text-green-400 mb-3">
             <Check className="h-4 w-4" /> Added to cart
           </div>
         ) : (
           <button
             onClick={onAdd}
             className={cn(
-              'flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold transition-colors',
+              'flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold transition-colors mb-3',
               tier.highlight
                 ? 'bg-primary text-primary-foreground hover:opacity-90'
                 : 'bg-primary/15 border border-primary/20 text-primary hover:bg-primary/25'
             )}
           >
             <ShoppingCart className="h-4 w-4" />
-            Add to cart
+            Start with discounted first month
           </button>
         )}
+
+        {/* Microcopy */}
+        <p className="text-[10px] text-muted-foreground/60 text-center leading-relaxed">
+          Try full alliance automation risk-free · Upgrade or cancel anytime
+        </p>
       </div>
 
       {/* Features toggle */}
@@ -991,20 +1004,37 @@ export function BotToolsHome({ cart, onAddToCart, onRemoveFromCart, onOpenCart, 
                 key={plan.id}
                 onClick={() => setTrackingPlan(plan.id)}
                 className={cn(
-                  'w-full flex items-center justify-between rounded-xl border p-4 transition-colors text-left',
+                  'relative w-full flex items-center justify-between rounded-xl border p-4 transition-colors text-left',
                   trackingPlan === plan.id
                     ? 'border-primary/40 bg-primary/5 ring-1 ring-primary/20'
                     : 'border-border/50 bg-card/60 hover:border-border'
                 )}
               >
+                {plan.planBadge && (
+                  <span className="absolute -top-2.5 right-3 rounded-full bg-primary px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-primary-foreground">
+                    {plan.planBadge}
+                  </span>
+                )}
                 <div>
                   <p className="text-sm font-semibold text-foreground">{plan.label}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">~${plan.perMonth}/mo</p>
-                  {plan.saving && <p className="text-[11px] text-green-400 mt-0.5">Save ${plan.saving} vs monthly</p>}
+                  <p className="text-xs text-muted-foreground mt-0.5">~${plan.perMonth}/mo effective</p>
+                  {plan.discountNote && (
+                    <p className="text-[11px] text-green-400 mt-0.5">{plan.discountNote}</p>
+                  )}
                 </div>
                 <div className="text-right">
-                  <p className="text-xl font-bold text-foreground">${plan.price}</p>
-                  <p className="text-[10px] text-muted-foreground">total</p>
+                  {plan.firstMonthPrice ? (
+                    <>
+                      <p className="text-xl font-bold text-foreground">${plan.firstMonthPrice}</p>
+                      <p className="text-[10px] text-muted-foreground line-through">${plan.price}/mo</p>
+                      <p className="text-[10px] text-muted-foreground">first month</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xl font-bold text-foreground">${plan.price}</p>
+                      <p className="text-[10px] text-muted-foreground">total</p>
+                    </>
+                  )}
                 </div>
               </button>
             ))}
@@ -1013,6 +1043,9 @@ export function BotToolsHome({ cart, onAddToCart, onRemoveFromCart, onOpenCart, 
               label={`KvK Data Tracking — ${selectedTracking.label}`}
               price={selectedTracking.price}
             />
+            <p className="text-[10px] text-muted-foreground/60 text-center leading-relaxed">
+              No commitment — cancel anytime · Used by competitive alliances
+            </p>
           </div>
 
           {/* Features */}
